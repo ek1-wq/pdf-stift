@@ -15,7 +15,8 @@ for m in re.finditer(r'text="([^"]*)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]
 PY
 ); [ -n "$B" ] && adb shell input tap $B; }
 shot 1-start
-tap "Offline"; sleep 6; shot 2-main
+for i in 1 2 3; do tap "Offline"; sleep 6; adb shell dumpsys window | grep -q "mCurrentFocus.*MainActivity" && break; done
+adb shell dumpsys window | grep -i "mCurrentFocus" > "$OUT/focus.txt"; shot 2-main
 adb shell settings put system accelerometer_rotation 0; adb shell settings put system user_rotation 1; sleep 5; shot 3-landscape
 adb shell settings put system user_rotation 0; sleep 3
 adb logcat -d -s AndroidRuntime:E > "$OUT/crash.txt"

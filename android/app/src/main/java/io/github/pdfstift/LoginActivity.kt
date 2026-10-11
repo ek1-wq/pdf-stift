@@ -60,7 +60,7 @@ class LoginActivity : AppCompatActivity() {
         }
         val wrap = LinearLayout(this).apply {
             gravity = Gravity.CENTER; setPadding(dp(24f), dp(48f), dp(24f), dp(24f))
-            addView(card, LinearLayout.LayoutParams(dp(500f), LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(card, LinearLayout.LayoutParams(minOf(dp(500f), resources.displayMetrics.widthPixels - dp(48f)), LinearLayout.LayoutParams.WRAP_CONTENT))
         }
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); addView(wrap) })
     }
@@ -100,7 +100,7 @@ class LoginActivity : AppCompatActivity() {
         }
         val wrap = LinearLayout(this).apply {
             gravity = Gravity.CENTER; setPadding(dp(24f), dp(48f), dp(24f), dp(24f))
-            addView(card, LinearLayout.LayoutParams(dp(460f), LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(card, LinearLayout.LayoutParams(minOf(dp(460f), resources.displayMetrics.widthPixels - dp(48f)), LinearLayout.LayoutParams.WRAP_CONTENT))
         }
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); addView(wrap) })
     }
