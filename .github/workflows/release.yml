@@ -104,7 +104,7 @@ jobs:
           # Google Play: native libraries must suit 16 KB memory pages
           python3 ../tools/check-16k.py "dist/PDF-Stift-$V.apk" "dist/PDF-Stift-$V-play.aab" || echo "::warning title=16 KB::a native library is not aligned for 16 KB pages"
           # signed APK into the release of this version (also later by a manual run, once the key is in the secrets)
-          if [ "$SIGNED" = 1 ] && gh release view "v$V" >/dev/null 2>&1; then gh release upload "v$V" "dist/PDF-Stift-$V.apk" --clobber; fi
+          if [ "$SIGNED" = 1 ] && gh release view "v$V" >/dev/null 2>&1; then gh release upload "v$V" "dist/PDF-Stift-$V.apk" "dist/PDF-Stift-$V-play.aab" --clobber; fi
       - uses: actions/upload-artifact@v4
         with:
           name: PDF-Stift-Android
