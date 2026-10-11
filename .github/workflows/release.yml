@@ -2,7 +2,7 @@ name: Build Windows app
 # Builds the Windows installer with a bundled PHP runtime (see tools/build-windows.sh).
 #  - push to main that changes the version in desktop/package.json, or push of a tag "v1.2.3"
 #      → builds that version and publishes it as a GitHub release (installed apps then show "Update available")
-#  - manual run → builds only; the installer is attached to the run as an artifact
+#  - manual run → publishes the version in desktop/package.json if it has no release yet, otherwise builds only
 on:
   push:
     branches: [main]
@@ -28,7 +28,7 @@ jobs:
         run: |
           V="$(node -p "require('./desktop/package.json').version")"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; MODE=publish
-          elif [[ "$GITHUB_EVENT_NAME" == push ]] && ! gh release view "v$V" >/dev/null 2>&1; then MODE=publish
+          elif ! gh release view "v$V" >/dev/null 2>&1; then MODE=publish
           else MODE=build; fi
           echo "version $V – $MODE"
           if [ "$MODE" = publish ]; then tools/build-windows.sh "$V" publish; else tools/build-windows.sh "$V"; fi
