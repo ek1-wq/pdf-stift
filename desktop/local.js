@@ -24,7 +24,14 @@ const cfgFile = () => path.join(app.getPath('userData'), 'bibliothek.json');
 
 function libraryDir() {
   try { const d = JSON.parse(fs.readFileSync(cfgFile(), 'utf8')).dir; if (d) return d; } catch (e) { /* Standard */ }
-  return path.join(app.getPath('documents'), 'PDF-Stift');
+  return path.join(docsDir(), 'PDF-Stift');
+}
+// im Snap-Paket zeigt „documents“ in den versteckten Snap-Ordner – dann den echten Dokumente-Ordner nehmen
+function docsDir() {
+  const h = process.env.SNAP_REAL_HOME;
+  if (!h) return app.getPath('documents');
+  for (const n of ['Dokumente', 'Documents']) { const d = path.join(h, n); if (fs.existsSync(d)) return d; }
+  return h;
 }
 function setLibraryDir(dir) { fs.writeFileSync(cfgFile(), JSON.stringify({ dir })); }
 

@@ -1,0 +1,31 @@
+# Test build of the Snap package (the Snap Store itself builds via snapcraft.io/build).
+# Builds the snap, installs it and checks that PDF-Stift starts and its PHP server answers.
+name: Snap test build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['snap/**', 'desktop/**', 'app/**', '.github/workflows/snap.yml']
+jobs:
+  snap:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: snapcore/action-build@v1
+        id: build
+      - name: Install and start
+        run: |
+          set +e
+          sudo snap install --dangerous "${{ steps.build.outputs.snap }}" || { echo "::error title=snap::install failed"; exit 1; }
+          snap connections pdf-stift
+          sudo apt-get install -y -qq xvfb >/dev/null
+          (xvfb-run -a pdf-stift > /tmp/app.log 2>&1 &)
+          OK=""
+          for i in $(seq 1 60); do sleep 1; C="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:38517/api.php?a=me)"; if [ "$C" = 200 ] || [ "$C" = 401 ]; then OK=1; break; fi; done
+          if [ -z "$OK" ]; then echo "::error title=snap start::$(tail -c 1800 /tmp/app.log | tr '\n' '|')"; exit 1; fi
+          echo "PDF-Stift snap started, PHP answers ($C)"
+          ls ~/snap/pdf-stift/current 2>/dev/null; ls ~/Documents 2>/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snap
+          path: ${{ steps.build.outputs.snap }}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=PDF-Stift
+GenericName=PDF annotation
+Comment=Annotate PDFs with pen, mouse and keyboard
+Exec=pdf-stift %U
+Icon=${SNAP}/meta/gui/pdf-stift.png
+Terminal=false
+Type=Application
+Categories=Office;Viewer;Education;
+MimeType=application/pdf;
+StartupWMClass=PDF-Stift

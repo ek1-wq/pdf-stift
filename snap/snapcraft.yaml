@@ -1,0 +1,74 @@
+# Snap package of PDF-Stift (Snap Store: snap install pdf-stift).
+# Built by snapcraft.io/build (Launchpad) from this repository, or locally with `snapcraft`.
+name: pdf-stift
+title: PDF-Stift
+summary: Annotate PDFs with pen, mouse and keyboard
+description: |
+  PDF-Stift is a PDF annotation app for lectures, reading and teaching.
+  Write and draw on PDFs with a pen or mouse, type text, highlight, and
+  keep notebooks next to your documents.
+
+  * Pen, highlighter, shapes, text and eraser
+  * Notebooks with page templates, links to PDF pages and search
+  * Your PDFs stay in a normal folder (Documents/PDF-Stift)
+  * Works fully offline – nothing is uploaded anywhere
+
+  Free software (GPL-3.0). Windows and Android versions and a version for
+  your own web server are available on GitHub.
+adopt-info: pdf-stift
+base: core22
+grade: stable
+confinement: strict
+license: GPL-3.0-only
+website: https://github.com/ek1-wq/pdf-stift
+source-code: https://github.com/ek1-wq/pdf-stift
+issues: https://github.com/ek1-wq/pdf-stift/issues
+icon: snap/gui/pdf-stift.png
+architectures:
+  - build-on: amd64
+
+apps:
+  pdf-stift:
+    command: app/pdf-stift --no-sandbox
+    desktop: meta/gui/pdf-stift.desktop
+    extensions: [gnome]
+    environment:
+      TMPDIR: $XDG_RUNTIME_DIR
+    plugs:
+      - home
+      - removable-media
+      - network
+      - network-bind
+      - browser-support
+      - audio-playback
+      - audio-record
+      - cups-control
+      - opengl
+
+parts:
+  pdf-stift:
+    plugin: nil
+    source: .
+    build-snaps: [node/20/stable]
+    build-packages: [curl, ca-certificates, grep, tar]
+    stage-packages: [libnss3, libnspr4, libxss1, libsecret-1-0]
+    override-build: |
+      set -eu
+      V="$(node -p "require('./desktop/package.json').version")"
+      craftctl set version="$V"
+      # self-contained PHP (static build, extensions built in)
+      rm -rf desktop/php && mkdir -p desktop/php
+      BASE="https://dl.static-php.dev/static-php-cli/common"
+      F="$(curl -sSfL "$BASE/" | grep -oE 'php-8\.3\.[0-9]+-cli-linux-x86_64\.tar\.gz' | sort -t. -k3,3n -u | tail -1)"
+      curl -sSfL "$BASE/$F" | tar xz -C desktop/php
+      chmod +x desktop/php/php
+      grep -v '^extension=' desktop/php.ini > desktop/php/php.ini
+      rm -rf desktop/web && cp -r app desktop/web
+      cp LICENSE desktop/LICENSE.txt && cp THIRD-PARTY-NOTICES.md desktop/THIRD-PARTY-NOTICES.md
+      cd desktop
+      export ELECTRON_GET_USE_PROXY=1 GLOBAL_AGENT_HTTPS_PROXY="${https_proxy:-${HTTPS_PROXY:-}}"
+      npm install --no-audit --no-fund
+      npx electron-builder --linux dir --x64 --publish never -c.extraMetadata.version="$V"
+      mkdir -p "$CRAFT_PART_INSTALL/app"
+      cp -r dist/linux-unpacked/. "$CRAFT_PART_INSTALL/app/"
+      rm -f "$CRAFT_PART_INSTALL/app/chrome-sandbox"

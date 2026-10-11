@@ -770,6 +770,7 @@ function updater() {
 const autoFile = () => path.join(app.getPath('userData'), 'autoupdate.json');
 function autoOn() { try { return JSON.parse(fs.readFileSync(autoFile(), 'utf8')).on !== false; } catch (e) { return true; } }
 function updates(byUser) {
+  if (process.env.SNAP) { if (byUser) send({ state: 'none', current: app.getVersion() }); return; } // Snap Store aktualisiert selbst
   if (!byUser && !autoOn()) return;
   try {
     if (byUser) { manual = true; later = false; }
