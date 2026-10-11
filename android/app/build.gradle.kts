@@ -16,6 +16,7 @@ android {
         targetSdk = 36
         versionCode = vCode
         versionName = vName
+        buildConfigField("boolean", "PLAY", "false") // Google-Play-Ausgabe: kein eigener Update-Knopf
     }
     signingConfigs {
         create("release") {
@@ -36,7 +37,7 @@ android {
     flavorDimensions += "store"
     productFlavors {
         create("github") { dimension = "store" }
-        create("play") { dimension = "store" }
+        create("play") { dimension = "store"; buildConfigField("boolean", "PLAY", "true") }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -43,7 +43,7 @@ object Updater {
 
     /** beim Start: still prüfen; bei neuer Fassung kurz fragen */
     /** In der Ausgabe für Google Play aktualisiert der Play Store – dort keine eigene Update-Funktion */
-    val enabled get() = BuildConfig.FLAVOR != "play"
+    val enabled get() = !BuildConfig.PLAY
 
     suspend fun check(a: Activity, silent: Boolean) {
         if (!enabled) return
