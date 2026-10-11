@@ -24,7 +24,7 @@ jobs:
           for i in $(seq 1 60); do sleep 1; C="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:38517/api.php?a=me)"; if [ "$C" = 200 ] || [ "$C" = 401 ]; then OK=1; break; fi; done
           if [ -z "$OK" ]; then echo "::error title=snap start::$(tail -c 1800 /tmp/app.log | tr '\n' '|')"; exit 1; fi
           echo "PDF-Stift snap started, PHP answers ($C)"
-          ls ~/snap/pdf-stift/current 2>/dev/null; ls ~/Documents 2>/dev/null
+          ls ~/snap/pdf-stift/current ~/Documents 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
           name: snap
