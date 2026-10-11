@@ -3,7 +3,10 @@
   "productName": "PDF-Stift",
   "version": "1.0.0",
   "description": "PDF-Stift – annotate PDFs with pen and keyboard. Free software (GPL-3.0).",
-  "author": "PDF-Stift contributors",
+  "author": {
+    "name": "PDF-Stift contributors",
+    "email": "pdf-stift@users.noreply.github.com"
+  },
   "main": "start.js",
   "dependencies": {
     "electron-updater": "6.3.9"
@@ -80,7 +83,24 @@
         "from": "THIRD-PARTY-NOTICES.md",
         "to": "THIRD-PARTY-NOTICES.md"
       }
-    ]
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "icon.png",
+      "maintainer": "PDF-Stift contributors <pdf-stift@users.noreply.github.com>",
+      "synopsis": "Annotate PDFs with pen, mouse and keyboard",
+      "artifactName": "PDF-Stift-${version}.${ext}",
+      "mimeTypes": [
+        "application/pdf"
+      ]
+    },
+    "deb": {
+      "artifactName": "pdf-stift_${version}_amd64.${ext}"
+    }
   },
   "license": "GPL-3.0-only",
   "homepage": "https://github.com/ek1-wq/pdf-stift",

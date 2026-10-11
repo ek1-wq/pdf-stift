@@ -1,5 +1,5 @@
 /* PDF-Stift Service Worker: hält die App selbst offline bereit. PDFs und Notizen liegen in IndexedDB. */
-const VERSION = '1.46.0';
+const VERSION = '1.65.0';
 const CACHE = 'pdfstift-' + VERSION;
 const SHELL = [
   './',
@@ -7,12 +7,12 @@ const SHELL = [
   'app/app.js?v=' + VERSION,
   'app/app.en.js?v=' + VERSION,
   'app/l10n.en.js?v=' + VERSION,
-  'vendor/pdf.min.js?v=' + VERSION,
+  'vendor/pdfjs/pdf.min.js?v=' + VERSION,
+  'vendor/pdfjs/pdf.worker.min.js?v=' + VERSION,
   'vendor/pdf-lib.min.js?v=' + VERSION,
   'vendor/qrcode.js?v=' + VERSION,
   'vendor/fflate.min.js?v=' + VERSION,
   'vendor/pptxgen.bundle.js?v=' + VERSION,
-  'vendor/pdf.worker.min.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-180.png',

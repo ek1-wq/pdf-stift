@@ -81,7 +81,7 @@ function meta_backlinks(string $rel): array
         $doc = json_decode($raw, true) ?: [];
         foreach ((array) ($doc['strokes'] ?? []) as $s) {
             if (($s['ln']['path'] ?? '') === $rel) {
-                $out[] = ['from' => (string) ($doc['path'] ?? ''), 'page' => (int) ($s['p'] ?? 0), 'text' => (string) ($s['text'] ?? ''), 'pg' => (int) ($s['ln']['pg'] ?? 0)];
+                $out[] = ['from' => (string) ($doc['path'] ?? ''), 'page' => (int) ($s['p'] ?? 0), 'text' => (string) ($s['text'] ?? ''), 'pg' => (int) ($s['ln']['pg'] ?? 0), 'img' => ($s['t'] ?? '') === 'img', 'id' => (string) ($s['id'] ?? '')];
             }
         }
     }

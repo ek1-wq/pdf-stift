@@ -1,14 +1,17 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/lib/common.php';
+require_once __DIR__ . '/lib/demo.php';
 // englische Oberfläche: index.en.php wird aus dieser Datei erzeugt (tools/i18n)
 if (basename(__FILE__) === 'index.php' && ui_lang() === 'en' && is_file(__DIR__ . '/index.en.php')) {
     require __DIR__ . '/index.en.php';
     exit;
 }
 $v = PDFSTIFT_VERSION;
+$demo = demo_public();
 header('Content-Type: text/html; charset=utf-8');
-header('X-Frame-Options: DENY');
+header('X-Frame-Options: SAMEORIGIN');
+header("Content-Security-Policy: frame-ancestors 'self'");
 header('Referrer-Policy: same-origin');
 ?><!doctype html>
 <html lang="de">
@@ -25,8 +28,9 @@ header('Referrer-Policy: same-origin');
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="stylesheet" href="app/app.css?v=<?= $v ?>">
+<script>try { var t = JSON.parse(localStorage.getItem('pdfstift.theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}</script>
 </head>
-<body data-ed="<?= edition() ?>">
+<body data-ed="<?= edition() ?>"<?= $demo ? ' data-demo="1"' : '' ?>>
 
 <section id="auth" class="auth" hidden>
   <form id="authForm" class="auth-card">
@@ -34,7 +38,10 @@ header('Referrer-Policy: same-origin');
     <h1 id="authTitle">Anmelden</h1>
     <p id="authText" class="muted">Gib dein Passwort ein.</p>
     <label for="pw">Passwort</label>
-    <input id="pw" type="password" autocomplete="current-password" required minlength="1">
+    <input id="pw" type="password" autocomplete="current-password" required minlength="1"<?= $demo ? ' value="' . htmlspecialchars($demo['password']) . '"' : '' ?>>
+<?php if ($demo): ?>
+    <p class="demo-note">Öffentliche Demo – das Passwort „<b><?= htmlspecialchars($demo['password']) ?></b>“ ist schon eingetragen. Einfach auf „Anmelden“ tippen.</p>
+<?php endif; ?>
     <div id="codeRow" hidden>
       <label for="code2">Code aus der Authenticator-App</label>
       <input id="code2" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="6 Ziffern oder Notfall-Code">
@@ -44,6 +51,9 @@ header('Referrer-Policy: same-origin');
   </form>
 </section>
 
+<?php if ($demo): ?>
+<div id="demoBar" class="demo-bar" role="note"><b>Demo</b><span>Wird jede volle Stunde zurückgesetzt – bitte keine persönlichen Dateien hochladen.</span><?php if ($demo['credit'] !== ''): ?><span class="muted"><?= htmlspecialchars($demo['credit']) ?></span><?php endif; ?><a href="https://github.com/ek1-wq/pdf-stift/releases/latest" target="_blank" rel="noopener">Kostenlos herunterladen</a></div>
+<?php endif; ?>
 <div id="shell" class="shell" hidden>
   <header class="topbar">
     <button id="btnLib" class="icon-btn" type="button" aria-label="Meine PDFs" title="Meine PDFs">
@@ -51,25 +61,58 @@ header('Referrer-Policy: same-origin');
     </button>
     <nav id="tabs" class="tabs" role="tablist" aria-label="Geöffnete PDFs"></nav>
     <button id="liveBadge" type="button" class="live-badge srv-only" hidden><i></i><span>LIVE</span></button>
-    <button id="thBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Seitenvorschau neben der PDF ein-/ausblenden" hidden>
-      <svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M15 4v16"/><path d="M17 8h1.5M17 12h1.5M17 16h1.5"/></svg>
-      <span>Seiten</span>
-    </button>
-    <button id="cmBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Kommentare: alle Notizzettel dieser PDF als Liste" hidden>
-      <svg viewBox="0 0 24 24"><path d="M5 5h14v10H10l-4 4v-4H5z"/></svg>
-      <span>Kommentare</span>
-    </button>
-    <button id="toolsBtn" type="button" class="text-btn present-btn" title="Werkzeuge: Bearbeiten, Formulare, Unterschrift, Umwandeln, Schützen …">
-      <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 13.5v7M13.5 17h7"/></svg>
-      <span>Werkzeuge</span>
-    </button>
-    <button id="presentBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Präsentation: nur die Seite zeigen – für Beamer und Bildschirmspiegelung" hidden>
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8"/></svg>
-      <span>Präsentation</span>
-    </button>
+    <div id="viewRow" class="view-row">
+      <div id="viewBar" class="view-bar" role="toolbar" aria-label="Ansicht und Bearbeiten" hidden>
+        <span class="menu-wrap vb-grip-wrap"><button id="vbGrip" type="button" class="tb-grip vb-grip" aria-label="Symbolleiste verschieben" title="Leiste verschieben: an den Rand ziehen – oder antippen"><svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg></button></span>
+        <button type="button" class="vb-b vb-x" data-vb="save" title="Speichern mit Notizen (Strg+S)" aria-label="Speichern"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg></button>
+        <button type="button" class="vb-b vb-x" data-vb="print" title="Drucken (Strg+P)" aria-label="Drucken"><svg viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="3.5" y="9" width="17" height="8" rx="1.5"/><path d="M7 14h10v6H7z"/></svg></button>
+        <span class="vb-sep vb-x"></span>
+        <span class="vb-seg">
+          <button type="button" class="vb-b" data-vb="single" title="Einzelseiten untereinander" aria-label="Einzelseiten"><svg viewBox="0 0 24 24"><rect x="7" y="3.5" width="10" height="17" rx="1.5"/></svg></button>
+          <button type="button" class="vb-b" data-vb="two" title="Zwei Seiten nebeneinander" aria-label="Zwei Seiten nebeneinander"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="8.5" height="14" rx="1.2"/><rect x="13" y="5" width="8.5" height="14" rx="1.2"/></svg></button>
+          <button type="button" class="vb-b" data-vb="cover" title="Wie ein Buch: Titelseite einzeln, dann je zwei Seiten" aria-label="Buchansicht"><svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 6.5 4.5 3 5v13.5c3.5-.5 7 0 9 1.5 2-1.5 5.5-2 9-1.5V5c-3.5-.5-7 0-9 1.5zM12 6.5V20"/></svg></button>
+        </span>
+        <button type="button" class="vb-b" data-vb="split" title="Zwei Dokumente nebeneinander (rechts ein zweites PDF)" aria-label="Zwei Dokumente nebeneinander"><svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="1.5"/><path d="M12 4v16"/><path d="M5 8h4M5 11h4M15 8h4M15 11h4M15 14h3"/></svg></button>
+        <span class="vb-sep"></span>
+        <button type="button" class="vb-b" data-vb="fitw" title="Seitenbreite (Strg+2)" aria-label="Seitenbreite"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M7 12h10M7 12l2.5-2.5M7 12l2.5 2.5M17 12l-2.5-2.5M17 12l-2.5 2.5"/></svg></button>
+        <button type="button" class="vb-b" data-vb="fitp" title="Ganze Seite (Strg+0)" aria-label="Ganze Seite"><svg viewBox="0 0 24 24"><rect x="6.5" y="3.5" width="11" height="17" rx="1.5"/><path d="M9.5 8.5V7h5v1.5M9.5 15.5V17h5v-1.5"/></svg></button>
+        <button type="button" class="vb-b" data-vb="zout" title="Verkleinern (Strg+−)" aria-label="Verkleinern"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4M8.5 11h5"/></svg></button>
+        <button type="button" class="vb-b" data-vb="zin" title="Vergrößern (Strg++)" aria-label="Vergrößern"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4M8.5 11h5M11 8.5v5"/></svg></button>
+        <button type="button" class="vb-b vb-x" data-vb="rotL" title="Ansicht links drehen" aria-label="Ansicht links drehen"><svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 1 0 2.05-4.95M5 4v4h4"/></svg></button>
+        <button type="button" class="vb-b" data-vb="rotR" title="Ansicht rechts drehen" aria-label="Ansicht rechts drehen"><svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4"/></svg></button>
+        <span class="vb-sep"></span>
+        <button type="button" class="vb-b" data-vb="undo" id="vbUndo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+        <button type="button" class="vb-b" data-vb="redo" id="vbRedo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+        <button type="button" class="vb-b" data-vb="find" title="In der PDF suchen (Strg+F)" aria-label="In der PDF suchen"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></button>
+        <span class="vb-sep vb-x"></span>
+        <button type="button" class="vb-b vb-x" data-vb="focus" title="Leisten ausblenden – nur die Seite (Strg+H)" aria-label="Leisten ausblenden"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+      <span class="vr-sp"></span>
+      <button id="thBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Seitenvorschau neben der PDF ein-/ausblenden" hidden>
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M15 4v16"/><path d="M17 8h1.5M17 12h1.5M17 16h1.5"/></svg>
+        <span>Seiten</span>
+      </button>
+      <button id="cmBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Kommentare: alle Notizzettel dieser PDF als Liste" hidden>
+        <svg viewBox="0 0 24 24"><path d="M5 5h14v10H10l-4 4v-4H5z"/></svg>
+        <span>Kommentare</span>
+      </button>
+      <button id="toolsBtn" type="button" class="text-btn present-btn" title="Werkzeuge: Bearbeiten, Formulare, Unterschrift, Umwandeln, Schützen …">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 13.5v7M13.5 17h7"/></svg>
+        <span>Werkzeuge</span>
+      </button>
+      <button id="presentBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Präsentation: nur die Seite zeigen – für Beamer und Bildschirmspiegelung" hidden>
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8"/></svg>
+        <span>Präsentation</span>
+      </button>
+      <button id="vrCfg" type="button" class="vb-b vr-cfg" title="Symbolleiste anpassen" aria-label="Symbolleiste anpassen"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
+    </div>
     <button id="srvUpd" type="button" class="upd-pill srv-pill srv-only" hidden title="Neue Version für den Server – mit einem Klick einspielen"><span class="upd-dot"></span><span id="srvUpdText">Server-Update</span></button>
     <button id="bkWarn" type="button" class="bk-warn srv-only" hidden title="Mit der Sicherung stimmt etwas nicht – antippen für Einzelheiten"><span>⚠︎</span><span id="bkWarnText">Sicherung</span></button>
     <button id="winUpd" type="button" class="upd-pill" hidden><span class="upd-dot"></span><span id="winUpdText">Update verfügbar</span></button>
+    <button id="themeBtn" type="button" class="theme-btn" title="Helles oder dunkles Design" aria-label="Helles oder dunkles Design">
+      <svg class="moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>
+      <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
+    </button>
     <div class="ocr-wrap">
       <button id="ocrInd" type="button" class="ocr-ind" data-state="idle" aria-haspopup="true" aria-expanded="false" title="Texterkennung (Scans durchsuchbar machen)">
         <span class="led" aria-hidden="true"></span><span class="ocr-lbl">OCR</span>
@@ -88,6 +131,7 @@ header('Referrer-Policy: same-origin');
     </div>
   </header>
 
+  <div id="dockT" class="dock dock-h">
   <div id="toolbar" class="toolbar" hidden>
     <div class="tb-row">
       <div class="menu-wrap tb-grip-wrap">
@@ -141,6 +185,13 @@ header('Referrer-Policy: same-origin');
         <div id="menu" class="menu" hidden>
           <button type="button" data-act="bd-fit" class="bd-only">Ganze Seite zeigen</button>
           <button type="button" data-act="bd-img" class="bd-only">Bild einfügen …</button>
+          <button type="button" data-act="bd-pdf" class="bd-only">PDF-Seiten einfügen …</button>
+          <button type="button" data-act="bd-tpl" class="bd-only">Vorlage einfügen (Cornell, Besprechung, Vorlesung) …</button>
+          <button type="button" data-act="link" class="bd-only">Verknüpfung einfügen …</button>
+          <button type="button" data-act="backlinks" class="bd-only">Wer verweist hierher? …</button>
+          <button type="button" data-act="bd-hist" class="bd-only">Frühere Stände …</button>
+          <button type="button" data-act="bd-save" class="bd-only">Als PDF speichern …</button>
+          <button type="button" data-act="bd-print" class="bd-only">Drucken …</button>
           <span class="menu-sep bd-only"></span>
           <button type="button" data-act="bg-dots" class="bd-only">Hintergrund: Punkte</button>
           <button type="button" data-act="bg-grid" class="bd-only">Hintergrund: Kariert</button>
@@ -171,7 +222,13 @@ header('Referrer-Policy: same-origin');
           <button type="button" data-act="resetfavs">Favoriten zurücksetzen</button>
           <span class="menu-sep"></span>
           <button type="button" data-act="two">Zwei Seiten nebeneinander / Einzelseiten</button>
+          <button type="button" data-act="vbcfg">Symbolleiste anpassen …</button>
           <button type="button" data-act="viewrot">Ansicht drehen (nur Anzeige)</button>
+          <button type="button" data-act="mkf">Folienmarke setzen</button>
+          <button type="button" data-act="study">Lernzettel aus Markierungen …</button>
+          <button type="button" data-act="tonb">Ins Notizbuch übernehmen …</button>
+          <button type="button" data-act="carry">Notizen aus älterer Fassung übernehmen …</button>
+          <button type="button" data-act="props">Dokumenteigenschaften …</button>
           <button type="button" data-act="settings"><b>Einstellungen …</b></button>
           <button type="button" data-act="report" class="srv-only">Bericht für Verbesserungen …</button>
           <button type="button" data-act="help">Kurzanleitung</button>
@@ -180,6 +237,21 @@ header('Referrer-Policy: same-origin');
       </div>
     </div>
 
+    <div id="searchRow" class="tb-row search-row" hidden>
+      <label for="q" class="sr">Im PDF suchen</label>
+      <input id="q" type="search" placeholder="Im PDF suchen …" autocomplete="off" enterkeyhint="search">
+      <span id="qInfo" class="muted num"></span>
+      <button id="qPrev" type="button" class="icon-btn" aria-label="Vorheriger Treffer"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button id="qNext" type="button" class="icon-btn" aria-label="Nächster Treffer"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button id="qClose" type="button" class="icon-btn" aria-label="Suche schließen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+  <div id="toolbar2" class="toolbar toolbar2" hidden>
+    <div class="menu-wrap tb-grip-wrap">
+      <button id="tb2Grip" type="button" class="tb-grip" aria-label="Werkzeug-Leiste verschieben" title="Leiste verschieben: an den Rand ziehen – oder antippen">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>
+      </button>
+    </div>
     <div id="toolsRow" class="tb-row tools-row">
       <div class="group seg" role="radiogroup" aria-label="Werkzeug">
         <button type="button" class="tool" data-tool="sel" aria-label="Text auswählen" title="Text auswählen und kopieren (Rechtsklick: hervorheben, kopieren …)">
@@ -237,16 +309,11 @@ header('Referrer-Policy: same-origin');
       <span class="sep"></span>
       <div id="widths" class="group" aria-label="Strichstärke"></div>
     </div>
-
-    <div id="searchRow" class="tb-row search-row" hidden>
-      <label for="q" class="sr">Im PDF suchen</label>
-      <input id="q" type="search" placeholder="Im PDF suchen …" autocomplete="off" enterkeyhint="search">
-      <span id="qInfo" class="muted num"></span>
-      <button id="qPrev" type="button" class="icon-btn" aria-label="Vorheriger Treffer"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
-      <button id="qNext" type="button" class="icon-btn" aria-label="Nächster Treffer"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-      <button id="qClose" type="button" class="icon-btn" aria-label="Suche schließen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
   </div>
+  </div>
+  <div id="dockL" class="dock dock-v"></div>
+  <div id="dockR" class="dock dock-v"></div>
+  <div id="dockB" class="dock dock-h"></div>
 
   <section id="overview" class="overview" hidden aria-label="Seitenübersicht">
     <div class="ov-head">
@@ -366,6 +433,16 @@ header('Referrer-Policy: same-origin');
   <main id="viewer" class="viewer" hidden>
     <div id="pages" class="pages"></div>
   </main>
+  <aside id="toolPanel" class="tool-panel" hidden aria-label="Werkzeuge">
+    <div class="tp-head" title="Ziehen: links, rechts oder frei als Fenster"><b>Werkzeuge</b>
+      <button id="tpSide" type="button" class="icon-btn" title="Leiste auf die andere Seite" aria-label="Seite wechseln"><svg viewBox="0 0 24 24"><path d="M7 8h12l-3-3M17 16H5l3 3"/></svg></button>
+      <button id="tpAll" type="button" class="icon-btn" title="Alle Werkzeuge groß anzeigen" aria-label="Alle Werkzeuge groß anzeigen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button id="tpClose" type="button" class="icon-btn" title="Leiste schließen" aria-label="Leiste schließen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="tp-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="tpQ" type="search" placeholder="Werkzeug suchen …" autocomplete="off"></div>
+    <div id="tpBody" class="tp-body"></div>
+    <div id="tpResize" class="tp-resize" title="Breite ändern"></div>
+  </aside>
   <aside id="thumbBar" class="thumb-bar" hidden aria-label="Seitenvorschau">
     <div class="th-head">
       <span class="th-title">Seiten</span>
@@ -770,10 +847,21 @@ header('Referrer-Policy: same-origin');
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="vendor/pdf.min.js?v=<?= $v ?>"></script>
 <script src="vendor/pdf-lib.min.js?v=<?= $v ?>"></script>
 <script src="vendor/qrcode.js?v=<?= $v ?>"></script>
 <script src="vendor/fflate.min.js?v=<?= $v ?>"></script>
-<script src="app/app.js?v=<?= $v ?>"></script>
+<script type="module">
+import * as pdfjs from './vendor/pdfjs/pdf.min.js?v=<?= $v ?>';
+// pdf.js 6: Schriftdaten (Standardschriften, Zeichentabellen), Bild-Dekoder und Farbprofile liegen daneben
+const B = new URL('vendor/pdfjs/', location.href).href;
+const OPT = { cMapUrl: B + 'cmaps/', cMapPacked: true, standardFontDataUrl: B + 'standard_fonts/', wasmUrl: B + 'wasm/', iccUrl: B + 'iccs/', isEvalSupported: false };
+// pdf.js 6: Dokumente haben kein destroy() mehr – wie früher anbieten (beendet die Ladeaufgabe)
+window.pdfjsLib = Object.assign({}, pdfjs, { getDocument: (src) => {
+  const task = pdfjs.getDocument(Object.assign({}, OPT, typeof src === 'string' || src instanceof URL ? { url: String(src) } : src));
+  task.promise.then((doc) => { if (typeof doc.destroy !== 'function') doc.destroy = () => task.destroy(); }, () => {});
+  return task;
+} });
+</script>
+<script defer src="app/app.js?v=<?= $v ?>"></script>
 </body>
 </html>

@@ -62,6 +62,22 @@ function search_clean(string $t): string
 }
 
 /** Text einer PDF in den Index schreiben (eine Zeile pro Seite, Seiten ab 0 gezählt). */
+/** Text einer Seite (0-basiert) aus dem Suchindex, leer wenn unbekannt */
+function index_page_text(string $rel, int $page): string
+{
+    $d = search_db();
+    if (!$d) {
+        return '';
+    }
+    try {
+        $st = $d->prepare('SELECT body FROM pages WHERE path = ? AND page = ?');
+        $st->execute([$rel, $page]);
+        return (string) ($st->fetchColumn() ?: '');
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
 function index_put(string $rel, int $mtime, int $size, array $texts, string $src): array
 {
     $d = search_db();

@@ -1,14 +1,17 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/lib/common.php';
+require_once __DIR__ . '/lib/demo.php';
 // englische Oberfläche: index.en.php wird aus dieser Datei erzeugt (tools/i18n)
 if (basename(__FILE__) === 'index.php' && ui_lang() === 'en' && is_file(__DIR__ . '/index.en.php')) {
     require __DIR__ . '/index.en.php';
     exit;
 }
 $v = PDFSTIFT_VERSION;
+$demo = demo_public();
 header('Content-Type: text/html; charset=utf-8');
-header('X-Frame-Options: DENY');
+header('X-Frame-Options: SAMEORIGIN');
+header("Content-Security-Policy: frame-ancestors 'self'");
 header('Referrer-Policy: same-origin');
 ?><!doctype html>
 <html lang="en">
@@ -25,8 +28,9 @@ header('Referrer-Policy: same-origin');
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="stylesheet" href="app/app.css?v=<?= $v ?>">
+<script>try { var t = JSON.parse(localStorage.getItem('pdfstift.theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}</script>
 </head>
-<body data-ed="<?= edition() ?>">
+<body data-ed="<?= edition() ?>"<?= $demo ? ' data-demo="1"' : '' ?>>
 
 <section id="auth" class="auth" hidden>
   <form id="authForm" class="auth-card">
@@ -34,7 +38,10 @@ header('Referrer-Policy: same-origin');
     <h1 id="authTitle">Sign in</h1>
     <p id="authText" class="muted">Enter your password.</p>
     <label for="pw">Password</label>
-    <input id="pw" type="password" autocomplete="current-password" required minlength="1">
+    <input id="pw" type="password" autocomplete="current-password" required minlength="1"<?= $demo ? ' value="' . htmlspecialchars($demo['password']) . '"' : '' ?>>
+<?php if ($demo): ?>
+    <p class="demo-note">Public demo – the password “<b><?= htmlspecialchars($demo['password']) ?></b>” is already filled in. Just tap “Sign in”.</p>
+<?php endif; ?>
     <div id="codeRow" hidden>
       <label for="code2">Code from the authenticator app</label>
       <input id="code2" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="6 digits or recovery code">
@@ -44,6 +51,9 @@ header('Referrer-Policy: same-origin');
   </form>
 </section>
 
+<?php if ($demo): ?>
+<div id="demoBar" class="demo-bar" role="note"><b>Demo</b><span>Reset every hour on the hour – please don’t upload personal files.</span><?php if ($demo['credit'] !== ''): ?><span class="muted"><?= htmlspecialchars($demo['credit']) ?></span><?php endif; ?><a href="https://github.com/ek1-wq/pdf-stift/releases/latest" target="_blank" rel="noopener">Download for free</a></div>
+<?php endif; ?>
 <div id="shell" class="shell" hidden>
   <header class="topbar">
     <button id="btnLib" class="icon-btn" type="button" aria-label="My PDFs" title="My PDFs">
@@ -51,25 +61,58 @@ header('Referrer-Policy: same-origin');
     </button>
     <nav id="tabs" class="tabs" role="tablist" aria-label="Open PDFs"></nav>
     <button id="liveBadge" type="button" class="live-badge srv-only" hidden><i></i><span>LIVE</span></button>
-    <button id="thBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Show/hide page thumbnails next to the PDF" hidden>
-      <svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M15 4v16"/><path d="M17 8h1.5M17 12h1.5M17 16h1.5"/></svg>
-      <span>Pages</span>
-    </button>
-    <button id="cmBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Comments: all sticky notes in this PDF as a list" hidden>
-      <svg viewBox="0 0 24 24"><path d="M5 5h14v10H10l-4 4v-4H5z"/></svg>
-      <span>Comments</span>
-    </button>
-    <button id="toolsBtn" type="button" class="text-btn present-btn" title="Tools: Edit, Forms, Signature, Convert, Protect …">
-      <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 13.5v7M13.5 17h7"/></svg>
-      <span>Tools</span>
-    </button>
-    <button id="presentBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Presentation: show only the page – for projectors and screen mirroring" hidden>
-      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8"/></svg>
-      <span>Presentation</span>
-    </button>
+    <div id="viewRow" class="view-row">
+      <div id="viewBar" class="view-bar" role="toolbar" aria-label="View and edit" hidden>
+        <span class="menu-wrap vb-grip-wrap"><button id="vbGrip" type="button" class="tb-grip vb-grip" aria-label="Move toolbar" title="Move toolbar: drag to an edge – or tap"><svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg></button></span>
+        <button type="button" class="vb-b vb-x" data-vb="save" title="Save with notes (Ctrl+S)" aria-label="Save"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg></button>
+        <button type="button" class="vb-b vb-x" data-vb="print" title="Print (Ctrl+P)" aria-label="Drucken"><svg viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="3.5" y="9" width="17" height="8" rx="1.5"/><path d="M7 14h10v6H7z"/></svg></button>
+        <span class="vb-sep vb-x"></span>
+        <span class="vb-seg">
+          <button type="button" class="vb-b" data-vb="single" title="Single pages, one below the other" aria-label="Single pages"><svg viewBox="0 0 24 24"><rect x="7" y="3.5" width="10" height="17" rx="1.5"/></svg></button>
+          <button type="button" class="vb-b" data-vb="two" title="Two pages side by side" aria-label="Two pages side by side"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="8.5" height="14" rx="1.2"/><rect x="13" y="5" width="8.5" height="14" rx="1.2"/></svg></button>
+          <button type="button" class="vb-b" data-vb="cover" title="Like a book: cover page alone, then two pages each" aria-label="Book view"><svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 6.5 4.5 3 5v13.5c3.5-.5 7 0 9 1.5 2-1.5 5.5-2 9-1.5V5c-3.5-.5-7 0-9 1.5zM12 6.5V20"/></svg></button>
+        </span>
+        <button type="button" class="vb-b" data-vb="split" title="Two documents side by side (a second PDF on the right)" aria-label="Two documents side by side"><svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="1.5"/><path d="M12 4v16"/><path d="M5 8h4M5 11h4M15 8h4M15 11h4M15 14h3"/></svg></button>
+        <span class="vb-sep"></span>
+        <button type="button" class="vb-b" data-vb="fitw" title="Fit width (Ctrl+2)" aria-label="Fit width"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M7 12h10M7 12l2.5-2.5M7 12l2.5 2.5M17 12l-2.5-2.5M17 12l-2.5 2.5"/></svg></button>
+        <button type="button" class="vb-b" data-vb="fitp" title="Whole page (Ctrl+0)" aria-label="Fit page"><svg viewBox="0 0 24 24"><rect x="6.5" y="3.5" width="11" height="17" rx="1.5"/><path d="M9.5 8.5V7h5v1.5M9.5 15.5V17h5v-1.5"/></svg></button>
+        <button type="button" class="vb-b" data-vb="zout" title="Zoom out (Ctrl+−)" aria-label="Zoom out"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4M8.5 11h5"/></svg></button>
+        <button type="button" class="vb-b" data-vb="zin" title="Zoom in (Ctrl++)" aria-label="Zoom in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4M8.5 11h5M11 8.5v5"/></svg></button>
+        <button type="button" class="vb-b vb-x" data-vb="rotL" title="Rotate view counterclockwise" aria-label="Rotate view counterclockwise"><svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 1 0 2.05-4.95M5 4v4h4"/></svg></button>
+        <button type="button" class="vb-b" data-vb="rotR" title="Rotate view clockwise" aria-label="Rotate view clockwise"><svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4"/></svg></button>
+        <span class="vb-sep"></span>
+        <button type="button" class="vb-b" data-vb="undo" id="vbUndo" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+        <button type="button" class="vb-b" data-vb="redo" id="vbRedo" title="Redo (Ctrl+Y)" aria-label="Redo"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+        <button type="button" class="vb-b" data-vb="find" title="Find in PDF (Ctrl+F)" aria-label="Search in PDF"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></button>
+        <span class="vb-sep vb-x"></span>
+        <button type="button" class="vb-b vb-x" data-vb="focus" title="Hide bars – page only (Ctrl+H)" aria-label="Hide toolbars"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+      <span class="vr-sp"></span>
+      <button id="thBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Show/hide page thumbnails next to the PDF" hidden>
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="1.5"/><path d="M15 4v16"/><path d="M17 8h1.5M17 12h1.5M17 16h1.5"/></svg>
+        <span>Pages</span>
+      </button>
+      <button id="cmBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Comments: all sticky notes in this PDF as a list" hidden>
+        <svg viewBox="0 0 24 24"><path d="M5 5h14v10H10l-4 4v-4H5z"/></svg>
+        <span>Comments</span>
+      </button>
+      <button id="toolsBtn" type="button" class="text-btn present-btn" title="Tools: Edit, Forms, Signature, Convert, Protect …">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 13.5v7M13.5 17h7"/></svg>
+        <span>Tools</span>
+      </button>
+      <button id="presentBtn" type="button" class="text-btn present-btn" aria-pressed="false" title="Presentation: show only the page – for projectors and screen mirroring" hidden>
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8"/></svg>
+        <span>Presentation</span>
+      </button>
+      <button id="vrCfg" type="button" class="vb-b vr-cfg" title="Customize toolbar" aria-label="Customize toolbar"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
+    </div>
     <button id="srvUpd" type="button" class="upd-pill srv-pill srv-only" hidden title="New version for the server – install with one click"><span class="upd-dot"></span><span id="srvUpdText">Server update</span></button>
     <button id="bkWarn" type="button" class="bk-warn srv-only" hidden title="Something is wrong with the backup – tap for details"><span>⚠︎</span><span id="bkWarnText">Backup</span></button>
     <button id="winUpd" type="button" class="upd-pill" hidden><span class="upd-dot"></span><span id="winUpdText">Update available</span></button>
+    <button id="themeBtn" type="button" class="theme-btn" title="Light or dark theme" aria-label="Light or dark theme">
+      <svg class="moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>
+      <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
+    </button>
     <div class="ocr-wrap">
       <button id="ocrInd" type="button" class="ocr-ind" data-state="idle" aria-haspopup="true" aria-expanded="false" title="Text recognition (make scans searchable)">
         <span class="led" aria-hidden="true"></span><span class="ocr-lbl">OCR</span>
@@ -88,6 +131,7 @@ header('Referrer-Policy: same-origin');
     </div>
   </header>
 
+  <div id="dockT" class="dock dock-h">
   <div id="toolbar" class="toolbar" hidden>
     <div class="tb-row">
       <div class="menu-wrap tb-grip-wrap">
@@ -141,6 +185,13 @@ header('Referrer-Policy: same-origin');
         <div id="menu" class="menu" hidden>
           <button type="button" data-act="bd-fit" class="bd-only">Show whole page</button>
           <button type="button" data-act="bd-img" class="bd-only">Insert image …</button>
+          <button type="button" data-act="bd-pdf" class="bd-only">Insert PDF pages …</button>
+          <button type="button" data-act="bd-tpl" class="bd-only">Insert template (Cornell, meeting, lecture) …</button>
+          <button type="button" data-act="link" class="bd-only">Insert link …</button>
+          <button type="button" data-act="backlinks" class="bd-only">What links here? …</button>
+          <button type="button" data-act="bd-hist" class="bd-only">Earlier versions …</button>
+          <button type="button" data-act="bd-save" class="bd-only">Save as PDF …</button>
+          <button type="button" data-act="bd-print" class="bd-only">Print …</button>
           <span class="menu-sep bd-only"></span>
           <button type="button" data-act="bg-dots" class="bd-only">Background: Dots</button>
           <button type="button" data-act="bg-grid" class="bd-only">Background: Grid</button>
@@ -171,7 +222,13 @@ header('Referrer-Policy: same-origin');
           <button type="button" data-act="resetfavs">Reset favorites</button>
           <span class="menu-sep"></span>
           <button type="button" data-act="two">Two pages side by side / single pages</button>
+          <button type="button" data-act="vbcfg">Customize toolbar …</button>
           <button type="button" data-act="viewrot">Rotate view (display only)</button>
+          <button type="button" data-act="mkf">Add slide marker</button>
+          <button type="button" data-act="study">Study sheet from highlights …</button>
+          <button type="button" data-act="tonb">Copy to notebook …</button>
+          <button type="button" data-act="carry">Take over notes from an older version …</button>
+          <button type="button" data-act="props">Document properties …</button>
           <button type="button" data-act="settings"><b>Settings …</b></button>
           <button type="button" data-act="report" class="srv-only">Improvement report …</button>
           <button type="button" data-act="help">Quick guide</button>
@@ -180,6 +237,21 @@ header('Referrer-Policy: same-origin');
       </div>
     </div>
 
+    <div id="searchRow" class="tb-row search-row" hidden>
+      <label for="q" class="sr">Search in PDF</label>
+      <input id="q" type="search" placeholder="Search in PDF …" autocomplete="off" enterkeyhint="search">
+      <span id="qInfo" class="muted num"></span>
+      <button id="qPrev" type="button" class="icon-btn" aria-label="Previous match"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button id="qNext" type="button" class="icon-btn" aria-label="Next match"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button id="qClose" type="button" class="icon-btn" aria-label="Close search"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+  <div id="toolbar2" class="toolbar toolbar2" hidden>
+    <div class="menu-wrap tb-grip-wrap">
+      <button id="tb2Grip" type="button" class="tb-grip" aria-label="Move tool bar" title="Move toolbar: drag to an edge – or tap">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>
+      </button>
+    </div>
     <div id="toolsRow" class="tb-row tools-row">
       <div class="group seg" role="radiogroup" aria-label="Tool">
         <button type="button" class="tool" data-tool="sel" aria-label="Select text" title="Select and copy text (right-click: highlight, copy …)">
@@ -237,16 +309,11 @@ header('Referrer-Policy: same-origin');
       <span class="sep"></span>
       <div id="widths" class="group" aria-label="Stroke width"></div>
     </div>
-
-    <div id="searchRow" class="tb-row search-row" hidden>
-      <label for="q" class="sr">Search in PDF</label>
-      <input id="q" type="search" placeholder="Search in PDF …" autocomplete="off" enterkeyhint="search">
-      <span id="qInfo" class="muted num"></span>
-      <button id="qPrev" type="button" class="icon-btn" aria-label="Previous match"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
-      <button id="qNext" type="button" class="icon-btn" aria-label="Next match"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-      <button id="qClose" type="button" class="icon-btn" aria-label="Close search"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </div>
   </div>
+  </div>
+  <div id="dockL" class="dock dock-v"></div>
+  <div id="dockR" class="dock dock-v"></div>
+  <div id="dockB" class="dock dock-h"></div>
 
   <section id="overview" class="overview" hidden aria-label="Page overview">
     <div class="ov-head">
@@ -366,6 +433,16 @@ header('Referrer-Policy: same-origin');
   <main id="viewer" class="viewer" hidden>
     <div id="pages" class="pages"></div>
   </main>
+  <aside id="toolPanel" class="tool-panel" hidden aria-label="Tools">
+    <div class="tp-head" title="Drag: dock left, right or float as a window"><b>Tools</b>
+      <button id="tpSide" type="button" class="icon-btn" title="Move bar to the other side" aria-label="Switch side"><svg viewBox="0 0 24 24"><path d="M7 8h12l-3-3M17 16H5l3 3"/></svg></button>
+      <button id="tpAll" type="button" class="icon-btn" title="Show all tools large" aria-label="Show all tools large"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button id="tpClose" type="button" class="icon-btn" title="Close panel" aria-label="Close panel"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="tp-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="tpQ" type="search" placeholder="Search tools …" autocomplete="off"></div>
+    <div id="tpBody" class="tp-body"></div>
+    <div id="tpResize" class="tp-resize" title="Resize"></div>
+  </aside>
   <aside id="thumbBar" class="thumb-bar" hidden aria-label="Page thumbnails">
     <div class="th-head">
       <span class="th-title">Pages</span>
@@ -770,11 +847,22 @@ header('Referrer-Policy: same-origin');
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="vendor/pdf.min.js?v=<?= $v ?>"></script>
 <script src="vendor/pdf-lib.min.js?v=<?= $v ?>"></script>
 <script src="vendor/qrcode.js?v=<?= $v ?>"></script>
 <script src="vendor/fflate.min.js?v=<?= $v ?>"></script>
+<script type="module">
+import * as pdfjs from './vendor/pdfjs/pdf.min.js?v=<?= $v ?>';
+// pdf.js 6: Schriftdaten (Standardschriften, Zeichentabellen), Bild-Dekoder und Farbprofile liegen daneben
+const B = new URL('vendor/pdfjs/', location.href).href;
+const OPT = { cMapUrl: B + 'cmaps/', cMapPacked: true, standardFontDataUrl: B + 'standard_fonts/', wasmUrl: B + 'wasm/', iccUrl: B + 'iccs/', isEvalSupported: false };
+// pdf.js 6: Dokumente haben kein destroy() mehr – wie früher anbieten (beendet die Ladeaufgabe)
+window.pdfjsLib = Object.assign({}, pdfjs, { getDocument: (src) => {
+  const task = pdfjs.getDocument(Object.assign({}, OPT, typeof src === 'string' || src instanceof URL ? { url: String(src) } : src));
+  task.promise.then((doc) => { if (typeof doc.destroy !== 'function') doc.destroy = () => task.destroy(); }, () => {});
+  return task;
+} });
+</script>
 <script src="app/l10n.en.js?v=<?= $v ?>"></script>
-<script src="app/app.en.js?v=<?= $v ?>"></script>
+<script defer src="app/app.en.js?v=<?= $v ?>"></script>
 </body>
 </html>

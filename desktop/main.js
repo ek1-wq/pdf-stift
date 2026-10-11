@@ -1,6 +1,6 @@
 // PDF-Stift für Windows: eigenes Programmfenster für pdf-stift.example.org – mit Stift, offline-fähig (wie im Browser),
 // „Öffnen mit PDF-Stift“ für PDFs aus dem Explorer und automatischen Updates.
-const { app, BrowserWindow, shell, dialog, session, Menu, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, shell, dialog, session, Menu, ipcMain, nativeImage, nativeTheme, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -69,6 +69,15 @@ async function start() {
   session.fromPartition(PART).setSpellCheckerLanguages(['de-DE', 'en-US']);
   // Links nach außen (Hilfe, Live-Mitschau-Link …) im normalen Browser öffnen
   wc.setWindowOpenHandler(({ url }) => {
+    // Präsentationsfenster: auf dem zweiten Bildschirm (Beamer) im Vollbild, sonst als normales Fenster (z. B. für Teams)
+    if (url.startsWith(BASE) && /[?&]show=1/.test(url)) {
+      const prim = screen.getPrimaryDisplay();
+      const ext = screen.getAllDisplays().find((d) => d.id !== prim.id);
+      const o = { title: 'Präsentation – PDF-Stift', autoHideMenuBar: true, backgroundColor: '#0D0F14', icon: path.join(__dirname, 'icon.png') };
+      if (ext) Object.assign(o, { x: ext.bounds.x, y: ext.bounds.y, width: ext.bounds.width, height: ext.bounds.height, fullscreen: true });
+      else Object.assign(o, { width: 1280, height: 760 });
+      return { action: 'allow', overrideBrowserWindowOptions: o };
+    }
     if (url.startsWith(BASE) && !/live\.php/.test(url)) return { action: 'allow' };
     if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
@@ -149,6 +158,7 @@ function menu() {
       { label: 'Original herunterladen …', click: cmd('original') },
       { label: 'Drucken …', accelerator: 'Ctrl+P', click: cmd('print') },
       { type: 'separator' },
+      { label: 'Dokumenteigenschaften …', accelerator: 'Ctrl+D', click: cmd('props') },
       { label: 'Einstellungen …', accelerator: 'Ctrl+,', registerAccelerator: false, click: cmd('settings') },
       { label: 'Als Drucker einrichten („PDF-Stift“ in Word, Chrome …) …', click: () => printerSetup() },
       { type: 'separator' },
@@ -183,16 +193,19 @@ function menu() {
       { label: 'Einzelseiten', click: cmd('single') },
       { label: 'Zwei Seiten nebeneinander', click: cmd('two') },
       { label: 'Zwei Seiten, Titelseite einzeln', click: cmd('cover') },
-      { label: 'Ansicht rechts drehen', accelerator: 'Ctrl+Shift+Plus', registerAccelerator: false, click: cmd('rotR') },
-      { label: 'Ansicht links drehen', accelerator: 'Ctrl+Shift+-', registerAccelerator: false, click: cmd('rotL') },
+      { label: 'Zwei Dokumente nebeneinander', accelerator: 'Ctrl+Shift+D', click: cmd('split') },
+      { label: 'Ansicht rechts drehen', accelerator: 'Ctrl+Shift+R', click: cmd('rotR') },
+      { label: 'Ansicht links drehen', accelerator: 'Ctrl+Shift+L', click: cmd('rotL') },
       { type: 'separator' },
       { label: 'Seitenleiste (Vorschaubilder)', click: cmd('thumbs') },
       { label: 'Kommentare (Liste)', click: cmd('comments') },
       { label: 'Nächster Tab', accelerator: 'Ctrl+Tab', click: cmd('nextTab') },
       { label: 'Vorheriger Tab', accelerator: 'Ctrl+Shift+Tab', click: cmd('prevTab') },
       { type: 'separator' },
+      { label: 'Symbolleiste anpassen …', click: cmd('vbcfg') },
       { label: 'Leisten ausblenden', accelerator: 'Ctrl+H', click: cmd('focus') },
       { label: 'Präsentation', accelerator: 'Ctrl+L', click: cmd('present') },
+      { label: 'Präsentation mit Referentenansicht', accelerator: 'Ctrl+Shift+P', click: cmd('presenter') },
       { label: 'Vollbild', accelerator: 'F11', role: 'togglefullscreen' },
       { label: 'Neu laden', accelerator: 'F5', click: () => win && win.webContents.reload() },
     ] },
@@ -213,9 +226,26 @@ function menu() {
       { label: 'Diese Seite drehen', click: cmd('rotate') },
       { label: 'Scans aufbereiten …', click: cmd('scanfix') },
       { label: 'Handzettel erstellen …', click: cmd('handout') },
+      { label: 'Folienmarke setzen', accelerator: 'Ctrl+M', click: cmd('mkf') },
+      { label: 'Videomarke setzen', click: cmd('mkv') },
+      { label: 'Lernzettel aus Markierungen …', click: cmd('study') },
+      { label: 'Ins Notizbuch übernehmen …', click: cmd('tonb') },
+      { label: 'Notizen aus älterer Fassung übernehmen …', click: cmd('carry') },
+      { label: 'Textbaustein anlegen …', click: cmd('snippets') },
       { label: 'Suchen und schwärzen …', click: cmd('findredact') },
       { label: 'Alle Werkzeuge …', click: cmd('allTools') },
       ...(LOCAL ? [] : [{ label: 'Live-Mitschau für Studierende …', click: cmd('live') }]),
+    ] },
+    { label: '&Notizbuch', submenu: [
+      { label: 'PDF-Seiten einfügen …', click: cmd('nbpdf') },
+      { label: 'Vorlage einfügen (Cornell, Besprechung, Vorlesung) …', click: cmd('nbtpl') },
+      { label: 'Verknüpfung einfügen …', click: cmd('nblink') },
+      { label: 'Wer verweist hierher? …', click: cmd('nbback') },
+      { label: 'Auf der Notizseite suchen', click: cmd('nbsearch') },
+      { label: 'Frühere Stände …', click: cmd('nbhist') },
+      { type: 'separator' },
+      { label: 'Notizseite als PDF speichern …', click: cmd('save') },
+      { label: 'Notizseite drucken …', click: cmd('print') },
     ] },
     { label: '&Hilfe', submenu: [
       { label: 'Kurzanleitung', accelerator: 'F1', click: () => openHelp() },
@@ -253,6 +283,8 @@ function usage(k, n, ms, x) {
 const folderFile = () => path.join(app.getPath('userData'), 'ordner.json');
 function inFolder() { try { return String(JSON.parse(fs.readFileSync(folderFile(), 'utf8')).folder || DROP0); } catch (e) { return DROP0; } }
 ipcMain.handle('set-folder', (_e, f) => { try { fs.writeFileSync(folderFile(), JSON.stringify({ folder: String(f || DROP0).slice(0, 200) })); } catch (e) { /* */ } });
+// Helles/dunkles Design auch für Titelleiste und Menüs
+ipcMain.handle('set-theme', (_e, t) => { nativeTheme.themeSource = t === 'light' || t === 'dark' ? t : 'system'; });
 // Sprache der Oberfläche: Menüs und Fenster wechseln mit einem Neustart
 ipcMain.handle('set-lang', (_e, l) => {
   if (l !== 'de' && l !== 'en') return;

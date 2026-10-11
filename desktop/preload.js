@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('pdfstiftWin', {
   onCommand: (cb) => ipcRenderer.on('cmd', (_e, c) => cb(c)),
   // Sprache und (freie Ausgabe) Ordner der Bibliothek
   setLang: (l) => ipcRenderer.invoke('set-lang', l),
+  setTheme: (t) => ipcRenderer.invoke('set-theme', t),
   libDir: () => ipcRenderer.invoke('lib-dir'),
   libOpen: () => ipcRenderer.invoke('lib-open'),
   libPick: () => ipcRenderer.invoke('lib-pick'),

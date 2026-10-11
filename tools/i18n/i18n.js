@@ -174,7 +174,7 @@ function build(check) {
   for (const { src, out } of HTML_SOURCES) {
     let html = translateHtml(readSrc(src), dict, missing);
     html = html.replace('<html lang="de">', '<html lang="en">');
-    html = html.replace('<script src="app/app.js?v=<?= $v ?>"></script>', '<script src="app/l10n.en.js?v=<?= $v ?>"></script>\n<script src="app/app.en.js?v=<?= $v ?>"></script>');
+    html = html.replace('<script defer src="app/app.js?v=<?= $v ?>"></script>', '<script src="app/l10n.en.js?v=<?= $v ?>"></script>\n<script defer src="app/app.en.js?v=<?= $v ?>"></script>');
     if (!html.includes('app/app.en.js')) throw new Error('index.en.php: Skript-Verweis nicht gefunden');
     results.push([out, html]);
   }

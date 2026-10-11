@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.46.0';
+const PDFSTIFT_VERSION = '1.65.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -19,13 +19,24 @@ function is_local(): bool
 }
 function edition(): string
 {
-    return is_local() ? 'local' : 'server';
+    // „free“: freie Ausgabe auf einem eigenen Webserver (ohne die Dienste der eigenen Ausgabe)
+    return is_local() ? 'local' : (is_file(__DIR__ . '/onenote.php') ? 'server' : 'free');
 }
 /** Sprache der Oberfläche: Cookie, sonst Deutsch (eigene Ausgabe) bzw. Englisch (freie Ausgabe) */
 function ui_lang(): string
 {
     $l = (string) ($_COOKIE['pdfstift_lang'] ?? '');
-    return in_array($l, ['de', 'en'], true) ? $l : (is_local() ? (string) (getenv('PDFSTIFT_LANG') ?: 'en') : 'de');
+    if (in_array($l, ['de', 'en'], true)) {
+        return $l;
+    }
+    if (is_local()) {
+        return (string) (getenv('PDFSTIFT_LANG') ?: 'en');
+    }
+    // Demo und freie Ausgabe auf einem Webserver: Sprache des Browsers
+    if (isset(cfg()['demo']) || edition() === 'free') {
+        return str_starts_with(strtolower((string) ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '')), 'de') ? 'de' : 'en';
+    }
+    return 'de';
 }
 
 function cfg(): array
@@ -53,6 +64,11 @@ function storage(string $sub = ''): string
         : rtrim(str_replace('\\', '/', cfg()['storage']), '/') . ($sub !== '' ? '/' . $sub : '');
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
+    }
+    // Datenordner nie direkt über das Web erreichbar (falls die .htaccess fehlt oder PDF-Stift in einem Unterordner liegt)
+    $root = rtrim(str_replace('\\', '/', cfg()['storage']), '/');
+    if ($sub === '' && !is_local() && !is_file($root . '/.htaccess')) {
+        @file_put_contents($root . '/.htaccess', "Require all denied\nDeny from all\n");
     }
     return $dir;
 }
@@ -210,6 +226,13 @@ function stroke_rot(array $s): array
     return abs($r) > 0.01 ? ['r' => round($r, 2)] : [];
 }
 
+/** Verknüpfung zu einer Seite einer anderen PDF oder Notizseite */
+function stroke_link(array $s): array
+{
+    return is_array($s['ln'] ?? null) && is_string($s['ln']['path'] ?? null) && $s['ln']['path'] !== '' && strlen($s['ln']['path']) <= 400 && !str_contains($s['ln']['path'], '..')
+        ? ['ln' => ['path' => $s['ln']['path'], 'pg' => max(0, min(100000, (int) ($s['ln']['pg'] ?? 0)))]] : [];
+}
+
 function valid_stroke_inner(array $s): ?array
 {
     $id = (string) ($s['id'] ?? '');
@@ -247,7 +270,7 @@ function valid_stroke_inner(array $s): ?array
         return [
             'id' => $id, 'p' => $p, 't' => 'img', 'c' => $c, 'pts' => array_slice($clean, 0, 2), 'src' => $src,
             'bw' => max(1.0, min(100000.0, (float) ($s['bw'] ?? 100))), 'bh' => max(1.0, min(100000.0, (float) ($s['bh'] ?? 100))),
-        ] + stroke_rot($s);
+        ] + stroke_rot($s) + stroke_link($s);
     }
     if ($t === 'txt') {
         $text = mb_substr((string) ($s['text'] ?? ''), 0, 20000);
@@ -261,8 +284,12 @@ function valid_stroke_inner(array $s): ?array
         ] + (!empty($s['b']) ? ['b' => 1] : []) + (!empty($s['i']) ? ['i' => 1] : []) + (!empty($s['nt']) ? ['nt' => 1] : []) + stroke_rot($s)
           + (preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($s['bg'] ?? '')) ? ['bg' => (string) $s['bg']] : [])
           + (preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($s['bo'] ?? '')) ? ['bo' => (string) $s['bo']] : [])
-          + (is_array($s['ln'] ?? null) && is_string($s['ln']['path'] ?? null) && $s['ln']['path'] !== '' && strlen($s['ln']['path']) <= 400 && !str_contains($s['ln']['path'], '..')
-              ? ['ln' => ['path' => $s['ln']['path'], 'pg' => max(0, min(100000, (int) ($s['ln']['pg'] ?? 0)))]] : []);
+          + (in_array($s['ff'] ?? '', ['serif', 'mono'], true) ? ['ff' => $s['ff']] : [])
+          + (in_array($s['mk'] ?? '', ['f', 'v'], true) ? ['mk' => $s['mk']] : [])
+          + (in_array($s['al'] ?? '', ['c', 'r'], true) ? ['al' => $s['al']] : [])
+          + (isset($s['w']) && (float) $s['w'] > 0 ? ['w' => max(1.0, min(20000.0, (float) $s['w']))] : [])
+          + (isset($s['src']) && is_string($s['src']) && $s['src'] !== '' ? ['src' => mb_substr($s['src'], 0, 20000)] : [])
+          + stroke_link($s);
     }
     if ($t === 'sh') {
         $k = in_array($s['k'] ?? '', ['line', 'arrow', 'rect', 'oval'], true) ? $s['k'] : 'line';

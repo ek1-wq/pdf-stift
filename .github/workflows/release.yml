@@ -1,5 +1,6 @@
-name: Build Windows app
-# Builds the Windows installer with a bundled PHP runtime (see tools/build-windows.sh).
+name: Build Windows and Linux apps
+# Builds the Windows installer and the Linux packages with a bundled PHP runtime (tools/build-windows.sh, tools/build-linux.sh),
+# plus the server package for your own web server.
 #  - push to main that changes the version in desktop/package.json, or push of a tag "v1.2.3"
 #      → builds that version and publishes it as a GitHub release (installed apps then show "Update available")
 #  - manual run → publishes the version in desktop/package.json if it has no release yet, otherwise builds only
@@ -14,6 +15,9 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    outputs:
+      mode: ${{ steps.build.outputs.mode }}
+      version: ${{ steps.build.outputs.version }}
     defaults:
       run:
         shell: bash
@@ -23,6 +27,7 @@ jobs:
         with:
           node-version: '20'
       - name: Build
+        id: build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -31,8 +36,31 @@ jobs:
           elif ! gh release view "v$V" >/dev/null 2>&1; then MODE=publish
           else MODE=build; fi
           echo "version $V – $MODE"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"; echo "version=$V" >> "$GITHUB_OUTPUT"
           if [ "$MODE" = publish ]; then tools/build-windows.sh "$V" publish; else tools/build-windows.sh "$V"; fi
       - uses: actions/upload-artifact@v4
         with:
           name: PDF-Stift-Setup
           path: desktop/dist/*.exe
+  linux:
+    # after Windows, so that both upload into the same release
+    needs: windows
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="${{ needs.windows.outputs.version }}"
+          if [ "${{ needs.windows.outputs.mode }}" = publish ]; then tools/build-linux.sh "$V" publish; else tools/build-linux.sh "$V"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Stift-Linux
+          path: |
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.zip

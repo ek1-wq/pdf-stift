@@ -13,6 +13,7 @@ if (is_file(__DIR__ . '/lib/ncbackup.php')) { require __DIR__ . '/lib/ncbackup.p
 if (is_file(__DIR__ . '/lib/selfupdate.php')) { require __DIR__ . '/lib/selfupdate.php'; }
 require __DIR__ . '/lib/meta.php';
 require __DIR__ . '/lib/auth2.php';
+require __DIR__ . '/lib/demo.php';
 
 $a = $_GET['a'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -34,7 +35,11 @@ function body(): array
 
 // ---------- ohne Anmeldung ----------
 if ($a === 'me') {
-    json_out(['setup' => needs_setup(), 'loggedIn' => !needs_setup() && is_logged_in(), 'version' => PDFSTIFT_VERSION, 'edition' => edition()]);
+    json_out(['setup' => needs_setup(), 'loggedIn' => !needs_setup() && is_logged_in(), 'version' => PDFSTIFT_VERSION, 'edition' => edition(), 'demo' => demo_public()]);
+}
+// Demo: stündlich zurücksetzen (Cronjob ruft diese Adresse mit dem geheimen Schlüssel auf)
+if ($a === 'demoreset') {
+    json_out(demo_reset((string) ($_GET['key'] ?? '')));
 }
 
 if ($a === 'setup' && $method === 'POST') {
@@ -148,6 +153,7 @@ if (needs_setup() || (!($tokenOk && $a === 'upload') && !is_logged_in())) {
     }
     fail('Bitte anmelden.', 401);
 }
+demo_guard($a);
 
 // ---------- freie Ausgabe: Dienste, die einen echten Server brauchen, gibt es nicht ----------
 if (is_local() && preg_match('/^(nc|od|on[a-z]|live|totp_|srvupdate|token$|share$|appreport$|setup$|login$)/', $a)) {
@@ -687,6 +693,7 @@ switch ($a) {
 
     // ---- Notizbücher (unendliche Tafel)
     case 'boards':
+        boards_reindex_once();
         json_out(['books' => list_boards()]);
 
     case 'nbnew':
@@ -703,7 +710,7 @@ switch ($a) {
             [$nb, $sec] = nb_ensure((string) ($b['nb'] ?? ''), (string) ($b['name'] ?? '') ?: 'Neuer Abschnitt');
             json_out(['path' => NB_PREFIX . $nb . '/' . $sec]);
         }
-        $rel = board_create((string) ($b['nb'] ?? 'Notizbuch'), (string) ($b['sec'] ?? 'Allgemein'), (string) ($b['title'] ?? ''), ['bg' => in_array($b['bg'] ?? '', ['dots', 'grid', 'lines', 'plain'], true) ? $b['bg'] : 'dots']);
+        $rel = board_create((string) ($b['nb'] ?? 'Notizbuch'), (string) ($b['sec'] ?? 'Allgemein'), (string) ($b['title'] ?? ''), ['bg' => in_array($b['bg'] ?? '', ['dots', 'grid', 'lines', 'plain'], true) ? $b['bg'] : 'dots'], (string) ($b['file'] ?? ''));
         json_out(['path' => $rel]);
 
     case 'nbrename':
@@ -712,6 +719,42 @@ switch ($a) {
         }
         $b = body();
         json_out(['path' => nb_rename((string) ($b['path'] ?? ''), (string) ($b['name'] ?? ''))]);
+
+    case 'nbhist':
+        // frühere Stände einer Notizseite (GET: Liste, POST: wiederherstellen)
+        if ($method === 'POST') {
+            $b = body();
+            $rel = safe_rel((string) ($b['path'] ?? ''));
+            if (!is_board($rel)) {
+                fail('Ungültiger Pfad.');
+            }
+            json_out(board_restore($rel, (int) ($b['t'] ?? 0)));
+        }
+        $rel = safe_rel((string) ($_GET['path'] ?? ''));
+        if (isset($_GET['t'])) {
+            $f = nbhist_dir($rel) . '/' . (int) $_GET['t'] . '.json';
+            json_out(['strokes' => is_board($rel) && is_file($f) ? ((json_decode((string) file_get_contents($f), true) ?: [])['strokes'] ?? new stdClass()) : new stdClass()]);
+        }
+        json_out(['list' => is_board($rel) ? board_history($rel) : []]);
+
+    case 'nbmove':
+        // Seite in einen anderen Abschnitt; danach optional neue Reihenfolge im Ziel
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        $b = body();
+        $new = nb_move_page((string) ($b['path'] ?? ''), (string) ($b['to'] ?? ''));
+        if (is_array($b['order'] ?? null)) {
+            nb_order(array_map(fn ($p) => $p === ($b['path'] ?? '') ? $new : $p, $b['order']));
+        }
+        json_out(['path' => $new]);
+
+    case 'nborder':
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        nb_order((array) (body()['paths'] ?? []));
+        json_out(['ok' => true]);
 
     case 'nbdel':
         if ($method !== 'POST') {
@@ -1030,6 +1073,9 @@ switch ($a) {
         }
         $add = is_array($b['add'] ?? null) ? $b['add'] : [];
         $del = is_array($b['del'] ?? null) ? $b['del'] : [];
+        if (is_board($rel) && ($add || $del)) {
+            board_snapshot($rel);
+        }
         $res = merge_notes($rel, $add, $del);
         if (is_board($rel) && ($add || $del)) {
             board_changed($rel);
@@ -1065,6 +1111,23 @@ switch ($a) {
                 }
                 $prefs['app'] = $app;
                 $prefs['appT'] = time();
+            }
+            // Oberfläche (Browser und Windows-App): Leisten, Favoriten, Farben … – gilt auf allen Geräten; je Eintrag gewinnt der neuere Stand
+            if (isset($b['ui']) && is_array($b['ui'])) {
+                $ui = (array) ($prefs['ui'] ?? []);
+                $uiT = (array) ($prefs['uiT'] ?? []);
+                $ts = (array) ($b['uiT'] ?? []);
+                foreach (array_slice($b['ui'], 0, 60, true) as $k => $v) {
+                    if (!is_string($k) || !preg_match('/^[A-Za-z0-9_]{1,30}$/', $k)) continue;
+                    $enc = json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                    if ($enc === false || strlen($enc) > 30000) continue;
+                    $t = (int) ($ts[$k] ?? 0);
+                    if ($t <= (int) ($uiT[$k] ?? 0)) continue;
+                    $ui[$k] = $v;
+                    $uiT[$k] = $t;
+                }
+                $prefs['ui'] = $ui;
+                $prefs['uiT'] = $uiT;
             }
             foreach (['signature', 'initials'] as $k) {
                 if (array_key_exists($k, $b)) {
@@ -1179,6 +1242,14 @@ switch ($a) {
             json_out($m);
         }
         json_out(meta_read());
+
+    case 'pgtext':
+        // Text einzelner PDF-Seiten aus dem Suchindex (Suche auf Notizseiten in übernommenen Folien)
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        $refs = array_slice((array) (body()['refs'] ?? []), 0, 400);
+        json_out(['texts' => array_map(fn ($r) => is_array($r) && is_string($r[0] ?? null) ? index_page_text(safe_rel($r[0]), (int) ($r[1] ?? 0)) : '', $refs)]);
 
     case 'backlinks':
         json_out(['links' => meta_backlinks(safe_rel((string) ($_GET['path'] ?? '')))]);
