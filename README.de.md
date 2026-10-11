@@ -6,7 +6,7 @@ PDF-Stift ist ein PDF-Programm zum Lesen, Beschriften und Ordnen von Unterlagen 
 
 Alles bleibt auf Ihrem Gerät. Unter Windows und Linux braucht PDF-Stift kein Konto, keine Cloud und keinen Server und schickt keine Nutzungsdaten. Die Bibliothek ist ein ganz normaler Ordner (`Dokumente/PDF-Stift`). Auf Android wählen Sie: **Offline** (alles bleibt auf dem Tablet) oder **Online** mit [eigenem Server](docs/SERVER.md) – dann ist dieselbe Bibliothek in jedem Browser und auf dem Tablet da.
 
-**[⬇ Herunterladen](https://github.com/ek1-wq/pdf-stift/releases/latest)** – Windows (`.exe`), Linux (`.AppImage`, `.deb`), Android (`.apk`), Server-Paket (`.zip`) · [English](README.md)
+**[⬇ Herunterladen](https://github.com/ek1-wq/pdf-stift/releases/latest)** – Windows (`.exe`), Linux (`.AppImage`, `.deb`), Android (`.apk`), Server-Paket (`.zip`) · **[▶ Online-Demo ausprobieren](https://pdf-stift.edu.net.co/)** (Passwort ist eingetragen, wird stündlich zurückgesetzt) · [English](README.md)
 
 ![Handschriftliche Notizen auf einer Vorlesungsfolie](docs/screenshots/hero.png)
 

@@ -6,7 +6,7 @@ PDF-Stift is a PDF app for reading, marking up and organizing documents such as 
 
 Everything stays on your device. On Windows and Linux PDF-Stift needs no account, no cloud and no server, and it sends no usage data. Your library is an ordinary folder (`Documents/PDF-Stift`) that you can back up and sync like any other folder. On Android you choose: **offline** (everything stays on the tablet) or **online** with [your own server](docs/SERVER.md) – then the same library is available in every browser and on the tablet.
 
-**[⬇ Download](https://github.com/ek1-wq/pdf-stift/releases/latest)** – Windows (`.exe`), Linux (`.AppImage`, `.deb`), Android (`.apk`), server package (`.zip`) · [Deutsch](README.de.md)
+**[⬇ Download](https://github.com/ek1-wq/pdf-stift/releases/latest)** – Windows (`.exe`), Linux (`.AppImage`, `.deb`), Android (`.apk`), server package (`.zip`) · **[▶ Try the online demo](https://pdf-stift.edu.net.co/)** (password is filled in, reset every hour) · [Deutsch](README.de.md)
 
 ![Handwritten notes on a lecture slide](docs/screenshots/hero.png)
 

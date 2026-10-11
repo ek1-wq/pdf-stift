@@ -100,7 +100,8 @@ jobs:
           set +e; PDFSTIFT_VERSION="$V" gradle --no-daemon assembleRelease 2>&1 | tee /tmp/build.log; EC=${PIPESTATUS[0]}; set -e
           if [ "$EC" != 0 ]; then echo "::error title=android::$(grep -E '^e: |error:|What went wrong' -A2 /tmp/build.log | head -40 | tr '\n' '|')"; exit "$EC"; fi
           mkdir -p dist && cp app/build/outputs/apk/release/app-release.apk "dist/PDF-Stift-$V.apk"
-          if [ "${{ needs.windows.outputs.mode }}" = publish ] && [ "$SIGNED" = 1 ]; then gh release upload "v$V" "dist/PDF-Stift-$V.apk" --clobber; fi
+          # signed APK into the release of this version (also later by a manual run, once the key is in the secrets)
+          if [ "$SIGNED" = 1 ] && gh release view "v$V" >/dev/null 2>&1; then gh release upload "v$V" "dist/PDF-Stift-$V.apk" --clobber; fi
       - uses: actions/upload-artifact@v4
         with:
           name: PDF-Stift-Android
