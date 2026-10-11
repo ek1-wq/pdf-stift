@@ -42,7 +42,11 @@ object Updater {
     }
 
     /** beim Start: still prüfen; bei neuer Fassung kurz fragen */
+    /** In der Ausgabe für Google Play aktualisiert der Play Store – dort keine eigene Update-Funktion */
+    val enabled get() = BuildConfig.FLAVOR != "play"
+
     suspend fun check(a: Activity, silent: Boolean) {
+        if (!enabled) return
         val j = refresh()
         if (j == null) { if (!silent) Ui.toast(a, "Keine Verbindung zum Server."); return }
         if (!hasUpdate) { if (!silent) Ui.toast(a, "Die App ist auf dem neuesten Stand (${BuildConfig.VERSION_NAME})."); return }
@@ -54,6 +58,7 @@ object Updater {
     }
 
     fun start(a: Activity) {
+        if (!enabled) return
         val j = latest ?: return
         if (!a.packageManager.canRequestPackageInstalls()) {
             Ui.alert(a, "Einmal erlauben", "Damit sich PDF-Stift selbst aktualisieren kann, fragt Android jetzt einmal nach. Bitte den Schalter einschalten und mit „Zurück“ hierher kommen – das Update startet dann von selbst.", "Weiter") {

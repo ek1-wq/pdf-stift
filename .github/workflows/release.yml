@@ -81,7 +81,7 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
       - name: Build APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -97,12 +97,20 @@ jobs:
             keytool -genkeypair -keystore app/release.jks -alias pdfstift -keyalg RSA -keysize 2048 -validity 1 -storepass "$ANDROID_KEYSTORE_PASSWORD" -keypass "$ANDROID_KEYSTORE_PASSWORD" -dname "CN=CI" >/dev/null
             SIGNED=0; echo "::warning::ANDROID_KEYSTORE secret missing – APK built with a temporary key and not published"
           fi
-          set +e; PDFSTIFT_VERSION="$V" gradle --no-daemon assembleRelease 2>&1 | tee /tmp/build.log; EC=${PIPESTATUS[0]}; set -e
+          set +e; PDFSTIFT_VERSION="$V" gradle --no-daemon assembleGithubRelease bundlePlayRelease 2>&1 | tee /tmp/build.log; EC=${PIPESTATUS[0]}; set -e
           if [ "$EC" != 0 ]; then echo "::error title=android::$(grep -E '^e: |error:|What went wrong' -A2 /tmp/build.log | head -40 | tr '\n' '|')"; exit "$EC"; fi
-          mkdir -p dist && cp app/build/outputs/apk/release/app-release.apk "dist/PDF-Stift-$V.apk"
+          mkdir -p dist && cp app/build/outputs/apk/github/release/app-github-release.apk "dist/PDF-Stift-$V.apk"
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab "dist/PDF-Stift-$V-play.aab"
+          # Google Play: native libraries must suit 16 KB memory pages
+          python3 ../tools/check-16k.py "dist/PDF-Stift-$V.apk" "dist/PDF-Stift-$V-play.aab" || echo "::warning title=16 KB::a native library is not aligned for 16 KB pages"
           # signed APK into the release of this version (also later by a manual run, once the key is in the secrets)
           if [ "$SIGNED" = 1 ] && gh release view "v$V" >/dev/null 2>&1; then gh release upload "v$V" "dist/PDF-Stift-$V.apk" --clobber; fi
       - uses: actions/upload-artifact@v4
         with:
           name: PDF-Stift-Android
           path: android/dist/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          # for the Play Console (Google Play): download from this run
+          name: PDF-Stift-Google-Play
+          path: android/dist/*.aab

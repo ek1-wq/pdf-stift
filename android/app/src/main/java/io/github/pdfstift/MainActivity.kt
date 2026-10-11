@@ -636,7 +636,7 @@ class MainActivity : AppCompatActivity(), FileHost {
         val m = PopupMenu(this, anchor)
         m.menu.add(0, 1, 0, "Aktualisieren")
         if (!Api.offline) m.menu.add(0, 2, 1, "Speicher auf dem Tablet")
-        m.menu.add(0, 3, 2, if (Updater.hasUpdate) "App aktualisieren auf ${Updater.latest?.optString("versionName")}" else "App aktualisieren (installiert: ${BuildConfig.VERSION_NAME})")
+        if (Updater.enabled) m.menu.add(0, 3, 2, if (Updater.hasUpdate) "App aktualisieren auf ${Updater.latest?.optString("versionName")}" else "App aktualisieren (installiert: ${BuildConfig.VERSION_NAME})")
         if (!Api.offline) m.menu.add(0, 5, 3, (if (Offline.on) "✓ " else "") + "Alle PDFs auf dem Tablet halten")
         m.menu.add(0, 8, 4, "PDF erstellen (Fotos, Word, Excel …) …")
         m.menu.add(0, 9, 4, "PDFs zusammenfügen …")

@@ -9,11 +9,11 @@ val vCode = vName.split(".").map { it.toIntOrNull() ?: 0 }.let { it[0] * 10000 +
 
 android {
     namespace = "io.github.pdfstift"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "io.github.pdfstift"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = vCode
         versionName = vName
     }
@@ -32,6 +32,11 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
         debug { }
+    }
+    flavorDimensions += "store"
+    productFlavors {
+        create("github") { dimension = "store" }
+        create("play") { dimension = "store" }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

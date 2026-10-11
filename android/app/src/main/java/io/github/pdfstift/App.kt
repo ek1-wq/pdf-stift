@@ -6,6 +6,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         Crash.init(this)
+        Edge.init(this)
         Api.init(this)
         Store.init(this)
         Images.init(this)
