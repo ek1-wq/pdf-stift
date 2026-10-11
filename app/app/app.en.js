@@ -8175,8 +8175,8 @@
   function markerStop() { MK.next = null; document.body.classList.remove('mk-mode'); }
   // ---- Textbausteine: häufige Randnotizen mit einem Klick (Baustein wählen, dann auf die Seite tippen)
   const SNIP0 = [
-    { text: "Important!", c: '#D6262B', b: 1 }, { text: "Remember", c: '#1F4FD6', b: 1 }, { text: 'Beispiel', c: '#1B8A3A' },
-    { text: 'Definition', c: '#7048E8', b: 1 }, { text: 'Frage', c: '#E8590C' }, { text: "Read up", c: '#495057' },
+    { text: "Important!", c: '#D6262B', b: 1 }, { text: "Remember", c: '#1F4FD6', b: 1 }, { text: "Example", c: '#1B8A3A' },
+    { text: 'Definition', c: '#7048E8', b: 1 }, { text: "Question", c: '#E8590C' }, { text: "Read up", c: '#495057' },
   ];
   const snippets = () => { const v = ls('snippets'); return Array.isArray(v) ? v.filter((x) => x && x.text) : SNIP0.map((x) => ({ ...x })); };
   const SNIP = { next: null };
@@ -8305,7 +8305,7 @@
   // ---- Lernzettel: alle Markierungen einer PDF nach Farbe gesammelt – jede Farbe mit eigener Bedeutung
   const MEANING0 = LANG === 'en'
     ? { '#FFE14D': 'Important', '#7CC7FF': 'Definition', '#7BE36B': 'Example', '#FF7AC0': 'Exam', '#FF4A1C': 'Key term', '#A855F7': 'Question' }
-    : { '#FFE14D': 'Wichtig', '#7CC7FF': 'Definition', '#7BE36B': 'Beispiel', '#FF7AC0': 'Prüfung', '#FF4A1C': 'Fachbegriff', '#A855F7': 'Frage' };
+    : { '#FFE14D': 'Wichtig', '#7CC7FF': 'Definition', '#7BE36B': "Example", '#FF7AC0': 'Prüfung', '#FF4A1C': 'Fachbegriff', '#A855F7': "Question" };
   const meanings = () => Object.assign({}, MEANING0, ls('meanings') || {});
   async function marksText(path) {
     const d = Notes.docs.get(path);
@@ -8385,7 +8385,7 @@
     ['bd-fit', "Show whole page", '#6E56CF', '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', () => boardFit()],
     ['bd-hist', "Earlier versions", '#6E56CF', '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/><path d="M4 4v4h4"/>', () => boardHistory()],
     ['bd-save', "Save as PDF", '#30A46C', '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 19h14"/>', () => boardPdfDialog('save')],
-    ['bd-print', 'Drucken', '#30A46C', '<path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 14h10v6H7z"/>', () => boardPdfDialog('print')],
+    ['bd-print', "Print", '#30A46C', '<path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 14h10v6H7z"/>', () => boardPdfDialog('print')],
   ];
   const TP_ADD = [
     ['tt', 'Text', '#D6409F', '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>', () => { S.tool = 'tt'; persistTools(); renderToolbar(); tpRender(); toast("Click on the page and start typing."); }],
@@ -10723,7 +10723,7 @@ The current version is backed up first. Your PDFs, notes and settings stay untou
 
   // ---- Drucken: Seiten mit Notizen als Bilder in einen Druckbereich, dann der Druckdialog von Windows
   function printDialog() {
-    track('tool', 'Drucken');
+    track('tool', "Print");
     if (!V.path || V.board) { toast("Please open a PDF first."); return; }
     let d = $('#printDlg');
     if (!d) {
@@ -11643,7 +11643,7 @@ The current version is backed up first. Your PDFs, notes and settings stay untou
       <div class="set-row"><span>Format</span><select id="bpFmt"><option value="a4p">A4 portrait – split across sheets</option><option value="a4l">A4 landscape – split across sheets</option><option value="one">One long sheet (whole notebook page)</option></select></div>
       <div class="set-row"><span></span><label><input type="checkbox" id="bpBg" ${(last.bg != null ? last.bg : bgNow === 'lines' || bgNow === 'grid') ? 'checked' : ''}> Include lines or grid</label></div>
       <p id="bpMsg" class="muted small" aria-live="polite"></p>
-      <div class="dlg-actions"><button type="submit" value="" class="btn">Cancel</button><button type="button" id="bpGo" class="btn primary">${act === 'print' ? 'Drucken' : "Save"}</button></div></form>`;
+      <div class="dlg-actions"><button type="submit" value="" class="btn">Cancel</button><button type="button" id="bpGo" class="btn primary">${act === 'print' ? "Print" : "Save"}</button></div></form>`;
     document.body.appendChild(d);
     d.addEventListener('close', () => d.remove(), { once: true });
     const q = (x) => d.querySelector(x);

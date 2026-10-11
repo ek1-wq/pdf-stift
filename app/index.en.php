@@ -65,7 +65,7 @@ header('Referrer-Policy: same-origin');
       <div id="viewBar" class="view-bar" role="toolbar" aria-label="View and edit" hidden>
         <span class="menu-wrap vb-grip-wrap"><button id="vbGrip" type="button" class="tb-grip vb-grip" aria-label="Move toolbar" title="Move toolbar: drag to an edge – or tap"><svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg></button></span>
         <button type="button" class="vb-b vb-x" data-vb="save" title="Save with notes (Ctrl+S)" aria-label="Save"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg></button>
-        <button type="button" class="vb-b vb-x" data-vb="print" title="Print (Ctrl+P)" aria-label="Drucken"><svg viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="3.5" y="9" width="17" height="8" rx="1.5"/><path d="M7 14h10v6H7z"/></svg></button>
+        <button type="button" class="vb-b vb-x" data-vb="print" title="Print (Ctrl+P)" aria-label="Print"><svg viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="3.5" y="9" width="17" height="8" rx="1.5"/><path d="M7 14h10v6H7z"/></svg></button>
         <span class="vb-sep vb-x"></span>
         <span class="vb-seg">
           <button type="button" class="vb-b" data-vb="single" title="Single pages, one below the other" aria-label="Single pages"><svg viewBox="0 0 24 24"><rect x="7" y="3.5" width="10" height="17" rx="1.5"/></svg></button>

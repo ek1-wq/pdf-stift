@@ -89,10 +89,12 @@ function start_session(): void
     session_save_path(storage('sessions'));
     ini_set('session.gc_maxlifetime', (string) ($days * 86400));
     ini_set('session.use_strict_mode', '1');
-    session_name('pdfstift');
+    // in einem Unterordner (z. B. /demo/): eigenes Cookie, damit es sich nicht mit einer zweiten Installation auf derselben Domain überschneidet
+    $path = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/'))), '/') . '/';
+    session_name($path === '/' ? 'pdfstift' : 'pdfstift_' . substr(md5($path), 0, 8));
     session_set_cookie_params([
         'lifetime' => $days * 86400,
-        'path'     => '/',
+        'path'     => $path,
         'secure'   => $https,
         'httponly' => true,
         'samesite' => 'Lax',
