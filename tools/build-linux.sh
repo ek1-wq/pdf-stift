@@ -48,6 +48,18 @@ cd desktop
 npm install --no-audit --no-fund 2>&1 | tail -3
 npx electron-builder --linux AppImage deb --x64 --publish "$PUB" -c.extraMetadata.version="$V" 2>&1 | tail -25
 
+echo "== start test (AppImage starts and its PHP server answers)"
+if command -v xvfb-run >/dev/null; then
+  AI="$(ls dist/*.AppImage | head -1)"; chmod +x "$AI"
+  HOME_T="$(mktemp -d)"
+  (HOME="$HOME_T" xvfb-run -a "$AI" --appimage-extract-and-run --no-sandbox > "$HOME_T/app.log" 2>&1 &)
+  OK=""
+  for i in $(seq 1 40); do sleep 1; C="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:38517/api.php?a=me || true)"; if [ "$C" = 200 ] || [ "$C" = 401 ]; then OK=1; break; fi; done
+  pkill -f "$(basename "$AI")" || true; pkill -f 'php -c' || true
+  [ -n "$OK" ] || { tail -30 "$HOME_T/app.log"; echo "APPIMAGE START TEST FAILED"; exit 1; }
+  echo "AppImage started, PHP answers ($C)"
+fi
+
 echo "== server package"
 S="$(mktemp -d)/pdf-stift"; mkdir -p "$S"
 cp -r "$ROOT/app/." "$S/"
