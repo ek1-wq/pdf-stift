@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="update" path="update/" />
+    <cache-path name="photos" path="photos/" />
+    <cache-path name="share" path="share/" />
+    <files-path name="audio" path="audio/" />
+</paths>

@@ -69,3 +69,39 @@ jobs:
             desktop/dist/*.AppImage
             desktop/dist/*.deb
             desktop/dist/*.zip
+  android:
+    # Android app (online with your own server, or offline); signed with the key from the repository secrets
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KS: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          V="${{ needs.windows.outputs.version }}"
+          cd android
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > app/release.jks; SIGNED=1
+          else
+            # no key in the secrets yet: build with a throw-away key (not published, updates would not install over it)
+            export ANDROID_KEYSTORE_PASSWORD=ci-only-key
+            keytool -genkeypair -keystore app/release.jks -alias pdfstift -keyalg RSA -keysize 2048 -validity 1 -storepass "$ANDROID_KEYSTORE_PASSWORD" -keypass "$ANDROID_KEYSTORE_PASSWORD" -dname "CN=CI" >/dev/null
+            SIGNED=0; echo "::warning::ANDROID_KEYSTORE secret missing – APK built with a temporary key and not published"
+          fi
+          set +e; PDFSTIFT_VERSION="$V" gradle --no-daemon assembleRelease 2>&1 | tee /tmp/build.log; EC=${PIPESTATUS[0]}; set -e
+          if [ "$EC" != 0 ]; then echo "::error title=android::$(grep -E '^e: |error:|What went wrong' -A2 /tmp/build.log | head -40 | tr '\n' '|')"; exit "$EC"; fi
+          mkdir -p dist && cp app/build/outputs/apk/release/app-release.apk "dist/PDF-Stift-$V.apk"
+          if [ "${{ needs.windows.outputs.mode }}" = publish ] && [ "$SIGNED" = 1 ]; then gh release upload "v$V" "dist/PDF-Stift-$V.apk" --clobber; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Stift-Android
+          path: android/dist/*.apk

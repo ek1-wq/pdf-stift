@@ -4,3 +4,8 @@ desktop/php/
 desktop/web/
 tools/i18n/node_modules/
 tools/i18n/pending.json
+android/app/release.jks
+android/app/build/
+android/.gradle/
+android/build/
+android/dist/
