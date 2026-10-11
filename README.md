@@ -8,7 +8,7 @@ Everything stays on your PC. PDF-Stift needs no account, no cloud and no server,
 
 **[⬇ Download for Windows](https://github.com/ek1-wq/pdf-stift/releases/latest)** · [Deutsch](README.de.md)
 
-![Writing and highlighting on lecture slides](docs/screenshots/viewer.png)
+![Handwritten notes on a lecture slide](docs/screenshots/hero.png)
 
 ## What you can do
 
@@ -21,11 +21,11 @@ Everything stays on your PC. PDF-Stift needs no account, no cloud and no server,
 - **Notebook.** Infinite-canvas pages for handwritten notes next to your PDFs.
 - **English and German.** Switch under Settings → Language.
 
-| Library | Tools |
-|---|---|
-| ![Library](docs/screenshots/library.png) | ![Tools](docs/screenshots/tools.png) |
+![Colour highlighting and margin notes in a textbook chapter](docs/screenshots/highlights.png)
 
-![Full-text search across all PDFs](docs/screenshots/search.png)
+![A real lecture slide, annotated by hand with a stylus](docs/screenshots/real-notes.png)
+
+![All tools at a glance](docs/screenshots/tools.png)
 
 ## Install
 
@@ -33,7 +33,7 @@ Everything stays on your PC. PDF-Stift needs no account, no cloud and no server,
 2. Run it. The installer isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
 3. Start PDF-Stift and add PDFs with **Add PDF**, by dragging them into the window, or by putting them into `Documents\PDF-Stift`.
 
-New versions show up in the app as **Update available**. You can also use Help → Check for updates.
+Updates come automatically: when a new version is out, a blue **Update available** button appears at the top right. Click it, then **Install**. You can also use Help → Check for updates.
 
 Requirements: Windows 10 or 11 (64-bit). Converting Office files needs Microsoft Office. Everything else works without it.
 

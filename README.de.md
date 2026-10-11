@@ -8,7 +8,9 @@ Alles bleibt auf Ihrem PC. PDF-Stift braucht kein Konto, keine Cloud und keinen 
 
 **[⬇ Für Windows herunterladen](https://github.com/ek1-wq/pdf-stift/releases/latest)** · [English](README.md)
 
-![Schreiben und Markieren auf Vorlesungsfolien](docs/screenshots/viewer.png)
+![Handschriftliche Notizen auf einer Vorlesungsfolie](docs/screenshots/hero.png)
+
+![Farbige Markierungen und Randnotizen](docs/screenshots/highlights.png)
 
 ## Was PDF-Stift kann
 
@@ -27,7 +29,7 @@ Alles bleibt auf Ihrem PC. PDF-Stift braucht kein Konto, keine Cloud und keinen 
 2. Starten Sie die Datei. Das Installationsprogramm ist noch nicht signiert. Windows SmartScreen meldet deshalb eventuell „Der Computer wurde durch Windows geschützt“. Klicken Sie dann auf **Weitere Informationen → Trotzdem ausführen**.
 3. Starten Sie PDF-Stift. Die Oberfläche ist zunächst englisch. Unter **Settings → Language** stellen Sie Deutsch ein.
 
-Neue Versionen erscheinen im Programm als **Update verfügbar**. Sie können auch über Hilfe → Nach Updates suchen nachsehen.
+Updates kommen automatisch: Gibt es eine neue Version, erscheint oben rechts der blaue Knopf **Update verfügbar**. Darauf klicken, dann **Installieren**. Sie können auch über Hilfe → Nach Updates suchen nachsehen.
 
 Voraussetzungen: Windows 10 oder 11 (64 Bit). Für das Umwandeln von Office-Dateien braucht es Microsoft Office, alles andere funktioniert auch ohne.
 
