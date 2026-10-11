@@ -1,0 +1,16 @@
+!macro customUnInstall
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.pdf\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.doc\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.docx\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.rtf\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.odt\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.ppt\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.pptx\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.pps\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.ppsx\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.odp\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.xls\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.xlsx\shell\PDFStift"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.ods\shell\PDFStift"
+  Delete "$APPDATA\Microsoft\Windows\SendTo\PDF-Stift.lnk"
+!macroend

@@ -1,0 +1,91 @@
+{
+  "name": "pdf-stift",
+  "productName": "PDF-Stift",
+  "version": "1.0.0",
+  "description": "PDF-Stift – annotate PDFs with pen and keyboard. Free software (GPL-3.0).",
+  "author": "PDF-Stift contributors",
+  "main": "start.js",
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  },
+  "devDependencies": {
+    "electron": "32.2.0",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "io.github.pdfstift",
+    "productName": "PDF-Stift",
+    "copyright": "Copyright © PDF-Stift contributors · GPL-3.0",
+    "files": [
+      "start.js",
+      "main.js",
+      "main.en.js",
+      "local.js",
+      "edition.json",
+      "preload.js",
+      "offline.html",
+      "icon.png",
+      "ocr.ps1",
+      "hilfe.html",
+      "hilfe.en.html"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "include": "installer.nsh",
+      "perMachine": false,
+      "artifactName": "PDF-Stift-Setup-${version}.${ext}",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PDF-Stift",
+      "deleteAppDataOnUninstall": false,
+      "license": "LICENSE.txt",
+      "allowToChangeInstallationDirectory": true
+    },
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF document",
+        "description": "PDF document",
+        "role": "Editor"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ek1-wq",
+        "repo": "pdf-stift",
+        "releaseType": "release"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "php",
+        "to": "php"
+      },
+      {
+        "from": "web",
+        "to": "web"
+      },
+      {
+        "from": "LICENSE.txt",
+        "to": "LICENSE.txt"
+      },
+      {
+        "from": "THIRD-PARTY-NOTICES.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      }
+    ]
+  },
+  "license": "GPL-3.0-only",
+  "homepage": "https://github.com/ek1-wq/pdf-stift",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ek1-wq/pdf-stift.git"
+  }
+}
