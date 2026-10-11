@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.66.1';
+  const VERSION = '1.66.2';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -102,7 +102,7 @@
   const UIS = { timer: 0, dirty: new Set(), last: {}, pulling: false };
   const uiTimes = () => { try { return JSON.parse(localStorage.getItem('pdfstift.uiT')) || {}; } catch (e) { return {}; } };
   function uiChanged(key, val) {
-    if (UIS.pulling) return;
+    if (UIS.pulling || document.body.dataset.demo) return; // Demo: jeder Besucher behält seine eigenen Einstellungen
     const j = JSON.stringify(val);
     if (UIS.last[key] === j) return;
     UIS.last[key] = j;
@@ -9117,6 +9117,8 @@
 
   // ---- Seitenvorschau als Leiste neben der PDF: ein-/ausblendbar, links/rechts, breiter/schmaler, Seiten ziehen
   const TH = { io: null, cur: -1, upd: new Map(), drag: null };
+  // öffentliche Demo: Seitenleiste von Anfang an zeigen (bis der Besucher sie selbst schließt)
+  if (document.body.dataset.demo && ls('thumbs') === null) ls('thumbs', true);
   const thOn = () => !!ls('thumbs') && !!V.path && !V.board && !$('#viewer').hidden;
   function thPlace() {
     if (typeof tpRender === 'function') setTimeout(tpRender, 0);
@@ -11246,7 +11248,7 @@ The current version is backed up first. Your PDFs, notes and settings stay untou
   }
   // Oberflächen-Einstellungen vom Server übernehmen (neuerer Stand gewinnt) – und eigene neuere hochladen
   function uiPull(p) {
-    if (LOCAL) return;
+    if (LOCAL || document.body.dataset.demo) return;
     const sv = p.ui || {}, st = p.uiT || {}, lt = uiTimes();
     const got = [], send = [];
     UIS.pulling = true;

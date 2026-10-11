@@ -43,6 +43,10 @@ function demo_guard(string $a): void
     if (in_array($a, $blocked, true)) {
         fail('In der Demo nicht möglich.', 403);
     }
+    // gemeinsame Einstellungen (Oberfläche, Unterschrift …) würden sonst bei allen Besuchern landen
+    if ($a === 'prefs' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+        json_out(['ok' => true]);
+    }
     $writes = ['upload', 'imgput', 'audioput', 'convert', 'burn', 'pageop', 'protect'];
     if (!in_array($a, $writes, true) || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
         return;
