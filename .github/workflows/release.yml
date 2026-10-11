@@ -56,7 +56,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           V="${{ needs.windows.outputs.version }}"
-          if [ "${{ needs.windows.outputs.mode }}" = publish ]; then tools/build-linux.sh "$V" publish; else tools/build-linux.sh "$V"; fi
+          M=""; [ "${{ needs.windows.outputs.mode }}" = publish ] && M=publish
+          set +e; tools/build-linux.sh "$V" $M 2>&1 | tee /tmp/build.log; EC=${PIPESTATUS[0]}; set -e
+          # Fehler als Hinweis am Lauf sichtbar machen (die Protokolle selbst sind nicht überall abrufbar)
+          if [ "$EC" != 0 ]; then echo "::error title=build-linux::$(tail -c 1800 /tmp/build.log | tr '\n' '|' | tr -d '\r')"; exit "$EC"; fi
       - uses: actions/upload-artifact@v4
         with:
           name: PDF-Stift-Linux
