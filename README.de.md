@@ -61,7 +61,7 @@ Server-Paket per FTP auf den eigenen Webspace laden und PDF-Stift in jedem Brows
 
 Die Windows-Versionen werden automatisch von GitHub Actions aus diesem Repository gebaut. Kostenlose Code-Signierung durch [SignPath.io](https://about.signpath.io), Zertifikat von der [SignPath Foundation](https://signpath.org) *(beantragt – bis dahin ist das Installationsprogramm unsigniert)*. Einzelheiten: [Code signing policy](README.md#code-signing-policy).
 
-PDF-Stift überträgt keine Daten an andere Systeme, außer Sie veranlassen es selbst. Einzige automatische Verbindung ist die Update-Prüfung bei `api.github.com` (ohne persönliche Daten, abschaltbar). Siehe [Datenschutzerklärung](docs/PRIVACY.md).
+PDF-Stift überträgt keine Daten an andere Systeme, außer Sie veranlassen es selbst. Einzige automatische Verbindung ist die Update-Prüfung bei `api.github.com` (ohne persönliche Daten; unter Windows und Linux in den Einstellungen abschaltbar). Siehe [Datenschutzerklärung](docs/PRIVACY.md).
 
 ## Lizenz
 

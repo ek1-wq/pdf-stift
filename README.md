@@ -106,7 +106,7 @@ Team roles:
 
 ### Privacy
 
-This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The only automatic connection is the update check: the Windows, Linux and Android versions from GitHub ask `api.github.com` whether a newer release exists (no personal data is sent; it can be switched off under Settings). See also the [privacy policy](docs/PRIVACY.md).
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The only automatic connection is the update check: the Windows, Linux and Android versions from GitHub ask `api.github.com` whether a newer release exists (no personal data is sent; on Windows and Linux it can be switched off under Settings). See also the [privacy policy](docs/PRIVACY.md).
 
 ## License
 
