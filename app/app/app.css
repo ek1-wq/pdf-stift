@@ -128,6 +128,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .tab.active { background: var(--accent-soft); color: var(--fg); border-color: var(--line); }
 .tab .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; border: 0; background: none; padding: 0; height: 100%; font-size: 14px; }
 .tab.active .name { font-weight: 700; }
+.tab.side { border-color: var(--line); box-shadow: inset 0 -2px 0 var(--accent-soft); }
 .tab .close { width: 32px; height: 32px; border: 0; background: none; border-radius: 8px; display: grid; place-items: center; color: inherit; }
 .tab .close svg { width: 16px; height: 16px; }
 #btnLib.active { background: var(--accent-soft); color: var(--accent); }

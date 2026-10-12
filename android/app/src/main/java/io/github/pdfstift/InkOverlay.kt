@@ -8,6 +8,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
+import android.view.Display
+import android.view.View
 import android.os.Build
 import android.view.MotionEvent
 import android.view.SurfaceView
@@ -24,15 +27,45 @@ class InkOverlay(ctx: Context) : SurfaceView(ctx) {
 
     private var r: CanvasFrontBufferedRenderer<Seg>? = null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
-    val ready get() = r != null
+    val ready get() = r != null && !external
+    /** Monitor/Beamer angeschlossen (gespiegelt): dann bremst der direkte Weg – normaler Zeichenweg statt Stift-Schnellweg */
+    private var external = false
+    private val dm get() = context.getSystemService(DisplayManager::class.java)
+    private fun hasExternal() = try { dm?.displays?.any { it.displayId != Display.DEFAULT_DISPLAY } == true } catch (e: Throwable) { false }
+    private val listener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) = check()
+        override fun onDisplayRemoved(id: Int) = check()
+        override fun onDisplayChanged(id: Int) {}
+    }
+    private fun check() {
+        val ext = hasExternal()
+        if (ext == external) return
+        external = ext
+        if (ext) { release(); visibility = View.GONE }
+        else { visibility = View.VISIBLE; post { start() } }
+    }
+    private fun start() {
+        if (r != null || external) return
+        if (Build.VERSION.SDK_INT >= 29 && Store.prefs().getBoolean("lowlat", true)) {
+            try { r = make() } catch (e: Throwable) { r = null; Crash.report("Schneller Stift nicht verfügbar", e) }
+        }
+    }
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        try { dm?.registerDisplayListener(listener, handler) } catch (e: Throwable) { }
+        check()
+    }
+    override fun onDetachedFromWindow() {
+        try { dm?.unregisterDisplayListener(listener) } catch (e: Throwable) { }
+        super.onDetachedFromWindow()
+    }
 
     init {
         setZOrderOnTop(true)
         holder.setFormat(PixelFormat.TRANSLUCENT)
         isClickable = false; isFocusable = false
-        if (Build.VERSION.SDK_INT >= 29 && Store.prefs().getBoolean("lowlat", true)) {
-            try { r = make() } catch (e: Throwable) { r = null; Crash.report("Schneller Stift nicht verfügbar", e) }
-        }
+        external = hasExternal()
+        if (external) visibility = View.GONE else start()
     }
 
     @RequiresApi(29)

@@ -431,15 +431,12 @@ switch ($a) {
             fail('POST erwartet.', 405);
         }
         $rel = safe_rel((string) (body()['path'] ?? ''));
-        if (!preg_match('/\.pdf$/i', $rel)) {
-            fail('Nur PDF-Dateien.');
-        }
         @set_time_limit(300);
-        $err = nc_fetch_one($rel);
+        [$local, $err] = nc_fetch_any($rel);
         if ($err !== '') {
             fail($err, 502);
         }
-        json_out(['ok' => true, 'path' => $rel]);
+        json_out(['ok' => true, 'path' => $local]);
 
     case 'ncmkdir':
         if ($method !== 'POST') {

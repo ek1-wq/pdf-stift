@@ -135,7 +135,8 @@ function nc_list(array $c, string $rel): array
     $basePath = rawurldecode((string) parse_url($url, PHP_URL_PATH));
     $out = [];
     foreach ($xp->query('//d:response') as $r) {
-        $href = rawurldecode((string) $xp->evaluate('string(d:href)', $r));
+        // erst zerlegen, dann einmal entschlüsseln – sonst schneiden „#“, „?“ oder „%“ im Dateinamen den Namen ab
+        $href = (string) $xp->evaluate('string(d:href)', $r);
         $hrefPath = rawurldecode((string) (parse_url($href, PHP_URL_PATH) ?? $href));
         if (rtrim($hrefPath, '/') === rtrim($basePath, '/')) {
             continue; // der Ordner selbst
@@ -286,6 +287,7 @@ function nc_browse(string $rel): array
         return ['error' => $err];
     }
     $etags = (array) ($c['etags'] ?? []);
+    $names = array_map(fn($it) => basename($it['rel']), $items);
     $folders = [];
     $files = [];
     foreach ($items as $it) {
@@ -300,13 +302,14 @@ function nc_browse(string $rel): array
             $folders[] = ['path' => $it['rel'], 'name' => $name];
             continue;
         }
-        if (!preg_match('/\.pdf$/i', $name)) {
+        $ext = strtolower((string) pathinfo($name, PATHINFO_EXTENSION));
+        if ($ext !== 'pdf' && !in_array($ext, OFFICE_EXT, true)) {
             continue;
         }
-        $local = storage('pdfs') . '/' . $it['rel'];
-        $have = is_file($local);
-        $state = !$have ? 'cloud' : (($etags[$it['rel']] ?? '') === $it['etag'] ? 'ok' : 'update');
-        $files[] = ['path' => $it['rel'], 'name' => $name, 'size' => $it['size'], 'mtime' => $it['mtime'], 'etag' => $it['etag'], 'state' => $state];
+        $lrel = nc_local_rel($it['rel'], $names);
+        $have = is_file(storage('pdfs') . '/' . $lrel);
+        $state = !$have ? 'cloud' : (($etags[$lrel] ?? '') === $it['etag'] ? 'ok' : 'update');
+        $files[] = ['path' => $it['rel'], 'local' => $lrel, 'name' => $name, 'ext' => $ext, 'size' => $it['size'], 'mtime' => $it['mtime'], 'etag' => $it['etag'], 'state' => $state];
     }
     usort($folders, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
     usort($files, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
@@ -335,6 +338,62 @@ function nc_fetch_one(string $rel): string
         }
     }
     return 'Die Datei gibt es in Nextcloud nicht mehr.';
+}
+
+/** Name in PDF-Stift: PDFs wie sie sind, Word/PowerPoint/Excel als „Name.pdf“ (bzw. „Name.docx.pdf“, falls es eine gleichnamige PDF gibt). */
+function nc_local_rel(string $rel, array $siblingNames = []): string
+{
+    if (preg_match('/\.pdf$/i', $rel)) {
+        return $rel;
+    }
+    $base = preg_replace('/\.[^.\/]+$/', '', $rel);
+    $plain = mb_strtolower(basename($base) . '.pdf');
+    return in_array($plain, array_map('mb_strtolower', $siblingNames), true) ? $rel . '.pdf' : $base . '.pdf';
+}
+
+/** Öffnen aus Nextcloud: PDF holen oder Office-Datei holen und in PDF umwandeln. Ergebnis [Pfad in PDF-Stift, Fehler] */
+function nc_fetch_any(string $rel): array
+{
+    if (preg_match('/\.pdf$/i', $rel)) {
+        $e = nc_fetch_one($rel);
+        return [$e === '' ? $rel : '', $e];
+    }
+    $ext = strtolower((string) pathinfo($rel, PATHINFO_EXTENSION));
+    if (!in_array($ext, OFFICE_EXT, true)) {
+        return ['', 'Nur PDF-, Word-, PowerPoint- und Excel-Dateien.'];
+    }
+    $c = nc_cfg();
+    if (empty($c['url'])) {
+        return ['', 'Nextcloud ist nicht eingerichtet.'];
+    }
+    $parent = str_contains($rel, '/') ? dirname($rel) : '';
+    [$items, $err] = nc_list($c, $parent);
+    if ($err !== '') {
+        return ['', $err];
+    }
+    $names = array_map(fn($it) => basename($it['rel']), $items);
+    foreach ($items as $it) {
+        if ($it['dir'] || $it['rel'] !== $rel) {
+            continue;
+        }
+        $tmp = storage('tmp') . '/' . bin2hex(random_bytes(8)) . '.' . $ext;
+        [$code, , $herr] = nc_http($c, 'GET', nc_base($c) . nc_enc_path($rel), [], null, $tmp);
+        if ($code !== 200 || !is_file($tmp)) {
+            @unlink($tmp);
+            return ['', 'Datei „' . $rel . '“ konnte nicht geladen werden (' . ($herr ?: 'HTTP ' . $code) . ').'];
+        }
+        $lrel = nc_local_rel($rel, $names);
+        $target = storage('pdfs') . '/' . $lrel;
+        $e = office_to_pdf($tmp, $ext, $target);
+        @unlink($tmp);
+        if ($e !== '') {
+            return ['', $e];
+        }
+        @touch($target, (int) $it['mtime']);
+        nc_set_etag($lrel, $it['etag']);
+        return [$lrel, ''];
+    }
+    return ['', 'Die Datei gibt es in Nextcloud nicht mehr.'];
 }
 
 /** Legt einen Ordner in Nextcloud an (mit allen Zwischenordnern). */

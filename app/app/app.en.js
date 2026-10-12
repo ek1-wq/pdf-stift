@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.66.2';
+  const VERSION = '1.66.5';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -1688,22 +1688,38 @@
   function renderTabs() {
     const nav = $('#tabs');
     nav.innerHTML = '';
+    // zwei Dokumente: der Reiter der aktiven Hälfte ist hervorgehoben, der der anderen Hälfte leicht
+    const rightAct = !EMBED && SPLIT.frame && SPLIT.act === 'r' && SPLIT.path;
+    const actPath = rightAct ? SPLIT.path : S.active;
+    const sidePath = SPLIT.frame ? (rightAct ? S.active : SPLIT.path) : null;
     for (const t of S.tabs) {
       const div = document.createElement('div');
-      div.className = 'tab' + (t.path === S.active ? ' active' : '');
+      div.className = 'tab' + (t.path === actPath ? ' active' : t.path === sidePath ? ' side' : '');
       div.dataset.path = t.path;
       if (window.pdfstiftWin && window.pdfstiftWin.dragPrep && !isBoard(t.path)) { div.draggable = true; div.title = "Drag out: into Explorer, onto the desktop or into an email (with notes)"; }
       div.setAttribute('role', 'tab');
       div.setAttribute('aria-selected', t.path === S.active ? 'true' : 'false');
       div.innerHTML = `<button type="button" class="name" title="${esc(isBoard(t.path) ? t.path.slice(4) : t.path)}">${isBoard(t.path) ? NB_TAB : ''}${esc(docTitle(t.path))}</button>
         <button type="button" class="close" aria-label="${esc(docTitle(t.path))} – close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
-      div.querySelector('.name').onclick = () => openDoc(t.path);
+      div.querySelector('.name').onclick = () => tabClick(t.path);
       div.querySelector('.close').onclick = () => closeTab(t.path);
       if (!EMBED) div.addEventListener('contextmenu', (e) => { e.preventDefault(); closeMenus(); const m = document.createElement('div'); m.className = 'menu tab-menu'; m.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px`; m.innerHTML = `<button type="button" data-a="split">Open on the right</button><button type="button" data-a="close">Close</button>`; m.onclick = (ev) => { const b = ev.target.closest('[data-a]'); if (!b) return; closeMenus(); if (b.dataset.a === 'close') closeTab(t.path); else if (t.path === S.active) { const o = S.tabs.find((x) => x.path !== t.path); if (o) { openDoc(o.path); setTimeout(() => splitOpen(t.path), 250); } else toast("Please open a second document first."); } else splitOpen(t.path); }; document.body.appendChild(m); openMenu = m; });
       nav.appendChild(div);
       if (t.path === S.active) requestAnimationFrame(() => div.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
     }
     $('#btnLib').classList.toggle('active', !S.active);
+  }
+  // Reiter angeklickt: bei zwei Dokumenten kommt es in die gerade aktive Hälfte
+  function tabClick(path) {
+    if (!EMBED && SPLIT.frame && SPLIT.act === 'r') {
+      closeMenus();
+      if (path === SPLIT.path) return;
+      if (path === S.active) { splitSwap(); return; }
+      splitLoad(path);
+      renderTabs();
+      return;
+    }
+    openDoc(path);
   }
   function openDoc(path) {
     closeMenus();
@@ -11058,6 +11074,7 @@ The current version is backed up first. Your PDFs, notes and settings stay untou
     document.body.classList.toggle('sp-act-r', !!SPLIT.frame && side === 'r');
     try { const pn = splitPane(); if (pn) pn.active(side === 'r'); } catch (e) { /* */ }
     updateUndo();
+    if (!EMBED) renderTabs();
   }
   $('#viewer').addEventListener('pointerdown', () => { if (SPLIT.frame) splitAct('l'); }, true);
   // Bedienelemente der Leisten an die rechte Hälfte weiterreichen, wenn sie aktiv ist
@@ -11140,6 +11157,7 @@ The current version is backed up first. Your PDFs, notes and settings stay untou
       SPLIT.frame.src = base + '?pane=1' + (path ? '&open=' + encodeURIComponent(path) : '');
     }
     splitHead();
+    if (!EMBED) renderTabs();
   }
   function splitClose() {
     const box = $('#splitPane');

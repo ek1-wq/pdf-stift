@@ -7,6 +7,7 @@ class App : Application() {
         super.onCreate()
         Crash.init(this)
         Edge.init(this)
+        Monitor.init(this)
         Api.init(this)
         Store.init(this)
         Images.init(this)
