@@ -1,5 +1,5 @@
 /* PDF-Stift Service Worker: hält die App selbst offline bereit. PDFs und Notizen liegen in IndexedDB. */
-const VERSION = '1.66.6';
+const VERSION = '1.66.7';
 const CACHE = 'pdfstift-' + VERSION;
 const SHELL = [
   './',
@@ -20,6 +20,7 @@ const SHELL = [
   'icons/icon-180.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'icons/icon-maskable-512.png',
 ];
 
 self.addEventListener('install', (e) => {
