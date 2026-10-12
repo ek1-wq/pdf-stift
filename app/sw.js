@@ -1,5 +1,5 @@
 /* PDF-Stift Service Worker: hält die App selbst offline bereit. PDFs und Notizen liegen in IndexedDB. */
-const VERSION = '1.66.5';
+const VERSION = '1.66.6';
 const CACHE = 'pdfstift-' + VERSION;
 const SHELL = [
   './',
@@ -15,6 +15,8 @@ const SHELL = [
   'vendor/pptxgen.bundle.js?v=' + VERSION,
   'manifest.webmanifest',
   'icons/icon.svg',
+  'icons/favicon.svg',
+  'icons/favicon-32.png',
   'icons/icon-180.png',
   'icons/icon-192.png',
   'icons/icon-512.png',

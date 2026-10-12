@@ -25,7 +25,9 @@ header('Referrer-Policy: same-origin');
 <meta name="apple-mobile-web-app-title" content="PDF-Stift">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="shortcut icon" href="favicon.ico">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="stylesheet" href="app/app.css?v=<?= $v ?>">
 <script>try { var t = JSON.parse(localStorage.getItem('pdfstift.theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}</script>
