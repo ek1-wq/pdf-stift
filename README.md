@@ -49,6 +49,14 @@ Download `PDF-Stift-….AppImage`, make it executable and start it (`chmod +x PD
 
 Download `PDF-Stift-….apk` on the tablet and open it (Android asks once to allow installing apps from this source). At the first start choose **Offline** or **Online** with the address of your own server. Updates: a blue **Update** button appears in the app when a new version is out. The Android app is in German for now; text recognition for scans is done on the PC.
 
+### Uninstall
+
+- **Windows:** Settings → Apps → *PDF-Stift* → Uninstall. This also removes the Explorer entry "Open in PDF-Stift" and the "Send to" shortcut. Your PDFs in `Documents\PDF-Stift` are kept; delete the folder yourself if you no longer need it. If you set up the optional "PDF-Stift" printer (File menu), remove it under Settings → Printers.
+- **Linux:** AppImage: delete the file. `.deb`: `sudo apt remove pdf-stift`. Your PDFs in `~/Documents/PDF-Stift` are kept.
+- **Android:** long-press the app icon → Uninstall (this also deletes the PDFs stored offline in the app).
+
+**What PDF-Stift changes on Windows:** for your user account only (no administrator rights), an Explorer context-menu entry "Open in PDF-Stift" for PDF and Office files and a "Send to → PDF-Stift" shortcut. The optional PDF printer is only installed when you choose it in the menu and asks for administrator rights. The uninstaller removes all of this.
+
 ### Your own server
 
 Upload the server package to your web space via FTP and use PDF-Stift in any browser and with the Android app – see **[docs/SERVER.md](docs/SERVER.md)** (about 10 minutes, any web host with PHP 8.1).
@@ -86,6 +94,19 @@ The German texts in the source are the originals. `tools/i18n/en.json` maps each
 ## Contributing
 
 Bug reports and ideas are welcome as [issues](https://github.com/ek1-wq/pdf-stift/issues). Please include your system (Windows, Linux distribution or Android version) and the PDF-Stift version (Help → About). Pull requests are welcome too. By contributing you agree that your contribution is licensed under the GPL-3.0.
+
+## Code signing policy
+
+Windows releases are built automatically by GitHub Actions from this repository ([release workflow](.github/workflows/release.yml)); nothing is built or signed on a personal computer.
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org) *(application in progress – until then the installer is unsigned)*.
+
+Team roles:
+- Committers and reviewers: [ek1-wq](https://github.com/ek1-wq)
+- Approvers (approve each signing request): [ek1-wq](https://github.com/ek1-wq)
+
+### Privacy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The only automatic connection is the update check: the Windows, Linux and Android versions from GitHub ask `api.github.com` whether a newer release exists (no personal data is sent; it can be switched off under Settings). See also the [privacy policy](docs/PRIVACY.md).
 
 ## License
 

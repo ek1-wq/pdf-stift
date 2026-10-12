@@ -47,9 +47,21 @@ Voraussetzungen: Windows 10 oder 11 (64 Bit). Für das Umwandeln von Office-Date
 
 `PDF-Stift-….apk` auf dem Tablet herunterladen und öffnen (Android fragt einmal, ob Apps aus dieser Quelle installiert werden dürfen). Beim ersten Start **Offline** oder **Online** mit der Adresse des eigenen Servers wählen. Neue Versionen meldet die App mit einem blauen **Update**-Knopf.
 
+### Deinstallieren
+
+- **Windows:** Einstellungen → Apps → *PDF-Stift* → Deinstallieren. Dabei verschwinden auch der Explorer-Eintrag „In PDF-Stift öffnen“ und die Verknüpfung unter „Senden an“. Ihre PDFs in `Dokumente\PDF-Stift` bleiben erhalten.
+- **Linux:** AppImage: Datei löschen. `.deb`: `sudo apt remove pdf-stift`.
+- **Android:** App-Symbol lange drücken → Deinstallieren (löscht auch die offline in der App gespeicherten PDFs).
+
 ### Eigener Server
 
 Server-Paket per FTP auf den eigenen Webspace laden und PDF-Stift in jedem Browser und mit der Android-App nutzen – siehe **[docs/SERVER.md](docs/SERVER.md)** (ca. 10 Minuten, jeder Hoster mit PHP 8.1).
+
+## Code-Signierung und Datenschutz
+
+Die Windows-Versionen werden automatisch von GitHub Actions aus diesem Repository gebaut. Kostenlose Code-Signierung durch [SignPath.io](https://about.signpath.io), Zertifikat von der [SignPath Foundation](https://signpath.org) *(beantragt – bis dahin ist das Installationsprogramm unsigniert)*. Einzelheiten: [Code signing policy](README.md#code-signing-policy).
+
+PDF-Stift überträgt keine Daten an andere Systeme, außer Sie veranlassen es selbst. Einzige automatische Verbindung ist die Update-Prüfung bei `api.github.com` (ohne persönliche Daten, abschaltbar). Siehe [Datenschutzerklärung](docs/PRIVACY.md).
 
 ## Lizenz
 
