@@ -1,5 +1,5 @@
 /* PDF-Stift Service Worker: hält die App selbst offline bereit. PDFs und Notizen liegen in IndexedDB. */
-const VERSION = '1.66.7';
+const VERSION = '1.66.8';
 const CACHE = 'pdfstift-' + VERSION;
 const SHELL = [
   './',

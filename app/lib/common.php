@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.66.7';
+const PDFSTIFT_VERSION = '1.66.8';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -108,6 +108,10 @@ function is_logged_in(): bool
         return hash_equals(local_key(), (string) ($_SERVER['HTTP_X_PDFSTIFT_LOCAL'] ?? ''));
     }
     start_session();
+    // öffentliche Demo: ohne Anmeldung – jeder Besucher ist sofort drin
+    if (empty($_SESSION['ok']) && function_exists('demo_on') && demo_on()) {
+        $_SESSION['ok'] = true;
+    }
     return !empty($_SESSION['ok']);
 }
 

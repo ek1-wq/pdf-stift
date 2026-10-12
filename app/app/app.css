@@ -1228,4 +1228,4 @@ body.embed .demo-bar, body.show-win .demo-bar { display: none; }
 body[data-ed="free"] #liveBadge, body[data-ed="free"] #srvUpd, body[data-ed="free"] #bkWarn, body[data-ed="free"] [data-act="live"],
 body[data-ed="free"] [data-src="nc"], body[data-ed="free"] [data-src="od"], body[data-ed="free"] #winBtn, body[data-ed="free"] #apkBtn,
 body[data-ed="free"] [data-act="ncput"], body[data-ed="free"] [data-a="on"], body[data-ed="free"] #btnNc,
-body[data-demo] #btnShortcut, body[data-demo] #btnBackup { display: none !important; }
+body[data-demo] #btnShortcut, body[data-demo] #btnBackup, body[data-demo] #btnLogout { display: none !important; }
