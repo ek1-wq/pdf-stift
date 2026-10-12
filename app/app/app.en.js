@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.66.8';
+  const VERSION = '1.66.9';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -8222,7 +8222,11 @@
     boardRender();
     $('#toast').hidden = true;
     track('tool', "Text snippet");
-    if (!e.shiftKey) snipStop();
+    if (!e.shiftKey) {
+      snipStop();
+      boardClearSel(); B.sel = { ids: new Set([st.id]) }; selBoxUpdate(); showSelBar();
+      toast("Snippet placed – drag to move, “Delete” removes it.", 3500);
+    }
   }, true);
   pagesEl.addEventListener('pointerdown', (e) => {
     if (!SNIP.next) return;
@@ -8243,7 +8247,12 @@
     $('#toast').hidden = true;
     track('tool', "Text snippet");
     // mit gedrückter Umschalttaste: weitere Male setzen
-    if (!e.shiftKey) snipStop();
+    if (!e.shiftKey) {
+      snipStop();
+      // gleich ausgewählt: ziehen = verschieben, „Löschen“ in der Leiste darunter
+      clearSel(); SEL = { P, ids: [st.id] }; renderSel();
+      toast("Snippet placed – drag to move, “Delete” removes it.", 3500);
+    }
   }, true);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && SNIP.next) { snipStop(); toast("Canceled."); } });
   function snipEdit(i) {
