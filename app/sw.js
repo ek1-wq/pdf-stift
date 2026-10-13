@@ -1,5 +1,5 @@
 /* PDF-Stift Service Worker: hält die App selbst offline bereit. PDFs und Notizen liegen in IndexedDB. */
-const VERSION = '1.67.2';
+const VERSION = '1.67.3';
 const CACHE = 'pdfstift-' + VERSION;
 const SHELL = [
   './',
@@ -30,7 +30,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('pdfstift-') && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('pdfstift-') && k !== CACHE && k !== 'pdfstift-snap').map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -53,9 +53,14 @@ self.addEventListener('fetch', (e) => {
       return r;
     });
     if (!isShell) { e.respondWith(net.catch(() => caches.match('./'))); return; }
-    e.respondWith(caches.match('./').then((hit) => {
-      if (hit) { e.waitUntil(net.catch(() => {})); return hit; }
-      return net.catch(() => caches.match('./'));
+    // Online immer die aktuelle Seite (sonst liefe nach einem Server-Update noch die alte Oberfläche);
+    // antwortet der Server nicht binnen 4 Sekunden oder ist das Gerät offline: die gespeicherte Fassung
+    e.respondWith(new Promise((resolve) => {
+      let done = false;
+      const fallback = () => caches.match('./').then((hit) => { if (!done && hit) { done = true; resolve(hit); } });
+      const t = setTimeout(fallback, 4000);
+      net.then((r) => { clearTimeout(t); if (!done) { done = true; resolve(r); } })
+        .catch(() => { clearTimeout(t); caches.match('./').then((hit) => { if (!done) { done = true; resolve(hit || Response.error()); } }); });
     }));
     return;
   }
