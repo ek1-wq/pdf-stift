@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.80.1';
+  const VERSION = '1.80.2';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -13548,7 +13548,20 @@ github.com/ek1-wq/pdf-stift`, "Quick guide")) openHelp();
     if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
     ls('theme', t || null);
     if (window.pdfstiftWin && window.pdfstiftWin.setTheme) window.pdfstiftWin.setTheme(t || 'system');
+    themeToFrames(t);
   }
+  // eingebettete Ansichten (rechtes Dokument bei „Zwei Dokumente“) sofort mitschalten
+  function themeToFrames(t) {
+    for (const f of document.querySelectorAll('iframe')) {
+      try { const h = f.contentDocument && f.contentDocument.documentElement; if (!h) continue; if (t === 'light' || t === 'dark') h.dataset.theme = t; else delete h.dataset.theme; } catch (e) { /* fremde Seite */ }
+    }
+  }
+  // umgekehrt: wird das Design in einem anderen Fenster/Rahmen umgeschaltet, hier übernehmen
+  window.addEventListener('storage', (ev) => {
+    if (ev.key !== 'pdfstift.theme') return;
+    let t = null; try { t = JSON.parse(ev.newValue); } catch (e) { /* */ }
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  });
   const curTheme = () => document.documentElement.dataset.theme || '';
   $('#themeBtn').onclick = () => { const dark = curTheme() ? curTheme() === 'dark' : sysDark(); setTheme(dark ? 'light' : 'dark'); track('tool', 'Design umgeschaltet'); };
   if (window.pdfstiftWin && window.pdfstiftWin.setTheme) window.pdfstiftWin.setTheme(curTheme() || 'system');
