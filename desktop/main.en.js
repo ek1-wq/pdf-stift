@@ -165,6 +165,7 @@ function menu() {
       { label: "Library", accelerator: 'Ctrl+Shift+B', click: cmd('library') },
       { label: "New presentation …", click: cmd('newdeck') },
       { label: "Presentations", click: cmd('decks') },
+      { label: "Open PowerPoint file as presentation …", click: cmd('pptximport') },
       { type: 'separator' },
       { label: "Save (with notes) …", accelerator: 'Ctrl+S', click: cmd('save') },
       { label: "Download original …", click: cmd('original') },

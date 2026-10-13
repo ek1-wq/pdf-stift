@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.76.2';
+  const VERSION = '1.77.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -4798,6 +4798,8 @@
   const OBV = { grid: false, snap: true, compact: false };
   try { Object.assign(OBV, ls('obView') || {}); } catch (e) { /* */ }
   const ICP = {
+    save: '<path d="M5 3.5h11l3.5 3.5v13.5h-14.5z"/><path d="M8 3.5v5h7v-5M8 20.5v-6h8v6"/>', print: '<path d="M7 9V3.5h10V9"/><rect x="3.5" y="9" width="17" height="8" rx="1.5"/><path d="M7 14h10v6.5H7z"/>',
+    find: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/>', hint: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.1"/>',
     sel: '<path d="M5 3.5l13 7.2-5.6 1.4L9.8 18z"/>', hand: '<path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 10.5V5a1.5 1.5 0 0 1 3 0v5.5"/><path d="M14 10.5V6.5a1.5 1.5 0 0 1 3 0v6.5c0 4-2.5 7-6.2 7-2.6 0-4-1.2-5.4-3.2L3.7 13a1.4 1.4 0 0 1 2.2-1.7L8 13.5"/>',
     pen: '<path d="M16.5 3.5l4 4L8 20H4v-4z"/><path d="M14 6l4 4"/>', hl: '<path d="M9 15l-3 3H3l3-3"/><path d="M9 15l9-9 3 3-9 9z"/><path d="M3 21h9"/>', tx: '<path d="M8 15l4-9 4 9M9.6 12h4.8"/><path d="M4 20h16"/>',
     sh: '<path d="M4 20L13 11"/><path d="M8.5 11H13v4.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/>', tt: '<path d="M5 6V4.5h14V6"/><path d="M12 4.5v15"/><path d="M9 19.5h6"/>',
@@ -4827,6 +4829,18 @@
   }
   const OB_RIB = {
     tabs: () => [['draw', 'Zeichnen'], ['pages', 'Seiten'], ['show', 'Bildschirmpräsentation'], ['view', 'Ansicht']],
+    // Start ohne ausgewähltes Objekt: statt grauer Schrift-Knöpfe das, was man beim Lesen und Markieren braucht
+    startIdle: ({ grp, rows, big, sb }, canPaste) => {
+      const DK = window.PDFSTIFT_DECK, RI = (DK && DK.RI) || {}, IC = (DK && DK.ICON) || {};
+      const tool = (k, l) => big(`data-f="pt:${k}"`, l, ICP[k]).replace('class="rb-big"', `class="rb-big${S.tool === k ? ' on' : ''}"`);
+      return grp('Zwischenablage', big('data-f="paste"', 'Einfügen', RI.paste, canPaste)) +
+        grp('Dokument', big('data-f="pc:save"', 'Speichern', ICP.save) + big('data-f="pc:print"', 'Drucken', ICP.print) +
+          rows(sb('pc:undo', 'Rückgängig (Strg+Z)', IC.undo, { label: 'Rückgängig' }), sb('pc:redo', 'Wiederholen (Strg+Y)', IC.redo, { label: 'Wiederholen' }))) +
+        grp('Suchen', rows(sb('pc:find', 'In der PDF suchen (Strg+F)', ICP.find, { label: 'Suchen' }), sb('replace', 'In Textfeldern, Formen und Tabellen suchen und ersetzen', RI.replace, { label: 'Ersetzen …' }))) +
+        grp('Einfügen', big('data-ins="text"', 'Textfeld', IC.textbox) + big('data-menu="shapes"', 'Formen', IC.shape, true, true) + big('data-ins="img"', 'Bild', IC.img) + big('data-ins="table"', 'Tabelle', IC.table)) +
+        grp('Stifte', tool('pen', 'Stift') + tool('hl', 'Marker') + tool('tx', 'Text markieren') + tool('er', 'Radierer')) +
+        grp('Formatieren', `<div class="rb-hint">${'<svg viewBox="0 0 24 24">' + ICP.hint + '</svg>'}<span>Ein Textfeld, eine Form oder ein Bild anklicken – dann stehen hier Schrift, Absatz und Anordnen.</span></div>`);
+    },
     tabContent: (tab, { grp, rows, big, sb }) => {
       const tool = (k, l) => big(`data-f="pt:${k}"`, l, ICP[k]).replace('class="rb-big"', `class="rb-big${S.tool === k ? ' on' : ''}"`);
       // Farben, Stärken und Arten der bisherigen Werkzeugleiste: Kopien, die die Originale anklicken
@@ -4859,7 +4873,8 @@
     },
     fmtExt: (f) => {
       const [g, a] = f.split(':');
-      if (!['pt', 'pp', 'ps', 'pv'].includes(g) || !a) return false;
+      if (!['pt', 'pp', 'ps', 'pv', 'pc'].includes(g) || !a) return false;
+      if (g === 'pc') { winCmd(a); return true; }
       const re = () => setTimeout(() => { const e2 = OB.ed || obIdle(); if (e2) e2.renderFmt(); }, 0);
       if (g === 'pt') { S.tool = a; persistTools(); renderToolbar(); re(); return true; }
       if (g === 'pp') {
@@ -5044,6 +5059,7 @@
   function deckCore() {
     window.PDFSTIFT_CORE = window.PDFSTIFT_CORE || {
       API, VERSION, LANG, esc, ls, apiJson, toast, confirmDlg, askText, prepareImage, uploadImage, downloadBlob,
+      pptx: () => pptxMod(),
       ensureFontkit: () => (window.fontkit ? Promise.resolve() : loadScript('vendor/fontkit.min.js?v=' + VERSION)),
       uploadPdf: async (blob, name) => {
         const fd = new FormData();
@@ -5115,6 +5131,33 @@
     if (S.src === 'dk' && !V.path) renderLibrary();
     renderTabs();
   }
+  // ---- PowerPoint-Dateien (.pptx) als bearbeitbare Präsentation öffnen
+  async function pptxMod() {
+    await ensureDeck();
+    if (!window.PDFSTIFT_PPTX) await loadScript('app/' + (LANG === 'en' ? 'pptx.en.js' : 'pptx.js') + '?v=' + VERSION);
+    return window.PDFSTIFT_PPTX;
+  }
+  function pptxPick() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.pptx,.potx,.ppsx,application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) pptxImport(f); };
+    inp.click();
+  }
+  async function pptxImport(file) {
+    if (!/\.(pptx|potx|ppsx|pptm)$/i.test(file.name || '')) { toast('Bitte eine PowerPoint-Datei (.pptx) wählen. Ältere .ppt-Dateien zuerst in PowerPoint als .pptx speichern.', 7000); return; }
+    toast('PowerPoint-Datei wird gelesen …', 120000);
+    try {
+      const M = await pptxMod();
+      const { deck, warn } = await M.importPptx(file, (t) => toast(t, 120000));
+      const r = await apiJson('decknew', { method: 'POST', body: { title: deck.title } });
+      await apiJson('deck', { method: 'POST', body: { path: r.path, deck, rev: r.rev } });
+      S.decks = [{ path: r.path, title: deck.title, slides: deck.slides.length, mtime: Date.now() / 1000 }, ...(S.decks || [])];
+      const miss = warn.emf + warn.other;
+      toast(`„${deck.title}“ übernommen: ${deck.slides.length} ${deck.slides.length === 1 ? 'Folie' : 'Folien'}.` + (miss ? ` ${miss} Bild(er) in einem Format, das der Browser nicht anzeigen kann (z. B. EMF), wurden ausgelassen.` : ''), miss ? 9000 : 5000);
+      track('tool', 'PowerPoint öffnen');
+      openDoc(r.path);
+    } catch (e) { toast(e.message || String(e), 8000); }
+  }
   async function newDeck() {
     const title = await askText('Neue Präsentation', 'Name der Präsentation', '', 'Anlegen');
     if (title === null || title === undefined) return;
@@ -5143,6 +5186,7 @@
       return c;
     };
     if (!q) card('dk-new', '+', 'Neue Präsentation', 'Folien bauen, vortragen, als PDF speichern', newDeck, null);
+    if (!q) card('dk-new dk-imp', '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="12" rx="1.5"/><path d="M8 20h8M12 17v3"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg>', 'PowerPoint öffnen', 'Eine .pptx-Datei als bearbeitbare Präsentation übernehmen', pptxPick, null);
     const list = (S.decks || []).filter((d) => !q || d.title.toLowerCase().includes(q));
     for (const d of list) {
       const c = card('dk-card', '<span class="ph nb-ph">' + DK_TAB + '</span>', d.title, `${d.slides} ${d.slides === 1 ? 'Folie' : 'Folien'} · ${fmtDate(d.mtime)}`, () => openDoc(d.path), [
@@ -11663,10 +11707,10 @@
 
   // ================================================================== Windows-App: Update-Hinweis oben rechts
   const WIN = window.pdfstiftWin || null;
-  // Menüleiste nur zeigen, solange das Menüband (mit Datei, Bearbeiten … in der Reiterzeile) nicht zu sehen ist
+  // Menüleiste nur zeigen, solange das Menüband (mit Datei, Bearbeiten … in der Reiterzeile) nicht zu sehen ist – und nie beim Präsentieren oder im Vollbild
   if (WIN && WIN.menuBar && WIN.menuPop) {
     let mbLast = null;
-    setInterval(() => { const t = document.querySelector('.rb-wm'); const vis = !!(t && t.offsetParent); if (vis !== mbLast) { mbLast = vis; WIN.menuBar(!vis); } }, 400);
+    setInterval(() => { const t = document.querySelector('.rb-wm'); const vis = !!(t && t.offsetParent) || !!(PR && PR.on) || !!(FS && FS.on) || !!document.fullscreenElement; if (vis !== mbLast) { mbLast = vis; WIN.menuBar(!vis); } }, 400);
   }
   const UPD = { d: null };
   function updDialog() {
@@ -11790,6 +11834,7 @@
       case 'carry': carryDialog(); break;
       case 'tonb': if (needDoc()) toNotebook(); break;
       case 'newdeck': newDeck(); break;
+      case 'pptximport': pptxPick(); break;
       case 'decks': S.src = 'dk'; ls('src', 'dk'); showLibrary(); renderLibrary(); break;
       case 'nbpdf': case 'nbtpl': case 'nbsearch': case 'nbhist':
         if (!V.board) { toast('Bitte zuerst eine Notizseite öffnen.'); break; }

@@ -17,6 +17,7 @@ const DICT_FILE = path.join(__dirname, 'en.json');
 const JS_SOURCES = [
   { src: 'app/app/app.js', out: 'app/app/app.en.js' },
   { src: 'app/app/deck.js', out: 'app/app/deck.en.js' },
+  { src: 'app/app/pptx.js', out: 'app/app/pptx.en.js' },
   { src: 'desktop/main.js', out: 'desktop/main.en.js', prefix: 'main:' }, // „main:Text“ = eigene Übersetzung nur für das Windows-Programm
 ];
 const HTML_SOURCES = [

@@ -158,6 +158,7 @@ function menu() {
       { label: 'Bibliothek', accelerator: 'Ctrl+Shift+B', click: cmd('library') },
       { label: 'Neue Präsentation …', click: cmd('newdeck') },
       { label: 'Präsentationen', click: cmd('decks') },
+      { label: 'PowerPoint-Datei als Präsentation öffnen …', click: cmd('pptximport') },
       { type: 'separator' },
       { label: 'Speichern (mit Notizen) …', accelerator: 'Ctrl+S', click: cmd('save') },
       { label: 'Original herunterladen …', click: cmd('original') },

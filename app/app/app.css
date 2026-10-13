@@ -1501,3 +1501,6 @@ body.ob-placing .page { cursor: crosshair !important; }
 .rb-tab.rb-file { background: var(--accent) !important; color: var(--bar) !important; border-radius: 6px !important; margin-right: 2px; }
 .rb-tab.rb-file:hover { filter: brightness(1.1); }
 .rb-wsep { width: 1px; height: 16px; background: var(--line); align-self: center; margin: 0 4px; flex: none; }
+.rb-hint { display: flex; align-items: center; gap: 8px; width: 230px; font-size: 12px; line-height: 1.35; color: var(--muted); padding: 0 4px; }
+.rb-hint svg { width: 20px; height: 20px; }
+.card.dk-imp .thumb svg { width: 46px; height: 46px; color: var(--accent); }

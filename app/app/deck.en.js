@@ -27,6 +27,17 @@
     return m ? `"PS ${m.f}", ${CAT_FB[m.c] || 'sans-serif'}` : STD_FONTS.sans[1];
   }
   const fontOk = (k) => !!(STD_FONTS[k] || FM.by[k] || (k && k.startsWith('L:') && k.length < 110));
+  // PowerPoint: Schriftname ↔ Schlüssel (metrisch gleiche freie Schriften für Calibri, Cambria …)
+  const FONT_ALIAS = { calibri: 'carlito', cambria: 'caladea', georgia: 'gelasio', 'comic sans ms': 'comicneue', arial: 'sans', helvetica: 'sans', 'times new roman': 'serif', times: 'serif', 'courier new': 'mono', courier: 'mono' };
+  const FONT_OFFICE = { carlito: 'Calibri', caladea: 'Cambria', gelasio: 'Georgia', comicneue: 'Comic Sans MS', arimo: 'Arial', tinos: 'Times New Roman', cousine: 'Courier New', sans: 'Arial', serif: 'Times New Roman', mono: 'Courier New' };
+  function fontKey(name) {
+    const n = String(name || '').trim(), l = n.toLowerCase();
+    if (!n) return '';
+    if (FONT_ALIAS[l]) return FONT_ALIAS[l];
+    const m = FM.list.find((x) => x.f.toLowerCase() === l.replace(/\s+/g, '') || x.n.replace(/\s*\(.*\)$/, '').toLowerCase() === l);
+    return m ? m.k : 'L:' + n.slice(0, 100);
+  }
+  const fontOffice = (k) => FONT_OFFICE[k] || (k && k.startsWith('L:') ? k.slice(2) : FM.by[k] ? FM.by[k].n.replace(/\s*\(.*\)$/, '') : 'Arial');
   const fontName = (k) => (STD_FONTS[k] ? STD_FONTS[k][0] : k && k.startsWith('L:') ? k.slice(2) : FM.by[k] ? FM.by[k].n : k);
   FM.ready = fetch('vendor/fonts/fonts.json?v=' + C.VERSION).then((r) => r.json()).then((list) => {
     FM.list = list;
@@ -796,7 +807,8 @@
       const tabs = [['start', 'Start'], ['insert', "Insert"], ...(host.tabs ? host.tabs() : [])];
       if (!tabs.some((t) => t[0] === RB.tab)) RB.tab = 'start';
       let h = '';
-      if (RB.tab === 'start') {
+      if (RB.tab === 'start' && !has && !ED.edit && !ED.painter && host.startIdle) h += host.startIdle(kit, !!(ED.clip || (host.clipboard && host.clipboard())));
+      else if (RB.tab === 'start') {
         if (host.ribbonPre) h += host.ribbonPre(kit, 'start');
         // Zwischenablage
         const canPaste = !!(ED.clip || (host.clipboard && host.clipboard()));
@@ -1648,7 +1660,7 @@
         ${ib('undo', ICON.undo, "Undo (Ctrl+Z)")}${ib('redo', ICON.redo, "Redo (Ctrl+Y)")}
         <span class="dk-grow"></span>
         <span class="dk-state muted small"></span>
-        ${ib('play', ICON.play, "Present (F5)", "Present")}${ib('pdf', ICON.pdf, "Save as PDF", 'PDF')}
+        ${ib('play', ICON.play, "Present (F5)", "Present")}${ib('pdf', ICON.pdf, "Save as PDF or PowerPoint file", "Save")}
       </div>
       <div class="dk-fmt rb-band"></div>
       <div class="dk-main">
@@ -1949,7 +1961,7 @@
     if (a === 'redo') { redo(); return; }
     if (a === 'design') { designMenu(r.left, r.bottom + 4); return; }
     if (a === 'play') { present(D.cur); return; }
-    if (a === 'pdf') { popMenu(r.left - 120, r.bottom + 4, [['dl', "Download PDF", () => exportPdf('download')], ['lib', "Put PDF into “My PDFs” (to write on)", () => exportPdf('library')]]); return; }
+    if (a === 'pdf') { popMenu(r.left - 120, r.bottom + 4, [['dl', "Download PDF", () => exportPdf('download')], ['lib', "Put PDF into “My PDFs” (to write on)", () => exportPdf('library')], ['pptx', "Save as PowerPoint file (.pptx)", () => exportPptxDeck()]]); return; }
     D.ed.act(a, b);
   }
   function onPaste(ev) {
@@ -2554,6 +2566,17 @@
       } catch (er) { /* Bild fehlt */ }
     }
   }
+  // als PowerPoint-Datei (.pptx): Texte, Formen, Tabellen und Diagramme bleiben in PowerPoint bearbeitbar
+  async function exportPptxDeck() {
+    D.ed.endEdit(); await flush();
+    C.toast("Creating PowerPoint file …", 120000);
+    try {
+      const M = await C.pptx();
+      const { blob, skipped } = await M.exportPptx(D.deck, { hf: (i) => hfEls(i), progress: (t) => C.toast(t, 120000) });
+      C.downloadBlob(blob, (D.deck.title || "Presentation").replace(/[\\/:*?"<>|]+/g, ' ').trim() + '.pptx');
+      C.toast(skipped ? `PowerPoint file created – ${skipped} object(s) could not be transferred.` : "PowerPoint file created.", 5000);
+    } catch (e) { C.toast(e.message || String(e), 8000); }
+  }
   async function exportPdf(where) {
     D.ed.endEdit(); await flush();
     C.toast("Creating PDF …", 60000);
@@ -2597,5 +2620,6 @@
 
   FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'F1' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); ev.stopImmediatePropagation(); rbCollapse(); } }, true);
-  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
+  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
+    PX: { W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, inkSvg, hfEls, uid, bgOf, DEF_TH }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();
