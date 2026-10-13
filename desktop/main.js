@@ -16,6 +16,13 @@ const DROP0 = LANG === 'en' ? 'Documents' : 'Dokumente';
 // Anfragen an PDF-Stift aus dem Programm selbst (in der freien Ausgabe mit dem Schlüssel des internen Servers)
 const sfetch = (url, opt = {}) => fetch(url, LOCAL ? { ...opt, headers: { ...(opt.headers || {}), 'X-PDFStift-Local': local.KEY } } : opt);
 let win = null;
+// Fenster noch da? (beim Beenden oder während eines Updates kann es schon zerstört sein)
+const alive = () => !!win && !win.isDestroyed();
+// Nachzügler nach dem Schließen des Fensters (Zeitgeber, Update-Meldungen) sollen keine Fehlermeldung aufpoppen lassen
+process.on('uncaughtException', (e) => {
+  if (e && /Object has been destroyed/.test(String(e.message))) { console.log('ignoriert:', e.message); return; }
+  try { dialog.showErrorBox('PDF-Stift', String((e && e.stack) || e)); } catch (e2) { /* */ }
+});
 let ready = false;
 const waiting = [];
 
@@ -27,10 +34,12 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', (_e, argv) => {
-    if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+    if (!alive()) return; // das Programm wird gerade beendet
+    if (win.isMinimized()) win.restore();
+    win.focus();
     pdfArgs(argv).forEach(openFile);
     const lp = libArg(argv);
-    if (lp && win) win.loadURL(BASE + '?open=' + encodeURIComponent(lp));
+    if (lp) win.loadURL(BASE + '?open=' + encodeURIComponent(lp));
   });
   app.whenReady().then(start);
   app.on('window-all-closed', () => app.quit());
@@ -218,7 +227,7 @@ function menu() {
       { label: 'Foliensortierung (Präsentation)', click: cmd('rb:v:sorter') },
       { label: 'Notizen unter der Folie (Präsentation)', click: cmd('rb:v:notes') },
       { type: 'separator' },
-      { label: 'Neu laden', accelerator: 'Ctrl+Shift+F5', click: () => win && win.webContents.reload() },
+      { label: 'Neu laden', accelerator: 'Ctrl+Shift+F5', click: () => alive() && win.webContents.reload() },
     ] },
     { label: '&Einfügen', id: 'm-einfuegen', submenu: [
       { label: 'Textfeld', click: cmd('rb:ins:text') },
@@ -376,6 +385,7 @@ ipcMain.handle('lib-open', () => { if (LOCAL) shell.openPath(local.libraryDir())
 ipcMain.handle('lib-pick', () => (LOCAL ? pickLibrary() : null));
 async function openFile(file, opt = {}) {
   if (!ready) { if (!opt.print) waiting.push(file); return false; }
+  if (!alive()) return false;
   let tmpDir = '';
   // PowerPoint: als bearbeitbare Präsentation oder als PDF zum Beschreiben?
   if (!opt.print && /\.(pptx|pptm|ppsx|potx)$/i.test(file)) {
