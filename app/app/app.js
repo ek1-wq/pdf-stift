@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.79.0';
+  const VERSION = '1.80.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -1614,7 +1614,7 @@
       const v = await chooseDlg('PowerPoint-Datei', pps.length === 1 ? `Wie möchten Sie „${pps[0].name}“ öffnen?` : `Wie möchten Sie die ${pps.length} PowerPoint-Dateien öffnen?`,
         [['deck', 'Als bearbeitbare Präsentation', 'Folien ändern, vortragen, als PowerPoint oder PDF speichern'], ['pdf', 'Als PDF zum Beschreiben', 'mit Stift und Marker, wie jede PDF'], ['both', 'Beides', 'Präsentation und PDF']]);
       if (!v) files = files.filter((f) => !pps.includes(f));
-      if (v === 'deck' || v === 'both') for (const f of pps) await pptxImport(f, { open: pps.length === 1 && v === 'deck' && files.length === 1 });
+      if (v === 'deck' || v === 'both') await pptxImportMany(pps, { open: pps.length === 1 && v === 'deck' && files.length === 1 });
       if (v === 'deck') files = files.filter((f) => !pps.includes(f));
       if (!files.length) return { ok: true, status: 200, saved: [], errs: [], notes: [], none: true };
     }
@@ -5162,26 +5162,51 @@
     if (!window.PDFSTIFT_PPTX) await loadScript('app/' + (LANG === 'en' ? 'pptx.en.js' : 'pptx.js') + '?v=' + VERSION);
     return window.PDFSTIFT_PPTX;
   }
-  function pptxPick() {
+  // eine, mehrere oder einen ganzen Ordner PowerPoint-Dateien übernehmen
+  function pptxPick(folder) {
     const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = '.pptx,.potx,.ppsx,application/vnd.openxmlformats-officedocument.presentationml.presentation';
-    inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) pptxImport(f); };
+    inp.type = 'file'; inp.multiple = true;
+    if (folder) inp.webkitdirectory = true;
+    else inp.accept = '.pptx,.potx,.ppsx,.pptm,application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    inp.onchange = () => { const fs = [...(inp.files || [])].filter((f) => /\.(pptx|potx|ppsx|pptm)$/i.test(f.name) && !f.name.startsWith('~$')); if (fs.length) pptxImportMany(fs); else if (inp.files && inp.files.length) toast('In der Auswahl ist keine PowerPoint-Datei (.pptx).', 5000); };
     inp.click();
   }
   async function pptxImport(file, o = {}) {
-    if (!/\.(pptx|potx|ppsx|pptm)$/i.test(file.name || '')) { toast('Bitte eine PowerPoint-Datei (.pptx) wählen. Ältere .ppt-Dateien zuerst in PowerPoint als .pptx speichern.', 7000); return; }
-    toast('PowerPoint-Datei wird gelesen …', 120000);
+    if (!/\.(pptx|potx|ppsx|pptm)$/i.test(file.name || '')) { if (!o.quiet) toast('Bitte eine PowerPoint-Datei (.pptx) wählen. Ältere .ppt-Dateien zuerst in PowerPoint als .pptx speichern.', 7000); return { name: file.name, error: 'keine .pptx-Datei' }; }
+    if (!o.quiet) toast('PowerPoint-Datei wird gelesen …', 120000);
     try {
       const M = await pptxMod();
-      const { deck, warn } = await M.importPptx(file, (t) => toast(t, 120000));
+      const { deck, warn } = await M.importPptx(file, o.quiet ? o.progress : (t) => toast(t, 120000));
       const r = await apiJson('decknew', { method: 'POST', body: { title: deck.title } });
       await apiJson('deck', { method: 'POST', body: { path: r.path, deck, rev: r.rev } });
       S.decks = [{ path: r.path, title: deck.title, slides: deck.slides.length, mtime: Date.now() / 1000 }, ...(S.decks || [])];
       const miss = warn.emf + warn.other;
-      toast(`„${deck.title}“ übernommen: ${deck.slides.length} ${deck.slides.length === 1 ? 'Folie' : 'Folien'}.` + (miss ? ` ${miss} Bild(er) in einem Format, das der Browser nicht anzeigen kann (z. B. EMF), wurden ausgelassen.` : ''), miss ? 9000 : 5000);
+      if (!o.quiet) toast(`„${deck.title}“ übernommen: ${deck.slides.length} ${deck.slides.length === 1 ? 'Folie' : 'Folien'}.` + (miss ? ` ${miss} Bild(er) in einem Format, das der Browser nicht anzeigen kann (z. B. EMF), wurden ausgelassen.` : ''), miss ? 9000 : 5000);
       track('tool', 'PowerPoint öffnen');
-      if (o.open !== false) openDoc(r.path); else if (S.src === 'dk') loadDecks();
-    } catch (e) { toast(e.message || String(e), 8000); }
+      if (o.open !== false && !o.quiet) openDoc(r.path); else if (S.src === 'dk' && !o.quiet) loadDecks();
+      return { name: file.name, title: deck.title, slides: deck.slides.length, miss, path: r.path };
+    } catch (e) { if (!o.quiet) toast(e.message || String(e), 8000); return { name: file.name, error: e.message || String(e) }; }
+  }
+  async function pptxImportMany(files, o = {}) {
+    if (files.length === 1) return pptxImport(files[0], o);
+    const res = [];
+    for (const [i, f] of files.entries()) {
+      const pre = `Datei ${i + 1} von ${files.length}: „${f.name}“`;
+      toast(pre + ' …', 600000);
+      res.push(await pptxImport(f, { quiet: true, progress: (t) => toast(`${pre} – ${t}`, 600000) }));
+    }
+    const ok = res.filter((r) => !r.error), bad = res.filter((r) => r.error);
+    toast(`${ok.length} von ${res.length} PowerPoint-Dateien übernommen.`, 5000);
+    if (S.src === 'dk') loadDecks();
+    // Bericht je Datei
+    const d = document.createElement('dialog');
+    d.className = 'dk-dlg pptx-report';
+    d.innerHTML = `<form method="dialog"><h3>PowerPoint-Dateien übernommen</h3><p class="muted">${ok.length} von ${res.length} Dateien sind jetzt unter „Präsentationen“.</p><div class="dk-dlg-body"><table class="pr-tab">${res.map((r) => `<tr><td>${r.error ? '⚠️' : '✓'}</td><td>${esc(r.title || r.name)}</td><td class="muted">${r.error ? esc(r.error) : `${r.slides} ${r.slides === 1 ? 'Folie' : 'Folien'}${r.miss ? ` · ${r.miss} Bild(er) ausgelassen` : ''}`}</td></tr>`).join('')}</table></div><div class="dk-dlg-btns"><button class="primary" value="ok">Fertig</button></div></form>`;
+    document.body.appendChild(d);
+    d.addEventListener('close', () => d.remove(), { once: true });
+    d.showModal();
+    void bad;
+    return res;
   }
   async function newDeck() {
     const title = await askText('Neue Präsentation', 'Name der Präsentation', '', 'Anlegen');
@@ -5211,7 +5236,7 @@
       return c;
     };
     if (!q) card('dk-new', '+', 'Neue Präsentation', 'Folien bauen, vortragen, als PDF speichern', newDeck, null);
-    if (!q) card('dk-new dk-imp', '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="12" rx="1.5"/><path d="M8 20h8M12 17v3"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg>', 'PowerPoint öffnen', 'Eine .pptx-Datei als bearbeitbare Präsentation übernehmen', pptxPick, null);
+    if (!q) card('dk-new dk-imp', '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="12" rx="1.5"/><path d="M8 20h8M12 17v3"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg>', 'PowerPoint öffnen', 'Eine oder mehrere .pptx-Dateien als bearbeitbare Präsentationen übernehmen', () => pptxPick(false), [['fold', 'Ganzen Ordner übernehmen …', () => pptxPick(true)]]);
     const list = (S.decks || []).filter((d) => !q || d.title.toLowerCase().includes(q));
     for (const d of list) {
       const c = card('dk-card', '<span class="ph nb-ph">' + DK_TAB + '</span>', d.title, `${d.slides} ${d.slides === 1 ? 'Folie' : 'Folien'} · ${fmtDate(d.mtime)}`, () => openDoc(d.path), [
@@ -11861,6 +11886,7 @@
       case 'tonb': if (needDoc()) toNotebook(); break;
       case 'newdeck': newDeck(); break;
       case 'pptximport': pptxPick(); break;
+      case 'pptxfolder': pptxPick(true); break;
       case 'decks': S.src = 'dk'; ls('src', 'dk'); showLibrary(); renderLibrary(); break;
       case 'nbpdf': case 'nbtpl': case 'nbsearch': case 'nbhist':
         if (!V.board) { toast('Bitte zuerst eine Notizseite öffnen.'); break; }

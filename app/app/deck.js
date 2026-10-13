@@ -338,6 +338,14 @@
     }).filter((m) => m[2] * m[3] >= 2 && m[2] >= 1 && m[3] >= 1);
     if (!e.mg.length) delete e.mg;
   }
+  // Farbverlauf einer Form (aus PowerPoint): e.gr = { s: [[pos, farbe, deckkraft]], ang, rad }
+  function gradDefs(e) {
+    if (!e.gr || e.k !== 'path' || !Array.isArray(e.gr.s)) return '';
+    const stops = e.gr.s.map(([p, c, a]) => `<stop offset="${p}" stop-color="${c}"${a != null && a < 1 ? ` stop-opacity="${a}"` : ''}/>`).join('');
+    if (e.gr.rad) return `<defs><radialGradient id="gr-${e.id}" cx="0.5" cy="0.5" r="0.71">${stops}</radialGradient></defs>`;
+    const a = ((e.gr.ang || 0) * Math.PI) / 180, c = Math.cos(a) / 2, s0 = Math.sin(a) / 2;
+    return `<defs><linearGradient id="gr-${e.id}" x1="${0.5 - c}" y1="${0.5 - s0}" x2="${0.5 + c}" y2="${0.5 + s0}">${stops}</linearGradient></defs>`;
+  }
   function elNode(e, th) {
     th = th || DEF_TH;
     const n = document.createElement('div');
@@ -369,8 +377,8 @@
       const stroke = e.line || (lineK || openK ? th.fg : 'none');
       const heads = arrowHeads(e, sw).map((d) => `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
       const pad2 = sw * 3; // Platz für Pfeilspitzen am Rand
-      n.innerHTML = `<svg viewBox="${-hp - pad2} ${-hp - pad2} ${e.w + sw + 2 * pad2} ${e.h + sw + 2 * pad2}" width="${e.w + sw + 2 * pad2}" height="${e.h + sw + 2 * pad2}" style="margin:${-hp - pad2}px;width:${e.w + sw + 2 * pad2}px;height:${e.h + sw + 2 * pad2}px;max-width:none;overflow:visible" preserveAspectRatio="none">` +
-        `<path d="${shapePath(e.k, lineK && e.k !== 'line' ? e.w - hp : e.w, e.h, e).replace(/^M0 /, lineK && e.k === 'arrow2' ? `M${hp} ` : 'M0 ')}" fill="${lineK || openK ? 'none' : e.fill || 'none'}"${e.fo != null && e.fill ? ` fill-opacity="${e.fo}"` : ''} stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>${heads}</svg>`;
+      n.innerHTML = `<svg viewBox="${-hp - pad2} ${-hp - pad2} ${e.w + sw + 2 * pad2} ${e.h + sw + 2 * pad2}" width="${e.w + sw + 2 * pad2}" height="${e.h + sw + 2 * pad2}" style="margin:${-hp - pad2}px;width:${e.w + sw + 2 * pad2}px;height:${e.h + sw + 2 * pad2}px;max-width:none;overflow:visible" preserveAspectRatio="none">${gradDefs(e)}` +
+        `<path d="${shapePath(e.k, lineK && e.k !== 'line' ? e.w - hp : e.w, e.h, e).replace(/^M0 /, lineK && e.k === 'arrow2' ? `M${hp} ` : 'M0 ')}" fill="${lineK || openK ? 'none' : e.gr && e.k === 'path' ? `url(#gr-${e.id})` : e.fill || 'none'}"${e.fo != null && e.fill && !e.gr ? ` fill-opacity="${e.fo}"` : ''} stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>${e.k === 'path' && e.ds ? `<path d="${scalePath(e.ds, e.w, e.h)}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>` : ''}${heads}</svg>`;
       if (e.html && !lineK && !openK) {
         const tx = document.createElement('div');
         tx.className = 'dk-tx va-' + (e.va || 'm'); tx.style.fontSize = (e.fs || 20) + 'px'; tx.style.color = e.c || (e.fill ? '#FFFFFF' : th.fg); tx.style.padding = pad + 'px';
@@ -389,7 +397,7 @@
       const cp = Math.max(1, Math.round((e.fs || 18) / 3));
       const MG = mergeMap(e);
       tb.innerHTML = '<colgroup>' + cw.map((f) => `<col style="width:${f * 100}%">`).join('') + '</colgroup>' +
-        e.rows.map((row, ri) => '<tr>' + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${th.fg}`}"><div class="dk-cell" style="padding:${cp}px">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
+        e.rows.map((row, ri) => '<tr>' + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; const cs = (e.cs && e.cs[k]) || {}; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${cs.c || th.fg}`}${cs.f ? `;background:${cs.f}` : ''}${cs.b ? ';font-weight:700' : ''};vertical-align:${{ t: 'top', b: 'bottom' }[cs.v || e.va] || 'middle'}"><div class="dk-cell" style="padding:${Math.max(1, Math.round((e.fs || 18) * 0.2))}px ${cp}px">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
       n.appendChild(tb);
     }
     return n;
@@ -538,8 +546,13 @@
   }
   // Diagramm als einfache Zeichenbefehle (gleich für Bildschirm und PDF)
   function chartPrims(e, th) {
-    const P = [], fs = e.fs || 14, w = e.w, h = e.h, col = chartColors(th), fg = th.fg, grid = '#D5D9E0';
+    const P = [], fs = e.fs || 14, w = e.w, h = e.h, col0 = chartColors(th), fg = e.tc || th.fg, grid = '#D5D9E0';
     const labels = e.labels || [], ser = (e.series || []).filter((s0) => s0 && Array.isArray(s0.v));
+    // Farbe je Reihe (eigene aus PowerPoint, sonst die des Designs); beim Kreis je Stück
+    const col = e.ct === 'pie' ? col0 : col0.map((c, i) => (ser[i] && ser[i].c) || c);
+    while (e.ct !== 'pie' && col.length < ser.length) col.push((ser[col.length] && ser[col.length].c) || col0[col.length % col0.length]);
+    const fmtV = (v, axis) => (e.pct ? (+(v * 100).toFixed(axis ? 1 : e.dp != null ? Math.max(0, e.dp) : 1)).toLocaleString('de-DE') + ' %' : !axis && e.dp != null ? (+v).toLocaleString('de-DE', { minimumFractionDigits: e.dp, maximumFractionDigits: e.dp }) : fmtNum(v));
+    if (e.bg) P.push({ k: 'rect', x: 0, y: 0, w, h, fill: e.bg });
     const tw = (t, z = fs) => String(t).length * z * 0.55;
     let top = fs * 0.6, bottom = h - fs * 0.5;
     if (e.title) { P.push({ k: 'text', x: w / 2, y: fs * 1.45, s: e.title, fs: fs * 1.25, a: 'middle', c: fg, b: 1 }); top = fs * 2.4; }
@@ -572,21 +585,27 @@
       return P;
     }
     const all = ser.flatMap((s0) => s0.v.map((v) => +v || 0));
-    const ticks = niceTicks(Math.min(0, ...all), Math.max(0, ...all, 1));
-    const lo = ticks[0], hi = ticks[ticks.length - 1];
+    let ticks = niceTicks(e.vmin != null ? e.vmin : Math.min(0, ...all), e.vmax != null ? e.vmax : Math.max(0, ...all));
+    if (e.vmin != null) ticks = ticks.filter((t) => t >= e.vmin - 1e-9);
+    if (e.vmax != null) ticks = ticks.filter((t) => t <= e.vmax + 1e-9);
+    if (ticks.length < 2) ticks = niceTicks(Math.min(0, ...all), Math.max(1, ...all));
+    const lo = e.vmin != null ? Math.min(e.vmin, ticks[0]) : ticks[0], hi = e.vmax != null ? Math.max(e.vmax, ticks[ticks.length - 1]) : ticks[ticks.length - 1];
     const horiz = e.ct === 'bar';
-    const valW = Math.max(...ticks.map((t) => tw(fmtNum(t)))) + fs * 0.6;
+    const valW = Math.max(...ticks.map((t) => tw(fmtV(t, 1)))) + fs * 0.6;
     const catW = Math.max(0, ...labels.map((t) => tw(t))) + fs * 0.6;
     const L = horiz ? Math.min(w * 0.35, catW) : valW, B = bottom - (horiz ? fs * 1.5 : fs * 1.6), R = w - fs * 0.6, T = top;
     const pw = Math.max(10, R - L), ph = Math.max(10, B - T);
-    const vpos = (v) => (horiz ? L + ((v - lo) / (hi - lo)) * pw : B - ((v - lo) / (hi - lo)) * ph);
+    const vpos = (v0) => { const v = Math.max(lo, Math.min(hi, v0)); return horiz ? L + ((v - lo) / (hi - lo)) * pw : B - ((v - lo) / (hi - lo)) * ph; };
     // Gitter und Werte-Achse
     for (const t of ticks) {
-      if (horiz) { const x = vpos(t); P.push({ k: 'line', x1: x, y1: T, x2: x, y2: B, c: grid, sw: 0.8 }); P.push({ k: 'text', x, y: B + fs * 1.2, s: fmtNum(t), fs: fs * 0.9, a: 'middle', c: fg }); }
-      else { const y = vpos(t); P.push({ k: 'line', x1: L, y1: y, x2: R, y2: y, c: grid, sw: 0.8 }); P.push({ k: 'text', x: L - fs * 0.4, y: y + fs * 0.32, s: fmtNum(t), fs: fs * 0.9, a: 'end', c: fg }); }
+      if (horiz) { const x = vpos(t); P.push({ k: 'line', x1: x, y1: T, x2: x, y2: B, c: grid, sw: 0.8 }); P.push({ k: 'text', x, y: B + fs * 1.2, s: fmtV(t, 1), fs: fs * 0.9, a: 'middle', c: fg }); }
+      else { const y = vpos(t); P.push({ k: 'line', x1: L, y1: y, x2: R, y2: y, c: grid, sw: 0.8 }); P.push({ k: 'text', x: L - fs * 0.4, y: y + fs * 0.32, s: fmtV(t, 1), fs: fs * 0.9, a: 'end', c: fg }); }
     }
     const n = Math.max(1, labels.length), slot = (horiz ? ph : pw) / n;
+    // zu viele Beschriftungen: nur jede k-te zeigen, damit nichts übereinanderliegt
+    const every = horiz ? Math.max(1, Math.ceil((fs * 1.1) / slot)) : Math.max(1, Math.ceil((Math.max(0, ...labels.map((t) => tw(t))) + fs * 0.4) / slot));
     labels.forEach((t, i) => {
+      if (i % every) return;
       if (horiz) P.push({ k: 'text', x: L - fs * 0.4, y: T + slot * (i + 0.5) + fs * 0.35, s: t, fs, a: 'end', c: fg });
       else P.push({ k: 'text', x: L + slot * (i + 0.5), y: B + fs * 1.25, s: t, fs, a: 'middle', c: fg });
     });
@@ -595,7 +614,8 @@
       ser.forEach((s0, si) => {
         const pts = s0.v.slice(0, n).map((v, i) => [L + slot * (i + 0.5), vpos(+v || 0)]);
         if (pts.length > 1) P.push({ k: 'path', d: 'M' + pts.map((q) => q.map((z) => +z.toFixed(2)).join(' ')).join('L'), stroke: col[si % col.length], sw: Math.max(1.5, fs * 0.16) });
-        for (const [x, y] of pts) P.push({ k: 'circle', cx: x, cy: y, r: Math.max(2, fs * 0.22), fill: col[si % col.length] });
+        if (e.mk !== 0) for (const [x, y] of pts) P.push({ k: 'circle', cx: x, cy: y, r: Math.max(2, fs * 0.22), fill: col[si % col.length] });
+        if (e.dl) s0.v.slice(0, n).forEach((v, i) => { if (i % every === 0 || n <= 12) P.push({ k: 'text', x: pts[i][0], y: pts[i][1] - fs * 0.5, s: fmtV(+v || 0), fs: fs * 0.8, a: 'middle', c: fg }); });
       });
     } else {
       const m = Math.max(1, ser.length), gap = slot * 0.2, bw = (slot - 2 * gap) / m;
@@ -603,6 +623,11 @@
         const p0 = vpos(+v || 0), off = slot * i + gap + bw * si;
         if (horiz) P.push({ k: 'rect', x: Math.min(zero, p0), y: T + off, w: Math.abs(p0 - zero), h: bw * 0.92, fill: col[si % col.length] });
         else P.push({ k: 'rect', x: L + off, y: Math.min(zero, p0), w: bw * 0.92, h: Math.abs(p0 - zero), fill: col[si % col.length] });
+        if (e.dl) {
+          const neg = (+v || 0) < 0, s1 = fmtV(+v || 0);
+          if (horiz) P.push({ k: 'text', x: p0 + (neg ? -fs * 0.3 : fs * 0.3), y: T + off + bw * 0.46 + fs * 0.3, s: s1, fs: fs * 0.85, a: neg ? 'end' : 'start', c: fg });
+          else P.push({ k: 'text', x: L + off + bw * 0.46, y: neg ? p0 + fs : p0 - fs * 0.3, s: s1, fs: fs * 0.85, a: 'middle', c: fg });
+        }
       }));
     }
     P.push(horiz ? { k: 'line', x1: zero, y1: T, x2: zero, y2: B, c: '#868E96', sw: 1 } : { k: 'line', x1: L, y1: zero, x2: R, y2: zero, c: '#868E96', sw: 1 });
@@ -642,7 +667,7 @@
   }
   // Daten eines Diagramms bearbeiten (wie eine kleine Tabelle; aus Excel einfügen geht auch)
   async function chartDialog(e) {
-    let labels = (e.labels || []).slice(), ser = (e.series || []).map((s0) => ({ n: s0.n, v: s0.v.slice() }));
+    let labels = (e.labels || []).slice(), ser = (e.series || []).map((s0) => ({ ...s0, v: s0.v.slice() }));
     let html = '';
     const grid = () => `<div class="ch-grid"><table><tr><th></th>${ser.map((s0, j) => `<th><input data-s="${j}" value="${esc(s0.n || '')}" placeholder="Reihe ${j + 1}"></th>`).join('')}<th><button type="button" class="btn small" data-a="addS">+ Reihe</button></th></tr>` +
       labels.map((l, i) => `<tr><th><input data-l="${i}" value="${esc(l)}"></th>${ser.map((s0, j) => `<td><input data-v="${i},${j}" inputmode="decimal" value="${s0.v[i] != null ? String(s0.v[i]).replace('.', ',') : ''}"></td>`).join('')}<td><button type="button" class="icon-btn" data-a="delL" data-i="${i}" title="Zeile löschen">✕</button></td></tr>`).join('') +
@@ -2679,6 +2704,45 @@
       }
       void extra;
     };
+    // Verlauf: Pfad als Schnittmaske, darin feine Streifen (linear) bzw. Ringe (rund)
+    const gradAt = (st, t) => {
+      if (t <= st[0][0]) return st[0];
+      for (let i = 1; i < st.length; i++) if (t <= st[i][0]) { const [p0, c0, a0] = st[i - 1], [p1, c1, a1] = st[i]; const f = (t - p0) / Math.max(1e-6, p1 - p0); const A = hexRgb(c0), B = hexRgb(c1); return [t, PDFLib.rgb(A.red + (B.red - A.red) * f, A.green + (B.green - A.green) * f, A.blue + (B.blue - A.blue) * f), (a0 ?? 1) + ((a1 ?? 1) - (a0 ?? 1)) * f]; }
+      return st[st.length - 1];
+    };
+    const drawGrad = (pg, d, e, K) => {
+      const { pushGraphicsState, popGraphicsState, moveTo, lineTo, appendBezierCurve, appendQuadraticCurve, closePath, clip, endPath } = PDFLib;
+      const ops = [pushGraphicsState()];
+      for (const m of d.matchAll(/([MLCQZ])([^MLCQZ]*)/g)) {
+        const v = (m[2].match(/-?\d*\.?\d+(e-?\d+)?/gi) || []).map((x) => +x * K);
+        const Y = (i) => -v[i];
+        if (m[1] === 'M') ops.push(moveTo(v[0], Y(1)));
+        else if (m[1] === 'L') for (let i = 0; i + 1 < v.length; i += 2) ops.push(lineTo(v[i], Y(i + 1)));
+        else if (m[1] === 'C') for (let i = 0; i + 5 < v.length; i += 6) ops.push(appendBezierCurve(v[i], Y(i + 1), v[i + 2], Y(i + 3), v[i + 4], Y(i + 5)));
+        else if (m[1] === 'Q') for (let i = 0; i + 3 < v.length; i += 4) ops.push(appendQuadraticCurve(v[i], Y(i + 1), v[i + 2], Y(i + 3)));
+        else ops.push(closePath());
+      }
+      ops.push(clip(), endPath());
+      pg.pushOperators(...ops);
+      const st = e.gr.s.map(([p, c, a]) => [p, c, a]);
+      const N = 60, op0 = OP * (e.fo != null ? e.fo : 1);
+      const colAt = (t) => { const g = gradAt(st, t); return { color: typeof g[1] === 'string' ? hexRgb(g[1]) : g[1], opacity: op0 * (g[2] ?? 1) }; };
+      if (e.gr.rad) {
+        const cx = e.w / 2, cy = e.h / 2;
+        for (let i = N; i >= 1; i--) { const t = i / N, c = colAt(t); pg.drawEllipse({ x: cx * K, y: -cy * K, xScale: (e.w / 2) * 1.42 * t * K, yScale: (e.h / 2) * 1.42 * t * K, color: c.color, opacity: c.opacity }); }
+      } else {
+        const a = ((e.gr.ang || 0) * Math.PI) / 180, ux = Math.cos(a), uy = Math.sin(a);
+        const corners = [[0, 0], [e.w, 0], [0, e.h], [e.w, e.h]].map(([x, y]) => x * ux + y * uy);
+        const t0 = Math.min(...corners), t1 = Math.max(...corners), L = Math.hypot(e.w, e.h) + 10;
+        for (let i = 0; i < N; i++) {
+          const a0 = t0 + ((t1 - t0) * i) / N, a1 = t0 + ((t1 - t0) * (i + 1.02)) / N, c = colAt((i + 0.5) / N);
+          const P = (t, s0) => [t * ux - s0 * uy, t * uy + s0 * ux];
+          const q = [P(a0, -L), P(a1, -L), P(a1, L), P(a0, L)];
+          pg.drawSvgPath(`M${q[0][0]} ${q[0][1]}L${q[1][0]} ${q[1][1]}L${q[2][0]} ${q[2][1]}L${q[3][0]} ${q[3][1]}Z`, { x: 0, y: 0, scale: K, color: c.color, opacity: c.opacity });
+        }
+      }
+      pg.pushOperators(popGraphicsState());
+    };
     async function drawEl(pg, e, K, base) {
       FF = await famOf(e.ff);
       const B0 = base || [1, 0, 0, 1, 0, 0];
@@ -2719,7 +2783,10 @@
         } else if (open) {
           pg.drawSvgPath(shapePath(e.k, e.w, e.h, e), { ...opt, borderColor: col(stroke), borderWidth: sw * K, borderLineCap: 1 });
         } else {
-          pg.drawSvgPath(shapePath(e.k, e.w, e.h, e), { ...opt, color: e.fill ? col(e.fill) : undefined, borderColor: e.line ? col(e.line) : undefined, borderWidth: e.line ? sw * K : 0, ...(e.fo != null && e.fill && !SH ? { opacity: (opt.opacity != null ? opt.opacity : 1) * e.fo } : {}) });
+          const dd0 = shapePath(e.k, e.w, e.h, e);
+          if (dd0 && e.gr && !SH) { drawGrad(pg, dd0, e, K); }
+          if (dd0) pg.drawSvgPath(dd0, { ...opt, color: e.fill && !(e.gr && !SH) ? col(e.fill) : undefined, borderColor: e.line ? col(e.line) : undefined, borderWidth: e.line ? sw * K : 0, ...(e.fo != null && e.fill && !SH ? { opacity: (opt.opacity != null ? opt.opacity : 1) * e.fo } : {}) });
+          if (e.k === 'path' && e.ds && (e.line || '')) pg.drawSvgPath(scalePath(e.ds, e.w, e.h), { ...opt, borderColor: col(e.line), borderWidth: sw * K, borderLineCap: 1 });
           if (e.html) drawTextBox(pg, e.html, 0, 0, e.w, e.h, e.fs || 20, e.c || (e.fill ? '#FFFFFF' : th.fg), e.va || 'm', e.pad != null ? e.pad : 10, K, e.lh);
         }
         for (const hd of arrowHeads(e, sw)) pg.drawSvgPath(hd, { ...opt, borderColor: col(stroke), borderWidth: sw * K, borderLineCap: 1 });
@@ -2754,9 +2821,11 @@
             const [rs, cs] = MG.span[ri + ',' + ci] || [1, 1];
             let w = 0; for (let j = 0; j < cs; j++) w += e.w * cw[ci + j];
             const hh = rh * rs;
-            const head = ri === 0 && e.head;
-            pg.drawRectangle({ x: xx * K, y: -(yy + hh) * K, width: w * K, height: hh * K, color: head ? col(th.accent) : (SH ? col('#000000') : undefined), borderColor: col(e.line || '#868E96'), borderWidth: 0.75, ...opa() });
-            if (!SH) drawTextBox(pg, (head ? '<b>' : '') + (e.rows[ri][ci] || '') + (head ? '</b>' : ''), xx, yy, w, hh, e.fs || 18, head ? '#FFFFFF' : th.fg, 'm', cp, K, e.lh);
+            const head = ri === 0 && e.head, cst = (e.cs && e.cs[ri + ',' + ci]) || {};
+            const cf = cst.f || (head ? th.accent : null);
+            pg.drawRectangle({ x: xx * K, y: -(yy + hh) * K, width: w * K, height: hh * K, color: cf ? col(cf) : (SH ? col('#000000') : undefined), borderColor: col(e.line || '#868E96'), borderWidth: 0.75, ...opa() });
+            const bold = head || cst.b;
+            if (!SH) drawTextBox(pg, (bold ? '<b>' : '') + (e.rows[ri][ci] || '') + (bold ? '</b>' : ''), xx, yy, w, hh, e.fs || 18, cst.c || (head ? '#FFFFFF' : th.fg), cst.v || e.va || 'm', cp, K, e.lh);
             xx += w0;
           }
           yy += rh;

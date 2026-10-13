@@ -59,6 +59,118 @@
     } catch (e) { return null; } finally { box.remove(); }
   }
 
+  // ------------------------------------------------------------------ PowerPoint-Formen (ECMA-376 Formdefinitionen) → SVG-Pfad in 0…1000
+  let PRESETS = null;
+  const presetsLoad = async () => { if (!PRESETS) PRESETS = await fetch('vendor/pptx-presets.json?v=' + C.VERSION).then((r) => (r.ok ? r.json() : {})).catch(() => ({})); return PRESETS; };
+  const DEG = Math.PI / 180 / 60000;
+  function geomPath(def, w, h, adj) {
+    w = w || 1; h = h || 1;
+    const V = {};
+    const BI = { l: 0, t: 0, r: w, b: h, w, h, hc: w / 2, vc: h / 2, ss: Math.min(w, h), ls: Math.max(w, h), cd2: 10800000, cd4: 5400000, cd8: 2700000, '3cd4': 16200000, '3cd8': 8100000, '5cd8': 13500000, '7cd8': 18900000 };
+    const get = (n) => {
+      if (n in V) return V[n];
+      if (n in BI) return BI[n];
+      if (/^-?\d+(\.\d+)?$/.test(n)) return +n;
+      const m = /^(w|h|ss)d(\d+)$/.exec(n);
+      if (m) return BI[m[1]] / +m[2];
+      throw new Error('Formgröße ' + n);
+    };
+    const ev = (f) => {
+      const [op, ...a] = String(f).trim().split(/\s+/);
+      const x = a.map(get);
+      switch (op) {
+        case 'val': return x[0];
+        case '*/': return x[2] ? (x[0] * x[1]) / x[2] : 0;
+        case '+-': return x[0] + x[1] - x[2];
+        case '+/': return x[2] ? (x[0] + x[1]) / x[2] : 0;
+        case '?:': return x[0] > 0 ? x[1] : x[2];
+        case 'abs': return Math.abs(x[0]);
+        case 'at2': return Math.atan2(x[1], x[0]) / DEG;
+        case 'cat2': return x[0] * Math.cos(Math.atan2(x[2], x[1]));
+        case 'sat2': return x[0] * Math.sin(Math.atan2(x[2], x[1]));
+        case 'cos': return x[0] * Math.cos(x[1] * DEG);
+        case 'sin': return x[0] * Math.sin(x[1] * DEG);
+        case 'tan': return x[0] * Math.tan(x[1] * DEG);
+        case 'max': return Math.max(x[0], x[1]);
+        case 'min': return Math.min(x[0], x[1]);
+        case 'mod': return Math.sqrt(x[0] * x[0] + x[1] * x[1] + (x[2] || 0) * (x[2] || 0));
+        case 'pin': return x[1] < x[0] ? x[0] : x[1] > x[2] ? x[2] : x[1];
+        case 'sqrt': return Math.sqrt(Math.max(0, x[0]));
+        default: throw new Error('Formel ' + op);
+      }
+    };
+    try {
+      for (const [n, f] of def.av || []) V[n] = ev(adj && adj[n] != null ? adj[n] : f);
+      for (const [n, f] of def.gd || []) V[n] = ev(f);
+      let d = '', ds = '', hasFill = false, hasStroke = false;
+      for (const p of def.p || []) {
+        const pw = +p.w || w, ph = +p.h || h;
+        const X = (v) => Math.round(((get(v) * 1000) / pw) * 10) / 10, Y = (v) => Math.round(((get(v) * 1000) / ph) * 10) / 10;
+        const R = (v) => Math.round(v * 10) / 10;
+        let cx = 0, cy = 0, s0 = '';
+        for (const c of p.c) {
+          const t = c[0];
+          if (t === 'm' || t === 'l') { cx = get(c[1]); cy = get(c[2]); s0 += `${t === 'm' ? 'M' : 'L'}${X(c[1])} ${Y(c[2])}`; }
+          else if (t === 'c') { s0 += `C${X(c[1])} ${Y(c[2])} ${X(c[3])} ${Y(c[4])} ${X(c[5])} ${Y(c[6])}`; cx = get(c[5]); cy = get(c[6]); }
+          else if (t === 'q') { s0 += `Q${X(c[1])} ${Y(c[2])} ${X(c[3])} ${Y(c[4])}`; cx = get(c[3]); cy = get(c[4]); }
+          else if (t === 'a') {
+            const wR = get(c[1]), hR = get(c[2]), st = get(c[3]) * DEG, sw = get(c[4]) * DEG;
+            // Winkel sind „sichtbare“ Winkel auf der Ellipse → Parameterwinkel
+            const par = (a) => Math.atan2(wR * Math.sin(a), hR * Math.cos(a));
+            const t1 = par(st);
+            let dt;
+            if (Math.abs(sw) >= 2 * Math.PI - 1e-6) dt = Math.sign(sw) * 2 * Math.PI;
+            else { dt = par(st + sw) - t1; if (sw > 0 && dt <= 0) dt += 2 * Math.PI; if (sw < 0 && dt >= 0) dt -= 2 * Math.PI; }
+            const ox = cx - wR * Math.cos(t1), oy = cy - hR * Math.sin(t1);
+            const n = Math.max(1, Math.ceil(Math.abs(dt) / (Math.PI / 2))), da = dt / n, k = (4 / 3) * Math.tan(da / 4);
+            let a = t1;
+            for (let i = 0; i < n; i++) {
+              const a2 = a + da;
+              const x1 = ox + wR * (Math.cos(a) - k * Math.sin(a)), y1 = oy + hR * (Math.sin(a) + k * Math.cos(a));
+              const x2 = ox + wR * (Math.cos(a2) + k * Math.sin(a2)), y2 = oy + hR * (Math.sin(a2) - k * Math.cos(a2));
+              cx = ox + wR * Math.cos(a2); cy = oy + hR * Math.sin(a2);
+              s0 += `C${R((x1 * 1000) / pw)} ${R((y1 * 1000) / ph)} ${R((x2 * 1000) / pw)} ${R((y2 * 1000) / ph)} ${R((cx * 1000) / pw)} ${R((cy * 1000) / ph)}`;
+              a = a2;
+            }
+          } else if (t === 'z') s0 += 'Z';
+        }
+        if (!s0) continue;
+        if (p.stroke !== 'false' && p.stroke !== '0') hasStroke = true;
+        if (p.fill === 'none') ds += s0; else { d += s0; hasFill = true; }
+      }
+      if ((!d && !ds) || /NaN|Infinity/.test(d + ds) || d.length + ds.length > 60000) return null;
+      return { d, ds, fill: hasFill, stroke: hasStroke };
+    } catch (e) { return null; }
+  }
+
+  // alle Textstücke um den Faktor k größer/kleiner (relativ, als em)
+  function scaleHtml(html, k) {
+    const t = document.createElement('template');
+    t.innerHTML = html;
+    const walk = (n) => { for (const c of [...n.childNodes]) { if (c.nodeType === 3 && c.nodeValue.trim()) { const sp = document.createElement('span'); sp.style.fontSize = Math.round(k * 1000) / 1000 + 'em'; c.replaceWith(sp); sp.appendChild(c); } else if (c.nodeType === 1 && !(c.tagName === 'SPAN' && c.style.fontSize)) walk(c); else if (c.nodeType === 1) c.style.fontSize = Math.round(parseFloat(c.style.fontSize) * k * 1000) / 1000 + 'em'; } };
+    walk(t.content);
+    return t.innerHTML;
+  }
+
+  // Bildeffekte aus PowerPoint: Graustufen, Schwarzweiß, Helligkeit/Kontrast, Duoton, Farbe durchsichtig
+  function applyFx(ctx, w, h, fx) {
+    const id = ctx.getImageData(0, 0, w, h), d = id.data;
+    const hx = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+    const A = fx.duo && hx(fx.duo[0]), B = fx.duo && hx(fx.duo[1]), KEY = fx.key && hx(fx.key);
+    const br = (fx.bright || 0) * 255, ct = 1 + (fx.contrast || 0);
+    for (let i = 0; i < d.length; i += 4) {
+      let r = d[i], g = d[i + 1], b = d[i + 2];
+      if (KEY && Math.abs(r - KEY[0]) + Math.abs(g - KEY[1]) + Math.abs(b - KEY[2]) < 24) { d[i + 3] = 0; continue; }
+      if (fx.bright || fx.contrast) { r = (r - 128) * ct + 128 + br; g = (g - 128) * ct + 128 + br; b = (b - 128) * ct + 128 + br; }
+      const y = 0.3 * r + 0.59 * g + 0.11 * b;
+      if (fx.gray) r = g = b = y;
+      if (fx.bi != null) r = g = b = y >= fx.bi * 255 ? 255 : 0;
+      if (A) { const t = y / 255; r = A[0] + (B[0] - A[0]) * t; g = A[1] + (B[1] - A[1]) * t; b = A[2] + (B[2] - A[2]) * t; }
+      d[i] = r; d[i + 1] = g; d[i + 2] = b;
+    }
+    ctx.putImageData(id, 0, 0);
+  }
+
   // ================================================================== Einlesen
   async function importPptx(file, progress) {
     const u8 = new Uint8Array(await file.arrayBuffer());
@@ -86,9 +198,39 @@
     };
     const relOfType = (p, type) => Object.values(relsOf(p)).find((r) => r.type === type);
 
+    // Tabellenformatvorlagen der Datei (PowerPoint speichert die benutzten in ppt/tableStyles.xml)
+    const tsDoc = xml('ppt/tableStyles.xml');
+    const tstyles = {};
+    if (tsDoc) for (const st of all(tsDoc, 'tblStyle')) tstyles[at(st, 'styleId')] = st;
+    const tstyleDef = tsDoc ? at(tsDoc.documentElement, 'def') : '';
+    const mixW = (hex, t) => '#' + [1, 3, 5].map((i) => hex2(parseInt(hex.slice(i, i + 2), 16) * t + 255 * (1 - t))).join('').toUpperCase();
+    function tableStyleParts(id, T) {
+      const st = tstyles[id];
+      if (!st) {
+        if (!id) return null;
+        // eingebaute Standardvorlage „Mittleres Format 2 – Akzent 1“
+        const a = '#' + (T.scheme.accent1 || '4472C4'), lt = '#' + (T.scheme.lt1 || 'FFFFFF'), dk = '#' + (T.scheme.dk1 || '000000');
+        return { wholeTbl: { f: mixW(a, 0.2), c: dk }, band1H: { f: mixW(a, 0.4) }, band1V: { f: mixW(a, 0.4) }, firstRow: { f: a, c: lt, b: 1 }, lastRow: { f: a, c: lt, b: 1 }, firstCol: { f: a, c: lt, b: 1 }, lastCol: { f: a, c: lt, b: 1 }, _line: lt };
+      }
+      const out = {};
+      for (const pn of ['wholeTbl', 'band1H', 'band2H', 'band1V', 'band2V', 'firstRow', 'lastRow', 'firstCol', 'lastCol']) {
+        const pe = kid(st, pn);
+        if (!pe) continue;
+        const o = {};
+        const tcs = kid(pe, 'tcStyle'), fe = tcs && kid(tcs, 'fill');
+        if (fe) { if (kid(fe, 'noFill')) o.f = 'none'; else { const c = color(kid(fe, 'solidFill'), T); if (c) o.f = c.c; } }
+        if (tcs && kid(tcs, 'fillRef')) { const c = color(kid(tcs, 'fillRef'), T); if (c) o.f = c.c; }
+        const tx = kid(pe, 'tcTxStyle');
+        if (tx) { if (at(tx, 'b') === 'on') o.b = 1; const c = color(tx, T) || color(kid(tx, 'fontRef'), T); if (c) o.c = c.c; }
+        if (pn === 'wholeTbl' && tcs) { const ln = all(kid(tcs, 'tcBdr'), 'ln')[0]; const c = ln && color(kid(ln, 'solidFill'), T); if (c) out._line = c.c; }
+        out[pn] = o;
+      }
+      return out;
+    }
     const pres = xml('ppt/presentation.xml');
     if (!pres) throw new Error("This is not a PowerPoint presentation (.pptx).");
     await X().fontsReady();
+    await presetsLoad();
     const sz = all(pres, 'sldSz')[0];
     const cx = num(at(sz, 'cx'), 12192000) / EMU, cy = num(at(sz, 'cy'), 6858000) / EMU; // in pt
     const W = X().W;
@@ -115,7 +257,7 @@
       const cm = m && all(m, 'clrMap')[0];
       if (cm) for (const a of cm.attributes) map[a.name] = a.value;
       const fmt = td && all(td, 'fmtScheme')[0];
-      const t = { scheme, map, major: fs ? fontOf('majorFont') : '', minor: fs ? fontOf('minorFont') : '', fmt, master: m, masterPath };
+      const t = { scheme, map, major: fs ? fontOf('majorFont') : '', minor: fs ? fontOf('minorFont') : '', fmt, master: m, masterPath, themePath: tr ? tr.target : '' };
       return (themeCache[masterPath] = t);
     }
     // Farbe aus einem Element, das einen Farbknoten enthält (solidFill, fillRef …)
@@ -142,7 +284,14 @@
         else if (m.localName === 'lumMod' || m.localName === 'lumOff') {
           const [h, s, l] = rgb2hsl(r, g, b);
           [r, g, b] = hsl2rgb(h, s, Math.max(0, Math.min(1, m.localName === 'lumMod' ? l * v : l + v)));
-        } else if (m.localName === 'tint') { r = r * v + 255 * (1 - v); g = g * v + 255 * (1 - v); b = b * v + 255 * (1 - v); }
+        } else if (/^(satMod|satOff|hueMod|hueOff)$/.test(m.localName)) {
+          let [hh, ss, ll] = rgb2hsl(r, g, b);
+          if (m.localName === 'satMod') ss = Math.min(1, ss * v); else if (m.localName === 'satOff') ss = Math.max(0, Math.min(1, ss + v));
+          else if (m.localName === 'hueMod') hh = (hh * v) % 1; else hh = (hh + num(at(m, 'val')) / 21600000 + 1) % 1;
+          [r, g, b] = hsl2rgb(hh, ss, ll);
+        } else if (m.localName === 'gray') { const y = 0.3 * r + 0.59 * g + 0.11 * b; r = g = b = y; }
+        else if (m.localName === 'inv') { r = 255 - r; g = 255 - g; b = 255 - b; }
+        else if (m.localName === 'tint') { r = r * v + 255 * (1 - v); g = g * v + 255 * (1 - v); b = b * v + 255 * (1 - v); }
         else if (m.localName === 'shade') { r *= v; g *= v; b *= v; }
       }
       return { c: '#' + (hex2(r) + hex2(g) + hex2(b)).toUpperCase(), a: alpha };
@@ -152,12 +301,34 @@
       if (spPr) {
         if (kid(spPr, 'noFill')) return null;
         const sf = kid(spPr, 'solidFill'); if (sf) return color(sf, T);
-        const gf = kid(spPr, 'gradFill'); if (gf) { const gs = all(gf, 'gs'); if (gs.length) return color(gs[0], T); }
+        const gf = kid(spPr, 'gradFill');
+        if (gf) {
+          const st = all(gf, 'gs').map((g) => ({ p: num(at(g, 'pos')) / 100000, c: color(g, T) })).filter((x) => x.c).sort((x, y) => x.p - y.p);
+          if (st.length === 1) return st[0].c;
+          if (st.length) {
+          // mittlere Farbe als Ersatz, dazu der Verlauf selbst
+          const mid = st.reduce((best, x) => (Math.abs(x.p - 0.5) < Math.abs(best.p - 0.5) ? x : best), st[0]).c;
+          return { c: mid.c, a: mid.a, grad: { s: st.map((x) => [Math.round(x.p * 1000) / 1000, x.c.c, Math.round(x.c.a * 100) / 100]), ang: Math.round(num(at(kid(gf, 'lin'), 'ang')) / 60000), rad: kid(gf, 'path') ? 1 : 0 } };
+          } // Verlauf ohne Farben: Stil der Form nehmen
+        }
         const pf = kid(spPr, 'pattFill'); if (pf) return color(kid(pf, 'fgClr'), T);
         if (kid(spPr, 'grpFill')) return grpF || null;
       }
       const fr = style && kid(style, 'fillRef');
-      if (fr && num(at(fr, 'idx')) > 0) return color(fr, T);
+      if (fr && num(at(fr, 'idx')) > 0) {
+        // Formstil des Designs (z. B. Verlauf in der Grundfarbe): Füllung aus der Stilliste mit der Stilfarbe
+        const ph0 = color(fr, T);
+        const lst = T.fmt && all(T.fmt, 'fillStyleLst')[0];
+        const fsx = lst && lst.children[num(at(fr, 'idx')) - 1];
+        if (fsx && ph0) {
+          if (fsx.localName === 'solidFill') return color(fsx, T, ph0.c) || ph0;
+          if (fsx.localName === 'gradFill') {
+            const st = all(fsx, 'gs').map((g) => ({ p: num(at(g, 'pos')) / 100000, c: color(g, T, ph0.c) })).filter((x) => x.c).sort((x, y) => x.p - y.p);
+            if (st.length > 1) return { c: ph0.c, a: 1, grad: { s: st.map((x) => [Math.round(x.p * 1000) / 1000, x.c.c, Math.round(x.c.a * 100) / 100]), ang: Math.round(num(at(kid(fsx, 'lin'), 'ang')) / 60000), rad: kid(fsx, 'path') ? 1 : 0 } };
+          }
+        }
+        return ph0;
+      }
       return null;
     }
     function lineOf(spPr, style, T) {
@@ -175,8 +346,8 @@
 
     // ---- Bilder hochladen (gleiche Datei nur einmal)
     const upCache = {};
-    async function upload(mediaPath, crop) {
-      const key = mediaPath + (crop ? JSON.stringify(crop) : '');
+    async function upload(mediaPath, crop, fx) {
+      const key = mediaPath + (crop ? JSON.stringify(crop) : '') + (fx ? JSON.stringify(fx) : '');
       if (key in upCache) return upCache[key];
       return (upCache[key] = (async () => {
         const b = z[mediaPath];
@@ -203,7 +374,7 @@
             blob = new Blob([txt], { type });
           }
         }
-        const needCanvas = crop || type === 'image/svg+xml' || type === 'image/bmp' || blob.size > 6e6;
+        const needCanvas = crop || fx || type === 'image/svg+xml' || type === 'image/bmp' || blob.size > 1.8e6; // große Bilder verkleinern (Grenze für das Hochladen)
         if (needCanvas) {
           const url = URL.createObjectURL(blob);
           try {
@@ -218,7 +389,10 @@
             const jpg = type === 'image/jpeg';
             if (jpg) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); }
             ctx.drawImage(im, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
-            blob = await new Promise((res) => cv.toBlob(res, jpg ? 'image/jpeg' : 'image/png', 0.88));
+            if (fx) applyFx(ctx, cv.width, cv.height, fx);
+            blob = await new Promise((res) => cv.toBlob(res, jpg && !(fx && fx.key) ? 'image/jpeg' : 'image/png', 0.88));
+            // große Ergebnisse (z. B. Fotos aus umgewandelten Grafiken) als JPEG – sonst scheitert das Hochladen
+            if (!jpg && blob && blob.size > 1.5e6) { const c2 = document.createElement('canvas'); c2.width = cv.width; c2.height = cv.height; const x2 = c2.getContext('2d'); x2.fillStyle = '#fff'; x2.fillRect(0, 0, c2.width, c2.height); x2.drawImage(cv, 0, 0); blob = await new Promise((res) => c2.toBlob(res, 'image/jpeg', 0.88)); }
           } catch (e) { warn.other++; return null; } finally { URL.revokeObjectURL(url); }
         }
         try {
@@ -241,6 +415,16 @@
       } catch (e) { /* kein LibreOffice */ }
       const WN = window.pdfstiftWin;
       if (WN && WN.imgConv) for (const k of vec) if (!conv[k]) { try { const png = await WN.imgConv(z[k], k.split('.').pop()); if (png && png.length) conv[k] = { png }; } catch (e) { /* */ } }
+    }
+    function blipFx(blip, T) {
+      if (!blip) return null;
+      const fx = {};
+      if (kid(blip, 'grayscl')) fx.gray = 1;
+      const bl = kid(blip, 'biLevel'); if (bl) fx.bi = num(at(bl, 'thresh'), 50000) / 100000;
+      const lu = kid(blip, 'lum'); if (lu) { fx.bright = num(at(lu, 'bright')) / 100000; fx.contrast = num(at(lu, 'contrast')) / 100000; }
+      const du = kid(blip, 'duotone'); if (du) { const cs = [...du.children].map((c) => color({ children: [c] }, T)).filter(Boolean); if (cs.length === 2) fx.duo = [cs[0].c, cs[1].c]; }
+      const cc = kid(blip, 'clrChange'); if (cc) { const to = color(kid(cc, 'clrTo'), T), fr = color(kid(cc, 'clrFrom'), T); if (fr && to && to.a < 0.05) fx.key = fr.c; }
+      return Object.keys(fx).length ? fx : null;
     }
     // ---- Platzhalter: Lage und Textstile aus Layout und Master
     const phOf = (sp) => path(sp, sp.localName === 'pic' ? 'nvPicPr' : sp.localName === 'graphicFrame' ? 'nvGraphicFramePr' : 'nvSpPr', 'nvPr', 'ph');
@@ -395,42 +579,24 @@
     }
 
     // freie Form: DrawingML-Pfade → SVG-Pfad in 0…1000 (Bögen werden zu Bézierkurven)
-    function custPath(geom, bw, bh) {
-      const lst = path(geom, 'pathLst');
-      if (!lst) return null;
-      let d = '', anyFill = false, anyStroke = false, bad = false;
-      const f = (v) => { if (v == null || v === '' || isNaN(+v)) { bad = true; return 0; } return +v; };
-      for (const p of kids(lst, 'path')) {
-        const pw = num(at(p, 'w')) || bw || 1, ph = num(at(p, 'h')) || bh || 1;
-        if (at(p, 'fill') !== 'none') anyFill = true;
-        if (at(p, 'stroke') !== '0') anyStroke = true;
-        const X = (v) => Math.round((f(v) * 1000 / pw) * 10) / 10, Y = (v) => Math.round((f(v) * 1000 / ph) * 10) / 10;
-        let cx = 0, cy = 0;
-        for (const c of p.children) {
-          const pts = kids(c, 'pt');
-          if (c.localName === 'moveTo' && pts[0]) { cx = f(at(pts[0], 'x')); cy = f(at(pts[0], 'y')); d += `M${X(cx)} ${Y(cy)}`; }
-          else if (c.localName === 'lnTo' && pts[0]) { cx = f(at(pts[0], 'x')); cy = f(at(pts[0], 'y')); d += `L${X(cx)} ${Y(cy)}`; }
-          else if (c.localName === 'cubicBezTo' && pts.length === 3) { d += 'C' + pts.map((q) => `${X(at(q, 'x'))} ${Y(at(q, 'y'))}`).join(' '); cx = f(at(pts[2], 'x')); cy = f(at(pts[2], 'y')); }
-          else if (c.localName === 'quadBezTo' && pts.length === 2) { d += 'Q' + pts.map((q) => `${X(at(q, 'x'))} ${Y(at(q, 'y'))}`).join(' '); cx = f(at(pts[1], 'x')); cy = f(at(pts[1], 'y')); }
-          else if (c.localName === 'arcTo') {
-            const wR = f(at(c, 'wR')), hR = f(at(c, 'hR')), st = (f(at(c, 'stAng')) / 60000) * Math.PI / 180, sw = (f(at(c, 'swAng')) / 60000) * Math.PI / 180;
-            const ox = cx - wR * Math.cos(st), oy = cy - hR * Math.sin(st);
-            const n = Math.max(1, Math.ceil(Math.abs(sw) / (Math.PI / 2))), da = sw / n, k = (4 / 3) * Math.tan(da / 4);
-            let a = st;
-            for (let i = 0; i < n; i++) {
-              const a2 = a + da;
-              const x1 = ox + wR * (Math.cos(a) - k * Math.sin(a)), y1 = oy + hR * (Math.sin(a) + k * Math.cos(a));
-              const x2 = ox + wR * (Math.cos(a2) + k * Math.sin(a2)), y2 = oy + hR * (Math.sin(a2) - k * Math.cos(a2));
-              cx = ox + wR * Math.cos(a2); cy = oy + hR * Math.sin(a2);
-              d += `C${X(x1)} ${Y(y1)} ${X(x2)} ${Y(y2)} ${X(cx)} ${Y(cy)}`;
-              a = a2;
-            }
-          } else if (c.localName === 'close') d += 'Z';
+    // freie Form (custGeom) wie eingebaute Form: Vorgaben, Hilfsgrößen und Pfade aus dem XML lesen
+    function defFromXml(geom) {
+      const gl = (el) => kids(el, 'gd').map((g) => [at(g, 'name'), at(g, 'fmla')]);
+      const p = kids(path(geom, 'pathLst'), 'path').map((pe) => {
+        const o = { c: [] };
+        for (const k of ['w', 'h', 'fill', 'stroke']) if (at(pe, k) != null) o[k] = at(pe, k);
+        for (const c of pe.children) {
+          const pts = kids(c, 'pt').flatMap((q) => [at(q, 'x'), at(q, 'y')]);
+          if (c.localName === 'moveTo') o.c.push(['m', ...pts]); else if (c.localName === 'lnTo') o.c.push(['l', ...pts]);
+          else if (c.localName === 'cubicBezTo') o.c.push(['c', ...pts]); else if (c.localName === 'quadBezTo') o.c.push(['q', ...pts]);
+          else if (c.localName === 'arcTo') o.c.push(['a', at(c, 'wR'), at(c, 'hR'), at(c, 'stAng'), at(c, 'swAng')]);
+          else if (c.localName === 'close') o.c.push(['z']);
         }
-      }
-      if (bad || !d || d.length > 50000) return null;
-      return { d, fill: anyFill, stroke: anyStroke };
+        return o;
+      });
+      return { av: gl(kid(geom, 'avLst')), gd: gl(kid(geom, 'gdLst')), p };
     }
+    function custPath(geom, bw, bh) { return geomPath(defFromXml(geom), bw, bh, {}); }
 
     // ---- ein Objekt umwandeln
     const PRST_K = {
@@ -442,7 +608,7 @@
       flowChartProcess: 'rect', flowChartAlternateProcess: 'round', flowChartDecision: 'diamond', flowChartTerminator: 'round', flowChartConnector: 'ellipse', flowChartInputOutput: 'para',
       flowChartPreparation: 'hex', flowChartManualOperation: 'trap', frame: 'rect', snip1Rect: 'rect', snip2SameRect: 'rect', plaque: 'round', can: 'round', cube: 'rect', bevel: 'rect', donut: 'ellipse', pie: 'ellipse', chord: 'ellipse', teardrop: 'ellipse',
     };
-    const LINE_PRST = /^(line|straightConnector1|curvedConnector\d|bentConnector2)$/;
+    const LINE_PRST = /^(line|straightConnector1)$/;
     async function convert(sp, ctx, M, out, gid) {
       const T = ctx.T;
       const ln = sp.localName;
@@ -503,7 +669,7 @@
         if (!target || target.ext) return;
         const sr = path(sp, 'blipFill', 'srcRect');
         const crop = sr && ['l', 't', 'r', 'b'].some((k) => num(at(sr, k))) ? { l: num(at(sr, 'l')) / 100000, t: num(at(sr, 't')) / 100000, r: num(at(sr, 'r')) / 100000, b: num(at(sr, 'b')) / 100000 } : null;
-        const res = await upload(target.target, crop);
+        const res = await upload(target.target, crop, blipFx(blip, T));
         if (!res) return;
         const e = { ...base, t: 'img', src: res.src, iw: res.w, ih: res.h };
         if (b.fx) e.fx = 1; if (b.fy) e.fy = 1;
@@ -525,6 +691,7 @@
           const def = all(pres, 'defaultTextStyle')[0]; if (def) chain.push(def);
           const tx = T.master && all(T.master, 'txStyles')[0]; if (tx && kid(tx, 'otherStyle')) chain.push(kid(tx, 'otherStyle'));
           let fs = null, lineC = null, headFill = 0;
+          const fsCount = new Map();
           const mg = [];
           const rows = [];
           for (const tr of kids(tbl, 'tr')) {
@@ -535,16 +702,59 @@
               if (at(tc, 'hMerge') === '1' || at(tc, 'vMerge') === '1') { row.push(''); continue; }
               if (!rows.length && path(tc, 'tcPr', 'solidFill')) headFill++;
               const t = textOf(kid(tc, 'txBody'), chain, ctx, { sz: 18 });
-              if (t && t.hasText && !fs) fs = t.fs;
-              row.push(t ? t.html : '');
+              if (t && t.hasText) fsCount.set(t.fs, (fsCount.get(t.fs) || 0) + 1);
+              row.push(t ? t : '');
               if (!lineC) { const lb = path(tc, 'tcPr', 'lnB') || path(tc, 'tcPr', 'lnL'); const c = lb && !kid(lb, 'noFill') && color(kid(lb, 'solidFill'), T); if (c) lineC = c.c; }
             }
             while (row.length < grid.length) row.push('');
             rows.push(row.slice(0, Math.max(1, grid.length)));
           }
           if (!rows.length) return;
+          // Schriftgröße der Tabelle: die häufigste; abweichende Zellen behalten ihre Größe (relativ)
+          fs = [...fsCount.entries()].sort((a, b2) => b2[1] - a[1])[0];
+          fs = fs ? fs[0] : 18;
+          for (const row of rows) for (let i = 0; i < row.length; i++) {
+            const t = row[i];
+            if (!t || typeof t === 'string') { row[i] = t || ''; continue; }
+            row[i] = t.hasText && Math.abs(t.fs - fs) / fs > 0.04 ? scaleHtml(t.html, t.fs / fs) : t.html;
+          }
           const e = { ...base, t: 'table', rows, cw: grid.map((g) => Math.round((g / tot) * 1000) / 1000), fs: Math.round(fs || 18) };
-          if (at(kid(tbl, 'tblPr'), 'firstRow') === '1' || (headFill && headFill >= rows[0].length && rows.length > 1)) e.head = 1;
+          // Zellformate: Tabellenformatvorlage (Kopfzeile, gebänderte Zeilen …) und eigene Zellfarben
+          const tp = kid(tbl, 'tblPr');
+          const flag = (n) => at(tp, n) === '1' || at(tp, n) === 'true';
+          const sid = (((tp && kid(tp, 'tableStyleId')) || {}).textContent || '').trim();
+          const parts = tableStyleParts(sid, T);
+          const cs = {};
+          const trs = kids(tbl, 'tr'), nR = rows.length, nC = rows[0].length;
+          trs.forEach((tr, r) => kids(tr, 'tc').forEach((tc, c) => {
+            if (c >= nC) return;
+            const f = {};
+            const add = (pn) => { const p0 = parts && parts[pn]; if (p0) Object.assign(f, p0); };
+            if (parts) {
+              add('wholeTbl');
+              const hr = flag('firstRow') ? 1 : 0;
+              if (flag('bandRow') && !(flag('firstRow') && r === 0) && !(flag('lastRow') && r === nR - 1)) add((r - hr) % 2 === 0 ? 'band1H' : 'band2H');
+              if (flag('bandCol') && !(flag('firstCol') && c === 0) && !(flag('lastCol') && c === nC - 1)) add((c - (flag('firstCol') ? 1 : 0)) % 2 === 0 ? 'band1V' : 'band2V');
+              if (flag('firstCol') && c === 0) add('firstCol');
+              if (flag('lastCol') && c === nC - 1) add('lastCol');
+              if (flag('lastRow') && r === nR - 1) add('lastRow');
+              if (flag('firstRow') && r === 0) add('firstRow');
+            }
+            const tcp = kid(tc, 'tcPr');
+            const anc = at(tcp, 'anchor') || 't';
+            if (anc !== 't') f.v = anc === 'ctr' ? 'm' : anc === 'b' ? 'b' : 't';
+            if (tcp) { if (kid(tcp, 'noFill')) f.f = 'none'; else { const fc = kid(tcp, 'solidFill') && color(kid(tcp, 'solidFill'), T); if (fc) f.f = fc.c; } }
+            const o = {};
+            if (f.f && f.f !== 'none') o.f = f.f;
+            if (f.c) o.c = f.c;
+            if (f.b) o.b = 1;
+            if (f.v) o.v = f.v;
+            if (Object.keys(o).length) cs[r + ',' + c] = o;
+          }));
+          e.va = 't'; // PowerPoint: Zellen oben ausgerichtet, sofern nicht anders angegeben
+          if (Object.keys(cs).length) e.cs = cs;
+          else if (flag('firstRow') || (headFill && headFill >= rows[0].length && rows.length > 1)) e.head = 1;
+          if (parts && parts._line && !lineC) e.line = parts._line;
           if (lineC) e.line = lineC;
           if (mg.length) e.mg = mg;
           delete e.r;
@@ -567,20 +777,73 @@
           const series = sers.map((s) => {
             const cat = pts(kid(s, 'cat')); if (cat.length > labels.length) labels = cat;
             const nm = pts(kid(s, 'tx'))[0] || (path(s, 'tx', 'v') || {}).textContent || '';
-            return { n: nm, v: pts(kid(s, 'val')).map((v) => num(v)) };
+            // eigene Farbe der Reihe (Füllung bei Balken, Linie bei Linien)
+            const sp = kid(s, 'spPr');
+            const fc = sp && (ct === 'line' ? color(path(sp, 'ln', 'solidFill'), T) || color(kid(sp, 'solidFill'), T) : color(kid(sp, 'solidFill'), T) || color(path(sp, 'ln', 'solidFill'), T));
+            return { n: nm, v: pts(kid(s, 'val')).map((v) => num(v)), c: fc && fc.c, mk: at(path(s, 'marker', 'symbol'), 'val') };
           }).filter((s) => s.v.length);
           if (!series.length) return;
           labels = labels.map((l) => (l == null ? '' : String(l)));
           while (labels.length < series[0].v.length) labels.push(String(labels.length + 1));
           const title = all(path(cd.documentElement, 'chart', 'title'), 't').map((t) => t.textContent).join('') || '';
-          const e = { ...base, t: 'chart', ct, labels: labels.slice(0, 40), series: series.slice(0, 10).map((s) => ({ n: s.n, v: s.v.slice(0, 40) })), fs: Math.max(8, Math.round(14 * K)), legend: path(cd.documentElement, 'chart', 'legend') ? 1 : 0 };
+          const valAx = kid(pa, 'valAx'), catAx = kid(pa, 'catAx') || kid(pa, 'dateAx');
+          const axR = (ax) => ax && all(kid(ax, 'txPr'), 'defRPr')[0];
+          const rp = axR(catAx) || axR(valAx) || all(kid(cd.documentElement, 'txPr'), 'defRPr')[0];
+          const csz = num(at(rp, 'sz')) || num(at(all(kid(cd.documentElement, 'txPr'), 'defRPr')[0], 'sz')) || 1000;
+          const e = { ...base, t: 'chart', ct, labels: labels.slice(0, 60), series: series.slice(0, 10).map((s) => ({ n: s.n, v: s.v.slice(0, 60), ...(s.c ? { c: s.c } : {}) })), fs: Math.max(6, Math.round((csz / 100) * K)), legend: path(cd.documentElement, 'chart', 'legend') ? 1 : 0 };
           if (title && path(cd.documentElement, 'chart', 'autoTitleDeleted') && at(path(cd.documentElement, 'chart', 'autoTitleDeleted'), 'val') === '1') { /* kein Titel */ } else if (title) e.title = title;
+          // Aussehen: Hintergrund, Schriftfarbe, Achsenbereich, Zahlenformat, Werte an den Balken, Punkte
+          const csp = kid(cd.documentElement, 'spPr');
+          const bgc = csp && color(kid(csp, 'solidFill'), T);
+          if (bgc && bgc.a > 0.5) e.bg = bgc.c;
+          const tcol = rp && color(kid(rp, 'solidFill'), T);
+          if (tcol) e.tc = tcol.c;
+          const sc = valAx && kid(valAx, 'scaling');
+          if (sc && kid(sc, 'min')) e.vmin = num(at(kid(sc, 'min'), 'val'));
+          if (sc && kid(sc, 'max')) e.vmax = num(at(kid(sc, 'max'), 'val'));
+          let fmt = at(valAx && kid(valAx, 'numFmt'), 'formatCode') || '';
+          if (!fmt || fmt === 'General' || at(valAx && kid(valAx, 'numFmt'), 'sourceLinked') === '1') fmt = (all(ch, 'formatCode')[0] || {}).textContent || fmt;
+          const dlN = all(ch, 'dLbls').flatMap((d) => [...all(d, 'numFmt')])[0];
+          if (/%/.test(fmt) || /%/.test(at(dlN, 'formatCode') || '')) e.pct = 1;
+          const dec = /0[.,](0+)/.exec(at(dlN, 'formatCode') || fmt);
+          if (dec) e.dp = dec[1].length;
+          if (all(ch, 'showVal').some((x) => at(x, 'val') === '1')) e.dl = 1;
+          if (ct === 'line' && series.every((s) => s.mk === 'none')) e.mk = 0;
+          // waagrechte Balken: PowerPoint zeichnet die erste Kategorie unten, außer die Achse ist umgekehrt
+          if (ct === 'bar' && at(path(catAx, 'scaling', 'orientation'), 'val') !== 'maxMin') { e.labels.reverse(); e.series.forEach((s) => s.v.reverse()); }
           out.push(e);
+          return;
+        }
+        // eingebettete Objekte (OLE, z. B. Excel-Tabellen): das mitgespeicherte Vorschaubild zeigen
+        if (/ole$/.test(uri)) {
+          const ole = all(gd, 'oleObj')[0];
+          let target = null;
+          const pic = ole && all(ole, 'pic')[0];
+          const blip = pic && all(pic, 'blip')[0];
+          if (blip) target = ctx.rels[rid(blip, 'embed')];
+          if (!target && ole && at(ole, 'spid')) {
+            const vr = Object.values(ctx.rels).find((r) => r.type === 'vmlDrawing' && z[r.target]);
+            if (vr) {
+              const vml = window.fflate.strFromU8(z[vr.target]);
+              const i0 = vml.indexOf(`id="${at(ole, 'spid')}"`);
+              const seg = i0 >= 0 ? vml.slice(i0, vml.indexOf('</v:shape>', i0) + 1 || undefined) : '';
+              const m = /<v:imagedata[^>]*o:relid="([^"]+)"/.exec(seg);
+              if (m) target = relsOf(vr.target)[m[1]];
+            }
+          }
+          const res = target && !target.ext ? await upload(target.target) : null;
+          if (res) out.push({ ...base, t: 'img', src: res.src, iw: res.w, ih: res.h });
           return;
         }
         // SmartArt: die mitgespeicherte Zeichnung übernehmen
         if (/diagram$/.test(uri)) {
-          const rel = Object.values(ctx.rels).find((r) => r.type === 'diagramDrawing' && xml(r.target));
+          // die zu genau diesem Diagramm gehörende Zeichnung (Datenteil → dataModelExt relId), sonst die erste
+          let rel = null;
+          const ri = all(gd, 'relIds')[0], dmRel = ri && ctx.rels[at(ri, 'r:dm')];
+          const dmX = dmRel && xml(dmRel.target);
+          const ext = dmX && all(dmX, 'dataModelExt')[0];
+          if (ext && ctx.rels[at(ext, 'relId')] && xml(ctx.rels[at(ext, 'relId')].target)) rel = ctx.rels[at(ext, 'relId')];
+          if (!rel) rel = Object.values(ctx.rels).find((r) => r.type === 'diagramDrawing' && xml(r.target));
           if (!rel) return;
           const dd = xml(rel.target);
           const tree = all(dd, 'spTree')[0];
@@ -595,7 +858,13 @@
       // Form, Textfeld oder Linie
       const geom = spPr && kid(spPr, 'prstGeom');
       const prst = geom ? at(geom, 'prst') : spPr && kid(spPr, 'custGeom') ? 'custom' : 'rect';
-      const cg = prst === 'custom' ? custPath(kid(spPr, 'custGeom'), b.w, b.h) : null;
+      // eingebaute Formen genau nach ihrer Definition (nur ganz einfache bleiben eigene, bearbeitbare Formen)
+      const NATIVE = new Set(['rect', 'ellipse', 'triangle', 'rtTriangle', 'diamond', 'roundRect']);
+      const adj = {};
+      if (geom) for (const g of kids(kid(geom, 'avLst'), 'gd')) adj[at(g, 'name')] = at(g, 'fmla');
+      let cg = null;
+      if (prst === 'custom') cg = custPath(kid(spPr, 'custGeom'), b.w, b.h);
+      else if (PRESETS && PRESETS[prst] && !LINE_PRST.test(prst) && !(NATIVE.has(prst) && !Object.keys(adj).length)) cg = geomPath(PRESETS[prst], b.w, b.h, adj);
       const bfill = spPr && kid(spPr, 'blipFill');
       if (bfill && !(kid(sp, 'txBody') && all(kid(sp, 'txBody'), 't').some((t) => t.textContent.trim()))) {
         const blip = kid(bfill, 'blip');
@@ -609,7 +878,7 @@
       let line = lineOf(spPr, style, T);
       const fontRefEl = style && kid(style, 'fontRef');
       const fontRef = fontRefEl ? color(fontRefEl, T) : null;
-      const isLineShape = ln === 'cxnSp' || LINE_PRST.test(prst);
+      const isLineShape = (ln === 'cxnSp' || LINE_PRST.test(prst)) && !(cg && (cg.d || cg.ds));
       if (isLineShape) {
         if (!line) return;
         // Endpunkte (Spiegelungen beachten), daraus eine waagrechte Linie mit Drehung
@@ -642,6 +911,8 @@
       const chain = styleChain(sp, ctx);
       const tb = kid(sp, 'txBody');
       const t = tb ? textOf(tb, chain, ctx, { sz: 18, fontRef, major: !!ph && masterType(phType(ph)) === 'title' }) : null;
+      // Verlauf: Form als Pfad (auch Rechteck/Ellipse), damit der Verlauf überall gezeichnet werden kann
+      if (fill && fill.grad && !cg && PRESETS) cg = geomPath(PRESETS[prst] || PRESETS.rect, b.w, b.h, adj) || geomPath(PRESETS.rect, b.w, b.h, {});
       const k = cg ? 'path' : PRST_K[prst] || 'rect';
       if (cg && !cg.fill) fill = null;
       const bodies = bodyPrChain(sp, ctx);
@@ -659,7 +930,8 @@
         if (fill) e.fill = fill.c;
       } else {
         e.t = 'shape'; e.k = k;
-        if (cg) { e.d = cg.d; if (line && (line.head || line.tail)) e.ah = line.head && line.tail ? 'b' : line.tail ? 'e' : 's'; }
+        if (fill && fill.grad && e.k === 'path') e.gr = fill.grad;
+        if (cg) { if (cg.d) e.d = cg.d; if (cg.ds) e.ds = cg.ds; if (line && (line.head || line.tail)) e.ah = line.head && line.tail ? 'b' : line.tail ? 'e' : 's'; }
         e.fill = fill ? fill.c : undefined;
         if (!fill) delete e.fill;
         if (b.fx) e.fx = 1; if (b.fy) e.fy = 1;
@@ -726,32 +998,110 @@
     }
 
     // Hintergrund einer Folie, eines Layouts oder des Masters
-    async function bgOfDoc(doc, rels, T) {
+    // Füllung (Verlauf, Bild, Kachel, Einfärbung) als Hintergrundbild zeichnen und hochladen
+    const fillImgCache = {};
+    async function fillImage(f, T, rels, ph, key) {
+      if (fillImgCache[key]) return fillImgCache[key];
+      return (fillImgCache[key] = (async () => {
+        const CW = 1920, CH = Math.round((1920 * H) / W), cv = document.createElement('canvas');
+        cv.width = CW; cv.height = CH;
+        const g2 = cv.getContext('2d');
+        g2.fillStyle = '#FFFFFF'; g2.fillRect(0, 0, CW, CH);
+        if (f.localName === 'gradFill') {
+          const gs = all(f, 'gs').map((g) => ({ p: num(at(g, 'pos')) / 100000, c: color(g, T, ph) })).filter((x) => x.c).sort((x, y) => x.p - y.p);
+          if (!gs.length) return null;
+          let gr;
+          const pth = kid(f, 'path');
+          if (pth) {
+            const fr = kid(pth, 'fillToRect');
+            const l = num(at(fr, 'l')) / 100000, t = num(at(fr, 't')) / 100000, r = num(at(fr, 'r')) / 100000, bb = num(at(fr, 'b')) / 100000;
+            const fx = ((l + (1 - r)) / 2) * CW, fy = ((t + (1 - bb)) / 2) * CH;
+            const R = Math.max(...[[0, 0], [CW, 0], [0, CH], [CW, CH]].map(([x, y]) => Math.hypot(x - fx, y - fy)));
+            gr = g2.createRadialGradient(fx, fy, 0, fx, fy, R);
+          } else {
+            const ang = ((num(at(kid(f, 'lin'), 'ang')) / 60000) * Math.PI) / 180;
+            const dx = Math.cos(ang), dy = Math.sin(ang), L = Math.abs(CW * dx) + Math.abs(CH * dy);
+            gr = g2.createLinearGradient(CW / 2 - (dx * L) / 2, CH / 2 - (dy * L) / 2, CW / 2 + (dx * L) / 2, CH / 2 + (dy * L) / 2);
+          }
+          for (const g of gs) { const h = g.c.c; gr.addColorStop(Math.max(0, Math.min(1, g.p)), `rgba(${parseInt(h.slice(1, 3), 16)},${parseInt(h.slice(3, 5), 16)},${parseInt(h.slice(5, 7), 16)},${g.c.a})`); }
+          g2.fillStyle = gr; g2.fillRect(0, 0, CW, CH);
+        } else if (f.localName === 'blipFill') {
+          const blip = kid(f, 'blip');
+          const r = blip && rels[rid(blip, 'embed')];
+          if (!r || r.ext || !z[r.target]) return null;
+          const ext = r.target.split('.').pop().toLowerCase();
+          const cv0 = conv[r.target];
+          const blob = cv0 && cv0.png ? new Blob([cv0.png], { type: 'image/png' }) : cv0 && cv0.svg ? await svgCrop(cv0.svg) : new Blob([z[r.target]], { type: ext === 'svg' ? 'image/svg+xml' : 'image/' + (ext === 'jpg' ? 'jpeg' : ext) });
+          if (!blob) return null;
+          const url = URL.createObjectURL(blob);
+          try {
+            const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+            const tile = kid(f, 'tile');
+            if (tile) {
+              const k = (CW / W) * K * 0.75; // Bildpunkt (96 dpi) → pt → Leinwand
+              const sx = (num(at(tile, 'sx'), 100000) / 100000) * k, sy = (num(at(tile, 'sy'), 100000) / 100000) * k;
+              const tw = Math.max(1, (im.naturalWidth || 64) * sx), th = Math.max(1, (im.naturalHeight || 64) * sy);
+              const tc = document.createElement('canvas'); tc.width = Math.round(tw); tc.height = Math.round(th);
+              tc.getContext('2d').drawImage(im, 0, 0, tc.width, tc.height);
+              g2.save(); g2.translate((num(at(tile, 'tx')) / EMU) * K * (CW / W), (num(at(tile, 'ty')) / EMU) * K * (CW / W));
+              g2.fillStyle = g2.createPattern(tc, 'repeat'); g2.fillRect(-tw, -th, CW + 2 * tw, CH + 2 * th); g2.restore();
+            } else g2.drawImage(im, 0, 0, CW, CH);
+          } catch (e) { return null; } finally { URL.revokeObjectURL(url); }
+          // Einfärbung (Duoton): helle und dunkle Stellen auf zwei Farben abbilden
+          const duo = kid(blip, 'duotone');
+          if (duo) {
+            const cs = [...duo.children].map((c) => color({ children: [c] }, T, ph)).filter(Boolean);
+            if (cs.length === 2) {
+              const A2 = [1, 3, 5].map((i) => parseInt(cs[0].c.slice(i, i + 2), 16)), B2 = [1, 3, 5].map((i) => parseInt(cs[1].c.slice(i, i + 2), 16));
+              const id = g2.getImageData(0, 0, CW, CH), dd = id.data;
+              for (let i = 0; i < dd.length; i += 4) { const y = (0.3 * dd[i] + 0.59 * dd[i + 1] + 0.11 * dd[i + 2]) / 255; dd[i] = A2[0] + (B2[0] - A2[0]) * y; dd[i + 1] = A2[1] + (B2[1] - A2[1]) * y; dd[i + 2] = A2[2] + (B2[2] - A2[2]) * y; }
+              g2.putImageData(id, 0, 0);
+            }
+          }
+        } else return null;
+        const out = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.86));
+        try { const up = await C.uploadImage(new File([out], 'hintergrund.jpg', { type: 'image/jpeg' })); return up ? { bgImg: up.src } : null; } catch (e) { return null; }
+      })());
+    }
+    // einfacher Verlauf (zwei Farben, waagrecht/senkrecht/schräg) bleibt bearbeitbar, alles andere wird ein Bild
+    const simpleGrad = (gf, T, ph) => {
+      const gs = all(gf, 'gs');
+      if (gs.length !== 2 || kid(gf, 'path')) return null;
+      const a = color(gs[0], T, ph), z2 = color(gs[1], T, ph);
+      if (!a || !z2 || a.a < 1 || z2.a < 1) return null;
+      const ang = num(at(kid(gf, 'lin'), 'ang')) / 60000;
+      const dir = Math.abs(ang - 90) < 3 ? 'v' : ang < 3 || ang > 357 ? 'h' : Math.abs(ang - 45) < 3 ? 'd' : '';
+      if (!dir) return null;
+      const [p, q] = num(at(gs[0], 'pos')) <= num(at(gs[1], 'pos')) ? [a, z2] : [z2, a];
+      return { bg: p.c, bgGrad: { a: p.c, b: q.c, dir } };
+    };
+    async function bgOfDoc(doc, rels, T, key) {
       const bg = doc && path(doc.documentElement, 'cSld', 'bg');
       if (!bg) return null;
+      key = (key || '') + ':' + JSON.stringify(T.map);
       const pr = kid(bg, 'bgPr');
       if (pr) {
-        const sf = kid(pr, 'solidFill'); if (sf) { const c = color(sf, T); return c ? { bg: c.c } : null; }
+        const sf = kid(pr, 'solidFill'); if (sf) { const c = color(sf, T); if (!c || c.a < 0.05) return null; return { bg: c.a < 1 ? mixW(c.c, c.a) : c.c }; } // durchsichtig: Hintergrund darunter bzw. Weiß
         const gf = kid(pr, 'gradFill');
-        if (gf) {
-          const gs = all(gf, 'gs').sort((a, b) => num(at(a, 'pos')) - num(at(b, 'pos')));
-          const a = color(gs[0], T), z2 = color(gs[gs.length - 1], T);
-          const ang = num(at(kid(gf, 'lin'), 'ang')) / 60000;
-          if (a && z2) return { bg: a.c, bgGrad: { a: a.c, b: z2.c, dir: Math.abs(ang - 90) < 20 ? 'v' : ang < 20 || ang > 340 ? 'h' : 'd' } };
-        }
+        if (gf) return simpleGrad(gf, T) || (await fillImage(gf, T, rels, null, key + ':pr'));
         const bf = kid(pr, 'blipFill');
-        if (bf) { const r = rels[rid(kid(bf, 'blip'), 'embed')]; const up = r && !r.ext && (await upload(r.target)); if (up) return { bgImg: up.src }; }
+        if (bf) return await fillImage(bf, T, rels, null, key + ':pr');
+        const pf = kid(pr, 'pattFill');
+        if (pf) { const c = color(kid(pf, 'bgClr'), T); if (c) return { bg: c.c }; }
         if (kid(pr, 'noFill')) return { bg: '#FFFFFF' };
       }
       const ref = kid(bg, 'bgRef');
       if (ref) {
         const idx = num(at(ref, 'idx'));
         const c = color(ref, T);
+        const ph = c && c.c;
         if (idx >= 1001 && T.fmt) {
           const lst = all(T.fmt, 'bgFillStyleLst')[0];
           const f = lst && lst.children[idx - 1001];
-          if (f && f.localName === 'solidFill') { const c2 = color(f, T, c && c.c); if (c2) return { bg: c2.c }; }
-          if (f && f.localName === 'gradFill') { const gs = all(f, 'gs'); const a = color(gs[0], T, c && c.c), z2 = color(gs[gs.length - 1], T, c && c.c); if (a && z2) return { bg: a.c, bgGrad: { a: a.c, b: z2.c, dir: 'v' } }; }
+          const trels = T.themePath ? relsOf(T.themePath) : {};
+          if (f && f.localName === 'solidFill') { const c2 = color(f, T, ph); if (c2) return { bg: c2.c }; }
+          if (f && f.localName === 'gradFill') return simpleGrad(f, T, ph) || (await fillImage(f, T, trels, ph, `${T.themePath}:${idx}:${ph}`));
+          if (f && f.localName === 'blipFill') { const r = await fillImage(f, T, trels, ph, `${T.themePath}:${idx}:${ph}`); if (r) return r; }
         }
         if (c) return { bg: c.c };
       }
@@ -768,12 +1118,13 @@
     const decoCache = {};
     // Gestaltungselemente von Master und Layout (Logos, Linien …), keine Platzhalter
     async function deco(docPath, ctx) {
-      if (decoCache[docPath]) return decoCache[docPath];
+      const ck = docPath + JSON.stringify(ctx.T.map);
+      if (decoCache[ck]) return decoCache[ck];
       const d = xml(docPath);
       const tree = d && all(d, 'spTree')[0];
       const out = [];
       if (tree) for (const c of tree.children) { if (/^(sp|pic|cxnSp|grpSp|graphicFrame)$/.test(c.localName) && !phOf(c)) await convert(c, { ...ctx, rels: relsOf(docPath) }, ID, out); }
-      return (decoCache[docPath] = out);
+      return (decoCache[ck] = out);
     }
     const TR = { fade: 'fade', dissolve: 'fade', push: 'push', wipe: 'wipe', split: 'wipe', zoom: 'zoom', cover: 'cover', pull: 'cover', randomBar: 'wipe', morph: 'fade' };
     const slides = [];
@@ -786,7 +1137,11 @@
       const layR = relOfType(sp, 'slideLayout');
       const layout = layR ? xml(layR.target) : null;
       const mR = layR && relOfType(layR.target, 'slideMaster');
-      const T = mR ? themeOf(mR.target) : T0;
+      const T0m = mR ? themeOf(mR.target) : T0;
+      // Farbzuordnung (hell/dunkel) kann ein Layout oder die Folie selbst umdrehen
+      const map = { ...T0m.map };
+      for (const dd of [layout, d]) { const o = dd && all(dd, 'overrideClrMapping')[0]; if (o) for (const a of o.attributes) map[a.name] = a.value; }
+      const T = { ...T0m, map };
       const ctx = { T, layout, rels, deckFont };
       const els = [];
       const showMaster = at(d.documentElement, 'showMasterSp') !== '0' && (!layout || at(layout.documentElement, 'showMasterSp') !== '0');
@@ -809,7 +1164,7 @@
       const gmap = {};
       for (const e of els) if (e.g) e.g = gmap[e.g] || (gmap[e.g] = X().uid());
       const s = { id: X().uid(), els };
-      const bg = (await bgOfDoc(d, rels, T)) || (layout && (await bgOfDoc(layout, relsOf(layR.target), T)));
+      const bg = (await bgOfDoc(d, rels, T, sp)) || (layout && (await bgOfDoc(layout, relsOf(layR.target), T, layR.target))) || (T.master && (await bgOfDoc(T.master, relsOf(mR.target), T, mR.target)));
       if (bg && !(bg.bg && !bg.bgGrad && !bg.bgImg && bg.bg === theme.bg)) Object.assign(s, bg);
       else if (!bg && mR && firstMaster && mR.target !== firstMaster.target) { const mb = await bgOfDoc(T.master, relsOf(mR.target), T); if (mb) Object.assign(s, mb); }
       if (at(d.documentElement, 'show') === '0') s.hidden = true;
@@ -828,7 +1183,9 @@
     let title = '';
     const core = xml('docProps/core.xml');
     if (core) title = (all(core, 'title')[0] || {}).textContent || '';
-    title = (title || file.name.replace(/\.[^.]+$/, '')).trim().slice(0, 200);
+    // Name: der Dateiname (eindeutiger als der oft gleiche Titel aus der Vorlage), sonst der eingetragene Titel
+    const stem0 = String(file.name || '').replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim();
+    title = (stem0 && stem0 !== 'x' ? stem0 : title || "Presentation").trim().slice(0, 200);
     return { deck: { v: 1, w: W, h: H, title, theme, slides }, warn };
   }
 
@@ -946,7 +1303,8 @@
     // Animationen: Objekte bekommen einen Namen, über den sie danach in der Folien-XML gefunden werden
     const AN = deck.slides.map(() => []);
     let curAn = null;
-    const nm = (e) => (e.an ? { objectName: 'ps-' + e.id } : {});
+    const nm = (e) => (e.an || e.gr ? { objectName: 'ps-' + e.id } : {});
+    const GR = deck.slides.map((s0) => s0.els.filter((e) => e.gr && e.k === 'path' && e.fill));
     const mark = (e, units) => { if (e.an && curAn) curAn.push({ e, units: units || null }); };
     for (let si = 0; si < deck.slides.length; si++) {
       const s = deck.slides[si];
@@ -984,10 +1342,10 @@
               continue;
             }
             const o = { ...boxO, shape: SHAPE_P[e.k] || 'rect', shadow, flipH: !!e.fx, flipV: !!e.fy };
-            if (e.k === 'path' && e.d) {
+            if (e.k === 'path' && (e.d || e.ds)) {
               // freie Form zurück als PowerPoint-Pfad (Punkte in Zoll, bezogen auf das Objekt)
               const sx = e.w / 1000 / IN, sy = e.h / 1000 / IN, pts = [];
-              for (const m of String(e.d).matchAll(/([MLCQZ])([^MLCQZ]*)/g)) {
+              for (const m of (String(e.d || '') + (e.fill ? '' : String(e.ds || ''))).matchAll(/([MLCQZ])([^MLCQZ]*)/g)) {
                 const v = (m[2].match(/-?\d*\.?\d+/g) || []).map(Number), P = (i) => [v[i] * sx, v[i + 1] * sy];
                 if (m[1] === 'M') { const [x, y] = P(0); pts.push({ x, y, moveTo: true }); }
                 else if (m[1] === 'L') { for (let i = 0; i + 1 < v.length; i += 2) { const [x, y] = P(i); pts.push({ x, y }); } }
@@ -1020,10 +1378,12 @@
             const rows = e.rows.map((row, ri) => row.map((cell, ci) => {
               if (MG.hid.has(ri + ',' + ci)) return null;
               const sp = MG.span[ri + ',' + ci];
-              const head = ri === 0 && e.head;
-              const color = head ? 'FFFFFF' : noHash(th.fg);
-              const options = { color, fill: head ? { color: noHash(th.accent) } : undefined, bold: head ? true : undefined };
+              const head = ri === 0 && e.head, cs = (e.cs && e.cs[ri + ',' + ci]) || {};
+              const color = cs.c ? noHash(cs.c) : head ? 'FFFFFF' : noHash(th.fg);
+              const fillC = cs.f || (head ? th.accent : null);
+              const options = { color, fill: fillC ? { color: noHash(fillC) } : undefined, bold: head || cs.b ? true : undefined };
               if (sp) { if (sp[0] > 1) options.rowspan = sp[0]; if (sp[1] > 1) options.colspan = sp[1]; }
+              const vv = cs.v || e.va; if (vv) options.valign = { t: 'top', m: 'middle', b: 'bottom' }[vv];
               return { text: runsOf(cell, { color, fs: e.fs || 18 }), options };
             }).filter(Boolean));
             mark(e); sl.addTable(rows, { ...nm(e), x: inch(e.x), y: inch(e.y), w: inch(e.w), colW: cw.map((f) => inch(f * e.w)), rowH: inch(e.h / Math.max(1, e.rows.length)), fontFace: face, fontSize: e.fs || 18, valign: 'middle', border: { type: 'solid', pt: 1, color: noHash(e.line || '#868E96') }, margin: Math.max(1, Math.round((e.fs || 18) / 3)) });
@@ -1035,6 +1395,16 @@
             const fs = e.fs || 14;
             const o = { ...boxO, chartColors: P.chartColors(th).map(noHash), showLegend: e.legend !== 0 && (e.ct === 'pie' || data.length > 1), legendPos: 'b', legendFontSize: fs, catAxisLabelFontSize: fs, valAxisLabelFontSize: fs, showTitle: !!e.title, title: e.title || '', titleFontSize: Math.round(fs * 1.25) };
             if (T === 'bar') o.barDir = e.ct === 'bar' ? 'bar' : 'col';
+            if (e.ct === 'bar') o.catAxisOrientation = 'maxMin'; // erste Kategorie oben, wie in der Vorschau
+            if (e.ct !== 'pie') o.chartColors = o.chartColors.map((c, i) => (ser[i] && ser[i].c ? noHash(ser[i].c) : c));
+            if (e.vmin != null) o.valAxisMinVal = e.vmin;
+            if (e.vmax != null) o.valAxisMaxVal = e.vmax;
+            const nf = e.pct ? '0' + (e.dp ? '.' + '0'.repeat(e.dp) : '') + '%' : e.dp != null ? '#,##0' + (e.dp ? '.' + '0'.repeat(e.dp) : '') : null;
+            if (e.pct) o.valAxisLabelFormatCode = '0%';
+            if (e.dl) { o.showValue = true; o.dataLabelFontSize = Math.round(fs * 0.85); if (nf) o.dataLabelFormatCode = nf; if (e.ct === 'bar' || e.ct === 'col') o.dataLabelPosition = 'outEnd'; }
+            if (e.mk === 0) o.lineDataSymbol = 'none';
+            if (e.tc) { o.catAxisLabelColor = noHash(e.tc); o.valAxisLabelColor = noHash(e.tc); o.legendColor = noHash(e.tc); }
+            if (e.bg) o.fill = noHash(e.bg);
             delete o.rotate;
             mark(e); sl.addChart(T, data, { ...o, ...nm(e) });
           }
@@ -1051,14 +1421,27 @@
     }
     let bin = new Uint8Array(await pres.write({ outputType: 'arraybuffer' }));
     // Übergänge und Animationen nachtragen (der PowerPoint-Baustein kann beides nicht selbst)
-    if (deck.slides.some((s) => s.tr) || AN.some((a) => a.length)) {
+    if (deck.slides.some((s) => s.tr) || AN.some((a) => a.length) || GR.some((a) => a.length)) {
       const z = window.fflate.unzipSync(bin);
       deck.slides.forEach((s, i) => {
         const pth = `ppt/slides/slide${i + 1}.xml`;
         if (!z[pth]) return;
-        const x = window.fflate.strFromU8(z[pth]);
+        let x = window.fflate.strFromU8(z[pth]);
+        // Farbverläufe: die einfarbige Füllung der Form durch den Verlauf ersetzen
+        for (const e of GR[i]) {
+          const at0 = x.indexOf(`name="ps-${e.id}"`);
+          if (at0 < 0) continue;
+          const sp0 = x.indexOf('<p:spPr', at0), sp1 = x.indexOf('</p:spPr>', sp0);
+          if (sp0 < 0 || sp1 < 0) continue;
+          const seg = x.slice(sp0, sp1);
+          const f0 = seg.indexOf('<a:solidFill>'), f1 = seg.indexOf('</a:solidFill>', f0);
+          if (f0 < 0 || f1 < 0) continue;
+          const gs = e.gr.s.map(([p0, c0, a0]) => `<a:gs pos="${Math.round(p0 * 100000)}"><a:srgbClr val="${String(c0).replace('#', '').toUpperCase()}">${a0 != null && a0 < 1 ? `<a:alpha val="${Math.round(a0 * 100000)}"/>` : ''}</a:srgbClr></a:gs>`).join('');
+          const gx = `<a:gradFill rotWithShape="1"><a:gsLst>${gs}</a:gsLst>${e.gr.rad ? '<a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path>' : `<a:lin ang="${Math.round((e.gr.ang || 0) * 60000)}" scaled="0"/>`}</a:gradFill>`;
+          x = x.slice(0, sp0) + seg.slice(0, f0) + gx + seg.slice(f1 + '</a:solidFill>'.length) + x.slice(sp1);
+        }
         const add = transXml(s.tr) + timingXml(x, s, AN[i]);
-        if (add) z[pth] = window.fflate.strToU8(x.includes('</p:clrMapOvr>') ? x.replace('</p:clrMapOvr>', '</p:clrMapOvr>' + add) : x.replace('</p:sld>', add + '</p:sld>'));
+        z[pth] = window.fflate.strToU8(!add ? x : x.includes('</p:clrMapOvr>') ? x.replace('</p:clrMapOvr>', '</p:clrMapOvr>' + add) : x.replace('</p:sld>', add + '</p:sld>'));
       });
       bin = window.fflate.zipSync(z, { level: 6 });
     }

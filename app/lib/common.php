@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.79.0';
+const PDFSTIFT_VERSION = '1.80.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -286,8 +286,16 @@ function stroke_obj($e): ?array
         $o['labels'] = array_map(static fn ($l) => mb_substr(is_scalar($l) ? (string) $l : '', 0, 200), array_slice(array_values((array) ($e['labels'] ?? [])), 0, 60));
         $o['series'] = [];
         foreach (array_slice((array) ($e['series'] ?? []), 0, 12) as $sr) {
-            $o['series'][] = ['n' => mb_substr((string) ($sr['n'] ?? ''), 0, 200), 'v' => array_map(static fn ($v) => is_numeric($v) ? round((float) $v, 6) : 0, array_slice(array_values((array) ($sr['v'] ?? [])), 0, 60))];
+            $so = ['n' => mb_substr((string) ($sr['n'] ?? ''), 0, 200), 'v' => array_map(static fn ($v) => is_numeric($v) ? round((float) $v, 6) : 0, array_slice(array_values((array) ($sr['v'] ?? [])), 0, 60))];
+            if (preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($sr['c'] ?? ''))) $so['c'] = (string) $sr['c'];
+            $o['series'][] = $so;
         }
+        // Darstellung aus PowerPoint: Hintergrund, Schriftfarbe, Achsenbereich, Prozent, Werte anzeigen, Punkte
+        foreach (['bg', 'tc'] as $k) if (preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($e[$k] ?? ''))) $o[$k] = (string) $e[$k];
+        foreach (['vmin', 'vmax'] as $k) if (isset($e[$k]) && is_numeric($e[$k])) $o[$k] = round((float) $e[$k], 6);
+        foreach (['pct', 'dl'] as $k) if (!empty($e[$k])) $o[$k] = 1;
+        if (isset($e['mk']) && (int) $e['mk'] === 0) $o['mk'] = 0;
+        if (isset($e['dp']) && is_numeric($e['dp'])) $o['dp'] = max(0, min(4, (int) $e['dp']));
         $o['title'] = mb_substr((string) ($e['title'] ?? ''), 0, 300);
         $o['legend'] = empty($e['legend']) ? 0 : 1;
     }
@@ -295,6 +303,9 @@ function stroke_obj($e): ?array
         $o['k'] = preg_match('/^[A-Za-z0-9]{2,12}$/', (string) ($e['k'] ?? '')) ? (string) $e['k'] : 'rect';
         if (isset($e['d']) && is_string($e['d']) && strlen($e['d']) < 60000 && preg_match('/^[MLCQZ0-9 .,eE-]*$/', $e['d'])) {
             $o['d'] = $e['d'];
+        }
+        if (isset($e['ds']) && is_string($e['ds']) && strlen($e['ds']) < 60000 && preg_match('/^[MLCQZ0-9 .,eE-]*$/', $e['ds'])) {
+            $o['ds'] = $e['ds'];
         }
         if (in_array($e['ah'] ?? '', ['s', 'e', 'b'], true)) {
             $o['ah'] = $e['ah'];
@@ -323,6 +334,29 @@ function stroke_obj($e): ?array
         $cw = array_values(array_filter((array) ($e['cw'] ?? []), 'is_numeric'));
         if (count($cw) === $cols) {
             $o['cw'] = array_map(static fn ($v) => max(0.01, min(1, round((float) $v, 4))), $cw);
+        }
+        $cs = [];
+        foreach (array_slice((array) ($e['cs'] ?? []), 0, 2000, true) as $k => $v) {
+            if (is_string($k) && preg_match('/^\d{1,3},\d{1,3}$/', $k) && is_array($v)) {
+                $c = [];
+                foreach (['f', 'c'] as $kk) {
+                    if (isset($v[$kk]) && is_string($v[$kk]) && preg_match('/^#[0-9A-Fa-f]{6}$/', $v[$kk])) {
+                        $c[$kk] = $v[$kk];
+                    }
+                }
+                if (!empty($v['b'])) {
+                    $c['b'] = 1;
+                }
+                if (in_array($v['v'] ?? '', ['t', 'm', 'b'], true)) {
+                    $c['v'] = $v['v'];
+                }
+                if ($c) {
+                    $cs[$k] = $c;
+                }
+            }
+        }
+        if ($cs) {
+            $o['cs'] = $cs;
         }
         $mg = [];
         foreach (array_slice((array) ($e['mg'] ?? []), 0, 200) as $m) {

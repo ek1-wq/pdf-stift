@@ -1,0 +1,4 @@
+pptx-presets.json enthält die Formdefinitionen der in PowerPoint eingebauten Formen
+(presetShapeDefinitions.xml aus ECMA-376 „Office Open XML File Formats“, © Ecma International),
+in der Fassung, die das Projekt Apache POI unter der Apache License 2.0 weitergibt
+(https://www.apache.org/licenses/LICENSE-2.0). Umgewandelt mit tools/pptx/presets.py.
