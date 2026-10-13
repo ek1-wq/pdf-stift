@@ -373,6 +373,9 @@ header('Referrer-Policy: same-origin');
           <button type="button" data-src="nb" role="tab">
             <svg viewBox="0 0 24 24"><path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6z"/><path d="M6 3v18M3.5 7H6M3.5 12H6M3.5 17H6"/></svg>Notebook
           </button>
+          <button type="button" data-src="dk" role="tab">
+            <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="12" rx="1.5"/><path d="M12 16.5V20M8.5 20h7"/><path d="M8 11.5l2.5-2.5 2 2 3-3.5"/></svg>Presentations
+          </button>
           <button type="button" data-src="nc" role="tab" class="srv-only">
             <svg viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5z"/></svg>Nextcloud
           </button>
@@ -454,6 +457,7 @@ header('Referrer-Policy: same-origin');
     <div id="thList" class="th-list"></div>
     <div id="thResize" class="th-resize" title="Resize"></div>
   </aside>
+  <main id="deckView" class="deck-view" hidden aria-label="Presentation"></main>
   <main id="board" class="board" hidden aria-label="Note page (infinite canvas)">
     <canvas id="bdCanvas"></canvas><canvas id="bdLive"></canvas>
   </main>

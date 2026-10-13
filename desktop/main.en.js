@@ -163,6 +163,8 @@ function menu() {
       { label: "Open PDF …", accelerator: 'Ctrl+O', click: pickPdf },
       { label: LOCAL ? "Add to Library …" : "Upload to Library …", click: cmd('upload') },
       { label: "Library", accelerator: 'Ctrl+Shift+B', click: cmd('library') },
+      { label: "New presentation …", click: cmd('newdeck') },
+      { label: "Presentations", click: cmd('decks') },
       { type: 'separator' },
       { label: "Save (with notes) …", accelerator: 'Ctrl+S', click: cmd('save') },
       { label: "Download original …", click: cmd('original') },

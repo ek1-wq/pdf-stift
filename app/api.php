@@ -4,6 +4,7 @@ require __DIR__ . '/lib/common.php';
 require __DIR__ . '/lib/nextcloud.php';
 require __DIR__ . '/lib/onedrive.php';
 require __DIR__ . '/lib/convert.php';
+require __DIR__ . '/lib/decks.php';
 if (is_file(__DIR__ . '/lib/live.php')) { require __DIR__ . '/lib/live.php'; }
 require __DIR__ . '/lib/shrink.php';
 require __DIR__ . '/lib/search.php';
@@ -792,6 +793,39 @@ switch ($a) {
             fail('Nicht gefunden.', 404);
         }
         json_out(board_read($file) + ['mtime' => filemtime($file)]);
+
+    // ---- Präsentationen
+    case 'decks':
+        json_out(['decks' => deck_list()]);
+
+    case 'deck':
+        $p = (string) ($_GET['path'] ?? (body()['path'] ?? ''));
+        if ($method === 'POST') {
+            $b = body();
+            if (!is_array($b['deck'] ?? null)) {
+                fail('Keine Präsentation empfangen.');
+            }
+            json_out(deck_save($p, $b['deck'], (int) ($b['rev'] ?? 0)));
+        }
+        json_out(['deck' => deck_read($p)]);
+
+    case 'decknew':
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        $b = body();
+        $src = (string) ($b['copy'] ?? '');
+        json_out(deck_new((string) ($b['title'] ?? ''), $src !== '' ? deck_read($src) : null));
+
+    case 'deckdel':
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        $f = deck_file((string) (body()['path'] ?? ''));
+        if (is_file($f)) {
+            @rename($f, $f . '.geloescht-' . date('Ymd-His'));
+        }
+        json_out(['ok' => true]);
 
     case 'imgput':
         if ($method !== 'POST') {

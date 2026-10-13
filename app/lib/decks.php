@@ -1,0 +1,110 @@
+<?php
+declare(strict_types=1);
+
+/*
+ * Präsentationen: eigene Folien, als JSON gespeichert (storage/decks/<id>.json).
+ * Folien und die Stiftnotizen darauf sind getrennt – die Folien bleiben immer bearbeitbar.
+ */
+
+function deck_dir(): string { return storage('decks'); }
+
+function deck_id(string $path): string
+{
+    if (!preg_match('#^@dk/([a-z0-9]{12})$#', $path, $m)) {
+        fail('Unbekannte Präsentation.', 404);
+    }
+    return $m[1];
+}
+
+function deck_file(string $path): string { return deck_dir() . '/' . deck_id($path) . '.json'; }
+
+function deck_read(string $path): array
+{
+    $f = deck_file($path);
+    if (!is_file($f)) {
+        fail('Diese Präsentation gibt es nicht mehr.', 404);
+    }
+    $d = json_decode((string) file_get_contents($f), true);
+    if (!is_array($d)) {
+        fail('Die Präsentation ist beschädigt.', 500);
+    }
+    return $d;
+}
+
+function deck_list(): array
+{
+    $out = [];
+    foreach (glob(deck_dir() . '/*.json') ?: [] as $f) {
+        $d = json_decode((string) file_get_contents($f), true);
+        if (!is_array($d)) {
+            continue;
+        }
+        $out[] = [
+            'path' => '@dk/' . basename($f, '.json'),
+            'title' => (string) ($d['title'] ?? 'Präsentation'),
+            'slides' => count((array) ($d['slides'] ?? [])),
+            'mtime' => filemtime($f),
+            'rev' => (int) ($d['rev'] ?? 0),
+            'first' => $d['slides'][0] ?? null,
+            'theme' => $d['theme'] ?? null,
+        ];
+    }
+    usort($out, fn ($a, $b) => $b['mtime'] <=> $a['mtime']);
+    return $out;
+}
+
+function deck_new(string $title, ?array $copyOf = null): array
+{
+    $title = trim(mb_substr($title, 0, 200)) ?: 'Neue Präsentation';
+    do {
+        $id = substr(bin2hex(random_bytes(8)), 0, 12);
+    } while (is_file(deck_dir() . '/' . $id . '.json'));
+    $d = $copyOf ?? ['v' => 1, 'w' => 960, 'h' => 540, 'theme' => ['bg' => '#FFFFFF', 'fg' => '#1A1A1A', 'accent' => '#1E2F6E', 'font' => 'sans'], 'slides' => []];
+    $d['title'] = $title;
+    $d['rev'] = 1;
+    file_put_contents(deck_dir() . '/' . $id . '.json', json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    return ['path' => '@dk/' . $id, 'title' => $title, 'rev' => 1];
+}
+
+/** Speichern mit Versionsprüfung: wurde inzwischen woanders gespeichert, gibt es 409 und den aktuellen Stand */
+function deck_save(string $path, array $deck, int $baseRev): array
+{
+    $f = deck_file($path);
+    $fp = fopen($f, 'c+');
+    if (!$fp || !flock($fp, LOCK_EX)) {
+        fail('Speichern nicht möglich.', 500);
+    }
+    $cur = json_decode((string) stream_get_contents($fp), true);
+    $rev = is_array($cur) ? (int) ($cur['rev'] ?? 0) : 0;
+    if ($baseRev && $rev && $baseRev !== $rev) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        json_out(['conflict' => true, 'deck' => $cur], 409);
+    }
+    $j = json_encode($deck, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (strlen((string) $j) > 20 * 1024 * 1024) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        fail('Die Präsentation ist zu groß.', 413);
+    }
+    // eine Sicherung des vorigen Stands (die letzten 20)
+    if (is_array($cur)) {
+        $bd = storage('decks/history/' . deck_id($path));
+        file_put_contents($bd . '/' . date('Ymd-His') . '.json', json_encode($cur, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $all = glob($bd . '/*.json') ?: [];
+        sort($all);
+        foreach (array_slice($all, 0, max(0, count($all) - 20)) as $old) {
+            @unlink($old);
+        }
+    }
+    $deck['rev'] = $rev + 1;
+    $deck['title'] = trim(mb_substr((string) ($deck['title'] ?? ($cur['title'] ?? 'Präsentation')), 0, 200)) ?: 'Präsentation';
+    ftruncate($fp, 0);
+    rewind($fp);
+    fwrite($fp, (string) json_encode($deck, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    clearstatcache();
+    return ['ok' => true, 'rev' => $deck['rev'], 'mtime' => filemtime($f)];
+}

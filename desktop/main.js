@@ -156,6 +156,8 @@ function menu() {
       { label: 'PDF öffnen …', accelerator: 'Ctrl+O', click: pickPdf },
       { label: LOCAL ? 'Zur Bibliothek hinzufügen …' : 'In die Bibliothek hochladen …', click: cmd('upload') },
       { label: 'Bibliothek', accelerator: 'Ctrl+Shift+B', click: cmd('library') },
+      { label: 'Neue Präsentation …', click: cmd('newdeck') },
+      { label: 'Präsentationen', click: cmd('decks') },
       { type: 'separator' },
       { label: 'Speichern (mit Notizen) …', accelerator: 'Ctrl+S', click: cmd('save') },
       { label: 'Original herunterladen …', click: cmd('original') },

@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.67.5';
+  const VERSION = '1.68.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -268,7 +268,7 @@
     favs: Array.isArray(ls('favs')) ? ls('favs') : DEFAULT_FAVS.map((f) => ({ ...f })),
     showTools: ls('showTools') ?? true,
     libView: ls('libView') === 'list' ? 'list' : 'grid',
-    src: ['nc', 'od', 'nb'].includes(ls('src')) ? ls('src') : 'local',
+    src: ['nc', 'od', 'nb', 'dk'].includes(ls('src')) ? ls('src') : 'local',
     nbPath: ls('nbPath') || '',
     boards: null,
     ncPath: ls('ncPath') || '',
@@ -949,6 +949,7 @@
     setSrcUi();
     if (CLOUD[S.src] && S.library && !S.libraryOffline && !CLOUD[S.src].ok()) { S.src = 'local'; ls('src', 'local'); }
     if (S.src === 'nb') { renderNotebook(); renderTextHits(); return; }
+    if (S.src === 'dk') { renderDecks(); return; }
     if (CLOUD[S.src]) { renderCloud(S.src); renderTextHits(); return; }
     const lib = S.library || { folders: [], files: [] };
     if (S.folder && !lib.folders.includes(S.folder)) S.folder = '';
@@ -1116,8 +1117,8 @@
       b.classList.toggle('active', on);
       b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
-    $('#libTitle').textContent = S.src === 'nb' ? "Notebook" : CLOUD[S.src] ? CLOUD[S.src].name : "My PDFs";
-    $('#btnUpload').hidden = S.src === 'nb';
+    $('#libTitle').textContent = S.src === 'dk' ? "Presentations" : S.src === 'nb' ? "Notebook" : CLOUD[S.src] ? CLOUD[S.src].name : "My PDFs";
+    $('#btnUpload').hidden = S.src === 'nb' || S.src === 'dk';
     $('#search').placeholder = CLOUD[S.src] ? "Search in this folder …" : "Search …";
     $('#btnUpload .up-lbl').textContent = S.src === 'od' ? "Upload" : LOCAL ? "Add PDF" : "Upload PDF";
   }
@@ -1131,6 +1132,7 @@
       renderLibrary();
       if (CLOUD[want]) cloudLoad(want, cloudPath(want));
       if (want === 'nb') loadBoards();
+      if (want === 'dk') loadDecks();
       $('#library').scrollTop = 0;
     };
   });
@@ -1699,7 +1701,7 @@
       if (window.pdfstiftWin && window.pdfstiftWin.dragPrep && !isBoard(t.path)) { div.draggable = true; div.title = "Drag out: into Explorer, onto the desktop or into an email (with notes)"; }
       div.setAttribute('role', 'tab');
       div.setAttribute('aria-selected', t.path === S.active ? 'true' : 'false');
-      div.innerHTML = `<button type="button" class="name" title="${esc(isBoard(t.path) ? t.path.slice(4) : t.path)}">${isBoard(t.path) ? NB_TAB : ''}${esc(docTitle(t.path))}</button>
+      div.innerHTML = `<button type="button" class="name" title="${esc(isBoard(t.path) ? t.path.slice(4) : isDeck(t.path) ? docTitle(t.path) : t.path)}">${isBoard(t.path) ? NB_TAB : isDeck(t.path) ? DK_TAB : ''}${esc(docTitle(t.path))}</button>
         <button type="button" class="close" aria-label="${esc(docTitle(t.path))} – close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
       div.querySelector('.name').onclick = () => tabClick(t.path);
       div.querySelector('.close').onclick = () => closeTab(t.path);
@@ -1754,6 +1756,8 @@
     document.title = 'PDF-Stift';
     setTimeout(() => thPlace(), 0);
     if (V.board) leaveBoard();
+    if (V.deck) leaveDeck();
+    if (S.src === 'dk') loadDecks();
     setFocusMode(false);
     $('#fsBtn').hidden = true;
     if (CLOUD[S.src]) cloudLoad(S.src, cloudPath(S.src));
@@ -1879,7 +1883,9 @@
     if (path !== V.path) V.viewRot = 0;
     if (typeof closeNote === 'function') closeNote(true);
     if (isBoard(path)) return showBoard(path);
+    if (isDeck(path)) return showDeck(path);
     if (V.board) leaveBoard();
+    if (V.deck) leaveDeck();
     if (editor) commitEditor(false);
     clearSel();
     if (V.path && V.path !== path) {
@@ -4338,6 +4344,7 @@
   lowLat(bdLive);
   const B = { cam: { x: 0, y: 0, s: 1 }, meta: {}, raf: 0, cur: null, touches: new Map(), pinch: null, pan: null, sel: null, ed: null, dpr: 1, w: 0, h: 0, rect: null, hide: null, camT: 0 };
   const isBoard = (p) => typeof p === 'string' && p.startsWith('@nb/');
+  const isDeck = (p) => typeof p === 'string' && p.startsWith('@dk/');
   const BOARD_PEN = [1.4, 2.4, 4.2], BOARD_HL = [14, 22, 34];
   const ZMIN = 1e-4, ZMAX = 1e5;
   const so = (s) => (s.o ? [s.o[0], s.o[1], s.z || 1] : [0, 0, 1]);
@@ -4557,13 +4564,15 @@
     for (const nb of S.boards || []) for (const sec of nb.sections) for (const p of sec.pages) if (p.path === path) return p;
     return null;
   }
-  const docTitle = (path) => (isBoard(path) ? ((boardInfo(path) || {}).title || path.split('/').pop()) : basename(path).replace(/\.pdf$/i, ''));
+  const docTitle = (path) => isDeck(path) ? (((S.decks || []).find((d) => d.path === path) || {}).title || "Presentation") : (isBoard(path) ? ((boardInfo(path) || {}).title || path.split('/').pop()) : basename(path).replace(/\.pdf$/i, ''));
+  const DK_TAB = '<svg class="tab-nb" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="12" rx="1.5"/><path d="M12 16.5V20"/></svg>';
   async function showBoard(path) {
     setTimeout(() => thPlace(), 50);
     if (editor) commitEditor(false);
     clearSel();
     if (V.path && V.path !== path && !V.board) { autoBurn(V.path); saveViewState(); }
     if (V.board) leaveBoard();
+    if (V.deck) leaveDeck();
     const token = ++V.token;
     unloadViewer();
     V.path = path;
@@ -4618,6 +4627,120 @@
     B.cam.s = clamp(Math.min(1.2, (B.w * 0.8) / Math.max(1, w[2] - w[0]), (B.h * 0.8) / Math.max(1, w[3] - w[1])), ZMIN, ZMAX);
     B.cam.x = (w[0] + w[2]) / 2 - B.w / 2 / B.cam.s; B.cam.y = (w[1] + w[3]) / 2 - B.h / 2 / B.cam.s;
     boardRender();
+  }
+  // ---- Präsentationen (eigener Baustein deck.js, wird erst bei Bedarf geladen)
+  function deckCore() {
+    window.PDFSTIFT_CORE = window.PDFSTIFT_CORE || {
+      API, VERSION, LANG, esc, ls, apiJson, toast, confirmDlg, askText, prepareImage, uploadImage, downloadBlob,
+      ensureFontkit: () => (window.fontkit ? Promise.resolve() : loadScript('vendor/fontkit.min.js?v=' + VERSION)),
+      uploadPdf: async (blob, name) => {
+        const fd = new FormData();
+        fd.append('folder', S.folder || '');
+        fd.append('files[]', new File([blob], name, { type: 'application/pdf' }));
+        const r = await fetch(API + '?a=upload', { method: 'POST', credentials: 'same-origin', headers: { 'X-PDFStift': '1' }, body: fd });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || "Error " + r.status);
+        loadLibrary();
+        return j;
+      },
+      deckTitle: (path, title) => {
+        S.decks = S.decks || [];
+        const d = S.decks.find((x) => x.path === path);
+        if (d) d.title = title; else S.decks.push({ path, title, slides: 0, mtime: Date.now() / 1000 });
+        if (V.path === path) document.title = (title || "Presentation") + ' – PDF-Stift';
+        renderTabs();
+      },
+    };
+    return loadScript('app/' + (LANG === 'en' ? 'deck.en.js' : 'deck.js') + '?v=' + VERSION);
+  }
+  async function showDeck(path) {
+    if (editor) commitEditor(false);
+    clearSel();
+    if (V.path && V.path !== path && !V.board && !V.deck) { const left = V.path; setTimeout(() => { if (V.path !== left) autoBurn(left); }, 4000); saveViewState(); snapSave(left); }
+    if (V.board) leaveBoard();
+    if (V.deck) leaveDeck();
+    ++V.token;
+    unloadViewer();
+    V.path = path;
+    V.deck = true;
+    closeSearch();
+    for (const q of ['#library', '#viewer', '#pageBadge', '#presentBtn']) $(q).hidden = true;
+    boardEl.hidden = true;
+    const el = $('#deckView');
+    el.hidden = false;
+    document.body.classList.add('on-deck');
+    document.title = docTitle(path) + ' – PDF-Stift';
+    renderToolbar();
+    try {
+      await deckCore();
+      if (V.path !== path) return;
+      await window.PDFSTIFT_DECK.open(path, el);
+    } catch (e) {
+      if (V.path === path) el.innerHTML = `<p class="empty">The presentation could not be opened: ${esc(e.message)}</p>`;
+    }
+  }
+  function leaveDeck() {
+    if (!V.deck) return;
+    try { if (window.PDFSTIFT_DECK) window.PDFSTIFT_DECK.close(); } catch (e) { /* */ }
+    V.deck = false;
+    const el = $('#deckView');
+    el.hidden = true;
+    el.innerHTML = '';
+    document.body.classList.remove('on-deck');
+  }
+  async function loadDecks() {
+    try { S.decks = (await apiJson('decks')).decks || []; } catch (e) { S.decks = S.decks || []; }
+    if (S.src === 'dk' && !V.path) renderLibrary();
+    renderTabs();
+  }
+  async function newDeck() {
+    const title = await askText("New presentation", "Name of the presentation", '', "Create");
+    if (title === null || title === undefined) return;
+    try {
+      const r = await apiJson('decknew', { method: 'POST', body: { title: title || "New presentation" } });
+      S.decks = [{ path: r.path, title: r.title, slides: 1, mtime: Date.now() / 1000 }, ...(S.decks || [])];
+      openDoc(r.path);
+    } catch (e) { toast(e.message); }
+  }
+  function renderDecks() {
+    $('#recentBox').hidden = true; $('#folderBar').hidden = true; $('#tagBar').hidden = true;
+    $('#folders').innerHTML = '';
+    const wrap = $('#files');
+    wrap.innerHTML = '';
+    wrap.classList.toggle('list', S.libView === 'list');
+    const empty = $('#libEmpty');
+    const q = S.search.trim().toLowerCase();
+    const card = (cls, thumb, title, sub, onOpen, menu) => {
+      const c = document.createElement('div');
+      c.className = 'card ' + cls;
+      c.innerHTML = `<button type="button" class="thumb">${thumb}</button><div class="meta"><div class="txt"><div class="n">${esc(title)}</div><div class="d">${sub}</div></div>${menu ? `<div class="menu-wrap"><button type="button" class="icon-btn more" aria-label="More options for ${esc(title)}">${MORE_SVG}</button></div>` : ''}</div>`;
+      c.querySelector('.thumb').onclick = onOpen;
+      c.querySelector('.txt').onclick = onOpen;
+      if (menu) c.querySelector('.more').onclick = (ev) => { ev.stopPropagation(); nbMenu(c.querySelector('.menu-wrap'), menu); };
+      wrap.appendChild(c);
+      return c;
+    };
+    if (!q) card('dk-new', '+', "New presentation", "Build slides, present, save as PDF", newDeck, null);
+    const list = (S.decks || []).filter((d) => !q || d.title.toLowerCase().includes(q));
+    for (const d of list) {
+      const c = card('dk-card', '<span class="ph nb-ph">' + DK_TAB + '</span>', d.title, `${d.slides} ${d.slides === 1 ? 'Folie' : "slides"} · ${fmtDate(d.mtime)}`, () => openDoc(d.path), [
+        ['rn', "Rename …", async () => {
+          const t = await askText("Rename", '', d.title, "Rename");
+          if (!t) return;
+          try { const r = await apiJson('deck', { params: { path: d.path } }); r.deck.title = t; await apiJson('deck', { method: 'POST', body: { path: d.path, deck: r.deck, rev: r.deck.rev } }); d.title = t; renderDecks(); renderTabs(); } catch (e) { toast(e.message); }
+        }],
+        ['cp', "Duplicate", async () => { try { await apiJson('decknew', { method: 'POST', body: { title: d.title + " (copy)", copy: d.path } }); loadDecks(); } catch (e) { toast(e.message); } }],
+        ['del', "Delete …", async () => {
+          if (!(await confirmDlg("Delete presentation", `“${d.title}”?`))) return;
+          try { await apiJson('deckdel', { method: 'POST', body: { path: d.path } }); if (S.tabs.some((t) => t.path === d.path)) closeTab(d.path); loadDecks(); } catch (e) { toast(e.message); }
+        }],
+      ]);
+      if (d.first) {
+        deckCore().then(() => { const th = c.querySelector('.thumb'); th.innerHTML = ''; th.appendChild(window.PDFSTIFT_DECK.preview(d.first, d.theme, th.clientWidth || 200)); }).catch(() => {});
+      }
+    }
+    empty.hidden = !!(list.length || !q);
+    empty.textContent = q ? "No presentation matches." : '';
   }
   function leaveBoard() {
     if (!V.board) return;
@@ -11158,6 +11281,8 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
       case 'study': studySheet(); break;
       case 'carry': carryDialog(); break;
       case 'tonb': if (needDoc()) toNotebook(); break;
+      case 'newdeck': newDeck(); break;
+      case 'decks': S.src = 'dk'; ls('src', 'dk'); showLibrary(); renderLibrary(); break;
       case 'nbpdf': case 'nbtpl': case 'nbsearch': case 'nbhist':
         if (!V.board) { toast("Please open a notebook page first."); break; }
         if (c === 'nbpdf') nbInsertPdf(); else if (c === 'nbtpl') boardInsertTpl(); else if (c === 'nbhist') boardHistory(); else openSearch();
@@ -12862,6 +12987,7 @@ github.com/ek1-wq/pdf-stift`, "Quick guide")) openHelp();
     upRestore();
     (await DB.keys('pdfs')).forEach((k) => S.offline.add(k));
     renderToolbar();
+    loadDecks();
     renderTabs();
     S.boards = (await DB.get('kv', 'boards')) || null;
     ls('signedIn', true);
