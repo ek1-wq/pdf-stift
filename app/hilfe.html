@@ -1,5 +1,22 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>PDF-Stift – Quick guide</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script>location.replace('hilfe/kurzanleitung-' + (/(^|[?&])ed=local(&|$)/.test(location.search.slice(1)) ? 'local' : 'server') + '.en.pdf');</script>
-</head><body><p><a href="hilfe/kurzanleitung-server.en.pdf">PDF-Stift – Quick guide (PDF)</a></p></body></html>
+<script>
+// Die Kurzanleitung ist eine PDF und öffnet sich im Hauptfenster von PDF-Stift wie jede andere Datei.
+// Ältere Windows-Apps öffnen noch dieses Hilfefenster: dann das Hauptfenster bitten, sie zu laden, und dieses Fenster schließen.
+// Ohne laufendes PDF-Stift (z. B. Link aus der Tablet-App) direkt zur PDF.
+(function () {
+  var ed = /(^|[?&])ed=local(&|$)/.test(location.search.slice(1)) ? 'local' : 'server';
+  var lang = 'en';
+  try { var s = JSON.parse(localStorage.getItem('pdfstift.settings') || '{}'); if (s.helpLang === 'de') lang = 'de'; } catch (e) {}
+  var pdf = 'hilfe/kurzanleitung-' + ed + '.' + lang + '.pdf';
+  var done = false;
+  try {
+    var bc = new BroadcastChannel('pdfstift-help');
+    bc.onmessage = function (ev) { if (ev.data === 'ok') { done = true; window.close(); setTimeout(function () { document.body.innerHTML = '<p style="font:16px sans-serif;margin:2em">The quick guide is open in the main PDF-Stift window. / Die Kurzanleitung ist im Hauptfenster von PDF-Stift geöffnet.</p>'; }, 300); } };
+    bc.postMessage('open');
+  } catch (e) {}
+  setTimeout(function () { if (!done) location.replace(pdf); }, 700);
+})();
+</script>
+</head><body></body></html>

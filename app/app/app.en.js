@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.81.2';
+  const VERSION = '1.81.3';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -12968,6 +12968,8 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
 
   // ---- Hilfe: Kurzanleitung und Versionsnummern
   // Kurzanleitung: liegt als PDF in der Bibliothek (Ordner „Help“ bzw. „Hilfe“) und öffnet sich wie jedes andere Dokument; Standard Englisch (US)
+  // ältere Windows-Apps öffnen hilfe.html in einem eigenen Fenster – das meldet sich hier, und die PDF öffnet sich im Hauptfenster
+  if (!EMBED && !SHOW) try { const hb = new BroadcastChannel('pdfstift-help'); hb.onmessage = (ev) => { if (ev.data === 'open') { hb.postMessage('ok'); openHelp(); } }; } catch (e) { /* */ }
   async function openHelp() {
     track('tool', "Quick guide");
     if (EMBED) { try { window.parent.PDFSTIFT_MAIN.help(); } catch (e) { /* */ } return; }
