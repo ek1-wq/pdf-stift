@@ -1,0 +1,437 @@
+[
+{
+"k": "carlito",
+"n": "Carlito (≈ Calibri)",
+"c": "sans",
+"f": "Carlito",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "arimo",
+"n": "Arimo (≈ Arial)",
+"c": "sans",
+"f": "Arimo",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "opensans",
+"n": "Open Sans",
+"c": "sans",
+"f": "OpenSans",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "roboto",
+"n": "Roboto",
+"c": "sans",
+"f": "Roboto",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "lato",
+"n": "Lato",
+"c": "sans",
+"f": "Lato",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "montserrat",
+"n": "Montserrat",
+"c": "sans",
+"f": "Montserrat",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "inter",
+"n": "Inter",
+"c": "sans",
+"f": "Inter",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "nunito",
+"n": "Nunito",
+"c": "sans",
+"f": "Nunito",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "poppins",
+"n": "Poppins",
+"c": "sans",
+"f": "Poppins",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "worksans",
+"n": "Work Sans",
+"c": "sans",
+"f": "WorkSans",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "notosans",
+"n": "Noto Sans",
+"c": "sans",
+"f": "NotoSans",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "firasans",
+"n": "Fira Sans",
+"c": "sans",
+"f": "FiraSans",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "ptsans",
+"n": "PT Sans",
+"c": "sans",
+"f": "PTSans",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "atkinson",
+"n": "Atkinson Hyperlegible",
+"c": "sans",
+"f": "AtkinsonHyperlegible",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "ubuntusans",
+"n": "Ubuntu Sans",
+"c": "sans",
+"f": "UbuntuSans",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "tinos",
+"n": "Tinos (≈ Times New Roman)",
+"c": "serif",
+"f": "Tinos",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "gelasio",
+"n": "Gelasio (≈ Georgia)",
+"c": "serif",
+"f": "Gelasio",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "caladea",
+"n": "Caladea (≈ Cambria)",
+"c": "serif",
+"f": "Caladea",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "ebgaramond",
+"n": "EB Garamond",
+"c": "serif",
+"f": "EBGaramond",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "crimsonpro",
+"n": "Crimson Pro",
+"c": "serif",
+"f": "CrimsonPro",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "notoserif",
+"n": "Noto Serif",
+"c": "serif",
+"f": "NotoSerif",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "sourceserif4",
+"n": "Source Serif 4",
+"c": "serif",
+"f": "SourceSerif4",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "ptserif",
+"n": "PT Serif",
+"c": "serif",
+"f": "PTSerif",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "cousine",
+"n": "Cousine (≈ Courier New)",
+"c": "mono",
+"f": "Cousine",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "firacode",
+"n": "Fira Code",
+"c": "mono",
+"f": "FiraCode",
+"s": [
+"Regular",
+"Bold"
+]
+},
+{
+"k": "jetbrainsmono",
+"n": "JetBrains Mono",
+"c": "mono",
+"f": "JetBrainsMono",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "robotomono",
+"n": "Roboto Mono",
+"c": "mono",
+"f": "RobotoMono",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "caveat",
+"n": "Caveat",
+"c": "hand",
+"f": "Caveat",
+"s": [
+"Regular",
+"Bold"
+]
+},
+{
+"k": "patrickhand",
+"n": "Patrick Hand",
+"c": "hand",
+"f": "PatrickHand",
+"s": [
+"Regular"
+]
+},
+{
+"k": "kalam",
+"n": "Kalam",
+"c": "hand",
+"f": "Kalam",
+"s": [
+"Regular",
+"Bold"
+]
+},
+{
+"k": "indieflower",
+"n": "Indie Flower",
+"c": "hand",
+"f": "IndieFlower",
+"s": [
+"Regular"
+]
+},
+{
+"k": "comicneue",
+"n": "Comic Neue (≈ Comic Sans)",
+"c": "hand",
+"f": "ComicNeue",
+"s": [
+"Regular",
+"Bold",
+"Italic",
+"BoldItalic"
+]
+},
+{
+"k": "permanentmarker",
+"n": "Permanent Marker",
+"c": "hand",
+"f": "PermanentMarker",
+"s": [
+"Regular"
+]
+},
+{
+"k": "shadowsintolight",
+"n": "Shadows Into Light",
+"c": "hand",
+"f": "ShadowsIntoLight",
+"s": [
+"Regular"
+]
+},
+{
+"k": "architectsdaughter",
+"n": "Architects Daughter",
+"c": "hand",
+"f": "ArchitectsDaughter",
+"s": [
+"Regular"
+]
+},
+{
+"k": "pacifico",
+"n": "Pacifico",
+"c": "deco",
+"f": "Pacifico",
+"s": [
+"Regular"
+]
+},
+{
+"k": "bebasneue",
+"n": "Bebas Neue",
+"c": "deco",
+"f": "BebasNeue",
+"s": [
+"Regular"
+]
+},
+{
+"k": "lobster",
+"n": "Lobster",
+"c": "deco",
+"f": "Lobster",
+"s": [
+"Regular"
+]
+},
+{
+"k": "abrilfatface",
+"n": "Abril Fatface",
+"c": "deco",
+"f": "AbrilFatface",
+"s": [
+"Regular"
+]
+}
+]

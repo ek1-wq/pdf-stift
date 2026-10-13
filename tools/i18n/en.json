@@ -2605,5 +2605,22 @@
   "Menüband links": "Ribbon on the left",
   "Menüband rechts": "Ribbon on the right",
   "Menüband verschieben": "Move ribbon",
-  "Menüband verschieben: an den Rand ziehen – oder antippen": "Move ribbon: drag to an edge – or tap"
+  "Menüband verschieben: an den Rand ziehen – oder antippen": "Move ribbon: drag to an edge – or tap",
+  "Ohne Serifen": "Sans serif",
+  "Mit Serifen": "Serif",
+  "Schreibmaschine": "Monospace",
+  "Handschrift": "Handwriting",
+  "Deko": "Display",
+  "L:": "L:",
+  "\", sans-serif": "\", sans-serif",
+  ") format(\"truetype\");font-weight:": ") format(\"truetype\");font-weight:",
+  "Dieser Browser kann die Schriften des Computers nicht anzeigen – bitte die Windows-App, Chrome oder Edge verwenden.": "This browser cannot show the computer's fonts – please use the Windows app, Chrome or Edge.",
+  "Keine Schriften gefunden – vermutlich wurde der Zugriff nicht erlaubt.": "No fonts found – access was probably not allowed.",
+  "Zugriff auf die Schriften dieses Computers wurde nicht erlaubt.": "Access to this computer's fonts was not allowed.",
+  "><optgroup label=\"Standard\">": "><optgroup label=\"Standard\">",
+  "<optgroup label=\"Auf diesem Computer\"><option value=\"@local\">Schriften dieses Computers anzeigen …</option></optgroup>": "<optgroup label=\"On this computer\"><option value=\"@local\">Show this computer's fonts …</option></optgroup>",
+  "Die Schrift „": "The font “",
+  "“ gibt es auf diesem Gerät nicht": "” is not available on this device",
+  "“ darf laut Hersteller nicht in PDFs eingebettet werden": "“ darf laut Hersteller nicht in PDFs eingebettet werden",
+  " – im PDF steht dort Helvetica.": " – im PDF steht dort Helvetica."
 }

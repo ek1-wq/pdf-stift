@@ -10,11 +10,94 @@
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const r1 = (v) => Math.round(v * 10) / 10;
   const uid = () => Math.random().toString(36).slice(2, 10);
-  const FONTS = { sans: 'Helvetica, Arial, "Liberation Sans", sans-serif', serif: '"Times New Roman", Times, "Liberation Serif", serif', mono: '"Courier New", Courier, "Liberation Mono", monospace',
-    carlito: '"PS Carlito", Carlito, Calibri, sans-serif', opensans: '"PS Open Sans", "Open Sans", sans-serif', caveat: '"PS Caveat", Caveat, cursive' };
-  // freie Schriften (SIL Open Font License) liegen in vendor/fonts und werden erst bei Bedarf geladen
-  const FONT_LIST = [['sans', 'Helvetica / Arial'], ['carlito', 'Carlito (wie Calibri)'], ['opensans', 'Open Sans'], ['serif', 'Times'], ['mono', 'Courier'], ['caveat', 'Caveat (Handschrift)']];
-  const FONT_FILES = { carlito: 'Carlito', opensans: 'OpenSans', caveat: 'Caveat' };
+  // Schriften: drei PDF-Standardschriften, freie Schriften aus vendor/fonts (SIL Open Font License, Liste in fonts.json)
+  // und auf Wunsch die Schriften dieses Computers (Windows-App, Chrome/Edge)
+  const STD_FONTS = { sans: ['Helvetica / Arial', 'Helvetica, Arial, "Liberation Sans", sans-serif'], serif: ['Times', '"Times New Roman", Times, "Liberation Serif", serif'], mono: ['Courier', '"Courier New", Courier, "Liberation Mono", monospace'] };
+  const CAT_FB = { sans: 'sans-serif', serif: 'serif', mono: 'monospace', hand: 'cursive', deco: 'sans-serif' };
+  const FONT_CATS = [['sans', 'Ohne Serifen'], ['serif', 'Mit Serifen'], ['mono', 'Schreibmaschine'], ['hand', 'Handschrift'], ['deco', 'Deko']];
+  const FM = { list: [], by: {}, local: null, localData: null };
+  const cssq = (t) => String(t).replace(/["\\<>;{}]/g, '');
+  function fontCss(k) {
+    if (STD_FONTS[k]) return STD_FONTS[k][1];
+    if (k && k.startsWith('L:')) return `"${cssq(k.slice(2))}", sans-serif`;
+    const m = FM.by[k];
+    return m ? `"PS ${m.f}", ${CAT_FB[m.c] || 'sans-serif'}` : STD_FONTS.sans[1];
+  }
+  const fontOk = (k) => !!(STD_FONTS[k] || FM.by[k] || (k && k.startsWith('L:') && k.length < 110));
+  const fontName = (k) => (STD_FONTS[k] ? STD_FONTS[k][0] : k && k.startsWith('L:') ? k.slice(2) : FM.by[k] ? FM.by[k].n : k);
+  FM.ready = fetch('vendor/fonts/fonts.json?v=' + C.VERSION).then((r) => r.json()).then((list) => {
+    FM.list = list;
+    for (const m of list) FM.by[m.k] = m;
+    const st = document.createElement('style');
+    st.id = 'ps-fonts';
+    st.textContent = list.map((m) => m.s.map((x) => `@font-face{font-family:"PS ${m.f}";src:url(vendor/fonts/${m.f}-${x}.ttf?v=${C.VERSION}) format("truetype");font-weight:${/Bold/.test(x) ? 700 : 400};font-style:${/Italic/.test(x) ? 'italic' : 'normal'};font-display:swap}`).join('')).join('');
+    document.head.appendChild(st);
+  }).catch(() => {});
+  // Schriften dieses Computers (fragt einmal nach Erlaubnis)
+  async function loadLocal() {
+    if (FM.local) return true;
+    if (!('queryLocalFonts' in window)) { C.toast('Dieser Browser kann die Schriften des Computers nicht anzeigen – bitte die Windows-App, Chrome oder Edge verwenden.', 6000); return false; }
+    try {
+      const all = await window.queryLocalFonts();
+      FM.localData = all;
+      FM.local = [...new Set(all.map((f) => f.family))].sort((a, b) => a.localeCompare(b, 'de'));
+      if (!FM.local.length) C.toast('Keine Schriften gefunden – vermutlich wurde der Zugriff nicht erlaubt.', 6000);
+      return true;
+    } catch (e) { C.toast('Zugriff auf die Schriften dieses Computers wurde nicht erlaubt.', 5000); return false; }
+  }
+  // Schriftart-Auswahl (gruppiert, jede Schrift in ihrem eigenen Aussehen)
+  function fontSelect(cur, en) {
+    const opt = (k, n) => `<option value="${esc(k)}"${k === cur ? ' selected' : ''} style="font-family:${esc(fontCss(k))}">${esc(n)}</option>`;
+    let h = `<select data-f="ff" class="rb-font" title="Schriftart"${en ? '' : ' disabled'}><optgroup label="Standard">${Object.entries(STD_FONTS).map(([k, [n]]) => opt(k, n)).join('')}</optgroup>`;
+    for (const [c, lab] of FONT_CATS) { const l = FM.list.filter((m) => m.c === c); if (l.length) h += `<optgroup label="${esc(lab)}">${l.map((m) => opt(m.k, m.n)).join('')}</optgroup>`; }
+    if (cur && cur.startsWith('L:') && !(FM.local || []).includes(cur.slice(2))) h += `<optgroup label="Auf einem Computer">${opt(cur, cur.slice(2))}</optgroup>`;
+    if (FM.local) h += `<optgroup label="Auf diesem Computer">${FM.local.map((f) => opt('L:' + f, f)).join('')}</optgroup>`;
+    else if ('queryLocalFonts' in window) h += `<optgroup label="Auf diesem Computer"><option value="@local">Schriften dieses Computers anzeigen …</option></optgroup>`;
+    return h + '</select>';
+  }
+  // Schriftsammlung (.ttc, z. B. Cambria): die eine Schrift herauslösen
+  function ttcPick(b, ps) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    if (b.length < 12 || dv.getUint32(0) !== 0x74746366) return b;
+    const n = dv.getUint32(8), offs = [];
+    for (let i = 0; i < n; i++) offs.push(dv.getUint32(12 + 4 * i));
+    const psOf = (off) => {
+      const nt = dv.getUint16(off + 4);
+      for (let i = 0; i < nt; i++) {
+        const r = off + 12 + 16 * i;
+        if (dv.getUint32(r) !== 0x6E616D65) continue;
+        const to = dv.getUint32(r + 8), cnt = dv.getUint16(to + 2), so = to + dv.getUint16(to + 4);
+        for (let j = 0; j < cnt; j++) {
+          const q = to + 6 + 12 * j;
+          if (dv.getUint16(q + 6) !== 6) continue;
+          const pid = dv.getUint16(q), len = dv.getUint16(q + 8), o = so + dv.getUint16(q + 10);
+          let t = '';
+          if (pid === 3 || pid === 0) for (let k = 0; k + 1 < len; k += 2) t += String.fromCharCode(dv.getUint16(o + k));
+          else for (let k = 0; k < len; k++) t += String.fromCharCode(dv.getUint8(o + k));
+          return t;
+        }
+      }
+      return '';
+    };
+    let pick = 0;
+    for (let i = 0; i < n; i++) if (psOf(offs[i]) === ps) { pick = i; break; }
+    const off = offs[pick], nt = dv.getUint16(off + 4), tabs = [];
+    for (let i = 0; i < nt; i++) { const r = off + 12 + 16 * i; tabs.push([dv.getUint32(r), dv.getUint32(r + 4), dv.getUint32(r + 8), dv.getUint32(r + 12)]); }
+    const pad = (x) => (x + 3) & ~3;
+    const out = new Uint8Array(12 + 16 * nt + tabs.reduce((a, t) => a + pad(t[3]), 0));
+    const ov = new DataView(out.buffer);
+    out.set(b.subarray(off, off + 12), 0);
+    let p = 12 + 16 * nt;
+    tabs.forEach(([tag, sum, o, l], i) => { const r = 12 + 16 * i; ov.setUint32(r, tag); ov.setUint32(r + 4, sum); ov.setUint32(r + 8, p); ov.setUint32(r + 12, l); out.set(b.subarray(o, o + l), p); p += pad(l); });
+    return out;
+  }
+  // darf die Schrift eingebettet werden? (OS/2 fsType: 2 = nur mit Erlaubnis des Herstellers)
+  function embedOk(b) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    const nt = dv.getUint16(4);
+    for (let i = 0; i < nt; i++) { const r = 12 + 16 * i; if (dv.getUint32(r) === 0x4F532F32) return (dv.getUint16(dv.getUint32(r + 8) + 8) & 0x000F) !== 0x0002; }
+    return true;
+  }
   const COLORS = ['#1A1A1A', '#FFFFFF', '#1E2F6E', '#1F4FD6', '#0091FF', '#1B8A3A', '#B8E62E', '#E8590C', '#D6262B', '#D6409F', '#7048E8', '#868E96'];
   const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 60, 72];
   const DEF_TH = { bg: '#FFFFFF', fg: '#1A1A1A', accent: '#1E2F6E', font: 'sans' };
@@ -109,7 +192,7 @@
     n.className = 'dk-el dk-' + e.t;
     n.dataset.id = e.id;
     n.style.cssText = pos(e);
-    if (e.ff && FONTS[e.ff]) n.style.fontFamily = FONTS[e.ff];
+    if (e.ff && fontOk(e.ff)) n.style.fontFamily = fontCss(e.ff);
     const pad = e.pad != null ? e.pad : 8;
     if (e.t === 'text') {
       const tx = document.createElement('div');
@@ -155,7 +238,7 @@
     th = th || DEF_TH;
     const sl = document.createElement('div');
     sl.className = 'dk-slide';
-    sl.style.cssText = `width:${W}px;height:${H}px;background:${s.bg || th.bg};font-family:${FONTS[th.font] || FONTS.sans};transform:scale(${scale});transform-origin:0 0`;
+    sl.style.cssText = `width:${W}px;height:${H}px;background:${s.bg || th.bg};font-family:${fontCss(th.font)};transform:scale(${scale});transform-origin:0 0`;
     for (const e of s.els) if (live || !isPh(e)) sl.appendChild(elNode(e, th));
     return sl;
   }
@@ -164,7 +247,7 @@
     th = th || DEF_TH;
     const sl = document.createElement('div');
     sl.className = 'dk-slide dk-layer';
-    sl.style.cssText = `width:${w}px;height:${h}px;background:transparent;overflow:visible;font-family:${FONTS[th.font] || FONTS.sans};transform:scale(${scale});transform-origin:0 0`;
+    sl.style.cssText = `width:${w}px;height:${h}px;background:transparent;overflow:visible;font-family:${fontCss(th.font)};transform:scale(${scale});transform-origin:0 0`;
     for (const e of els) sl.appendChild(elNode(e, th));
     return sl;
   }
@@ -218,6 +301,7 @@
    *       surface() Fläche zeichnen · typing() beim Tippen · placing(an) Einfügemodus · pickImage() · rendered() */
   function makeEditor(host) {
     const ED = { sel: [], edit: null, insert: null, clip: null };
+    FM.ready.then(() => { if (host.fmtBar()) renderFmt(); });
     const els = () => host.els() || [];
     const byId = (id) => els().find((e) => e.id === id);
     const u = () => host.unit || 1;
@@ -277,7 +361,7 @@
       if (!box) return;
       for (const e of list) {
         const n = box.querySelector(`.dk-el[data-id="${e.id}"]`);
-        if (n) { n.style.cssText = pos(e); if (e.ff && FONTS[e.ff]) n.style.fontFamily = FONTS[e.ff]; }
+        if (n) { n.style.cssText = pos(e); if (e.ff && fontOk(e.ff)) n.style.fontFamily = fontCss(e.ff); }
         if (n && (e.t === 'shape' || e.t === 'table')) { const nn = elNode(e, host.theme()); nn.className = n.className; n.replaceWith(nn); }
       }
       const h = box.querySelector('.dk-handles');
@@ -315,7 +399,7 @@
       const sizes = !e || SIZES.includes(fs0) ? SIZES : [...SIZES, fs0].sort((x, y) => x - y);
       const ff0 = (e && e.ff) || host.theme().font || 'sans';
       h += grp('Schriftart', rows(
-        `<select data-f="ff" class="rb-font" title="Schriftart"${dis(textish)}>${FONT_LIST.map(([k, l]) => `<option value="${k}"${k === ff0 ? ' selected' : ''} style="font-family:${esc(FONTS[k])}">${esc(l)}</option>`).join('')}</select>` +
+        fontSelect(ff0, textish) +
         `<select data-f="fs" class="rb-size" title="Schriftgröße"${dis(textish)}>${e ? '' : '<option></option>'}${sizes.map((x) => `<option value="${x}"${x === fs0 ? ' selected' : ''}>${x}</option>`).join('')}</select>` +
         sb('fs+', 'Schrift vergrößern', RI.grow, { en: textish }) + sb('fs-', 'Schrift verkleinern', RI.shrink, { en: textish }) + sb('clear', 'Formatierung löschen', RI.clear, { en: textish }),
         `<button type="button" class="rb-s rb-t" data-f="bold" title="Fett (Strg+B)"${dis(textish)}><b>F</b></button><button type="button" class="rb-s rb-t" data-f="italic" title="Kursiv (Strg+I)"${dis(textish)}><i>K</i></button><button type="button" class="rb-s rb-t" data-f="underline" title="Unterstrichen (Strg+U)"${dis(textish)}><u>U</u></button>` +
@@ -416,7 +500,13 @@
         return;
       }
       if (f === 'fs') { each((e) => { e.fs = +v; }); return; }
-      if (f === 'ff') { if (!FONTS[v]) return; each((e) => { e.ff = v; }); if (document.fonts && FONT_FILES[v]) document.fonts.load(`16px ${FONTS[v].split(',')[0]}`).then(() => { if (grow()) render(); }).catch(() => {}); return; }
+      if (f === 'ff') {
+        if (v === '@local') { loadLocal().then(() => renderFmt()); renderFmt(); return; }
+        if (!fontOk(v)) return;
+        each((e) => { e.ff = v; });
+        if (document.fonts) document.fonts.load(`16px ${fontCss(v).split(',')[0]}`).then(() => { if (grow()) render(); }).catch(() => {});
+        return;
+      }
       if (f === 'va') { each((e) => { e.va = v; }); return; }
       if (f === 'fill') { each((e) => { if (v) e.fill = v; else delete e.fill; }); return; }
       if (f === 'line') { each((e) => { if (v) e.line = v; else delete e.line; }); return; }
@@ -1141,19 +1231,48 @@
     const fams = {};
     let kitOk = false;
     // Schriftfamilie für ein Element (eingebettet, nur benutzte Zeichen)
+    await FM.ready;
     const famOf = async (ff) => {
-      ff = FONTS[ff] ? ff : (th.font === 'serif' ? 'serif' : 'sans');
+      const base0 = th.font === 'serif' ? 'serif' : 'sans';
+      ff = ff && fontOk(ff) ? ff : base0;
       if (fams[ff]) return fams[ff];
       if (STD[ff]) {
         const [r, b, i, bi] = await Promise.all(STD[ff].map((n) => doc.embedFont(n)));
         fams[ff] = { r, b, i, bi, custom: false };
-      } else {
-        if (!kitOk) { await C.ensureFontkit(); doc.registerFontkit(window.fontkit); kitOk = true; }
-        const base = FONT_FILES[ff];
-        const get = async (st) => { const r = await fetch('vendor/fonts/' + base + '-' + st + '.ttf?v=' + C.VERSION); if (!r.ok) throw new Error('Schrift fehlt'); return doc.embedFont(new Uint8Array(await r.arrayBuffer()), { subset: true }); };
-        const r = await get('Regular'), b = await get('Bold');
-        const i = ff === 'caveat' ? r : await get('Italic'), bi = ff === 'caveat' ? b : await get('BoldItalic');
+        return fams[ff];
+      }
+      if (!kitOk) { await C.ensureFontkit(); doc.registerFontkit(window.fontkit); kitOk = true; }
+      try {
+        let get, has;
+        if (ff.startsWith('L:')) {
+          // Schrift dieses Computers
+          const fam = ff.slice(2);
+          if (!FM.localData && 'queryLocalFonts' in window) { try { FM.localData = await window.queryLocalFonts(); } catch (e) { /* */ } }
+          const list = (FM.localData || []).filter((f) => f.family === fam);
+          if (!list.length) throw new Error(`Die Schrift „${fam}“ gibt es auf diesem Gerät nicht`);
+          const st = (re) => list.find((f) => re.test(f.style || ''));
+          const pickS = { Regular: st(/^(regular|normal|book|roman|standard)$/i) || list.find((f) => !/bold|italic|oblique|light|black|thin|medium|semi|demi|condensed|narrow/i.test(f.style || '')) || list[0],
+            Bold: st(/^(bold|fett)$/i), Italic: st(/^(italic|oblique|kursiv)$/i), BoldItalic: st(/^bold ?(italic|oblique)$/i) };
+          has = (x) => !!pickS[x];
+          get = async (x) => {
+            const fd = pickS[x];
+            const bin = ttcPick(new Uint8Array(await (await fd.blob()).arrayBuffer()), fd.postscriptName);
+            if (!embedOk(bin)) throw new Error(`Die Schrift „${fam}“ darf laut Hersteller nicht in PDFs eingebettet werden`);
+            return doc.embedFont(bin, { subset: true });
+          };
+        } else {
+          const m = FM.by[ff];
+          has = (x) => m.s.includes(x);
+          get = async (x) => { const r = await fetch('vendor/fonts/' + m.f + '-' + x + '.ttf?v=' + C.VERSION); if (!r.ok) throw new Error('Schrift fehlt'); return doc.embedFont(new Uint8Array(await r.arrayBuffer()), { subset: true }); };
+        }
+        const r = await get('Regular');
+        const b = has('Bold') ? await get('Bold') : r;
+        const i = has('Italic') ? await get('Italic') : r;
+        const bi = has('BoldItalic') ? await get('BoldItalic') : (has('Bold') ? b : i);
         fams[ff] = { r, b, i, bi, custom: true, set: new Set(r.getCharacterSet()) };
+      } catch (err) {
+        C.toast(err.message + ' – im PDF steht dort Helvetica.', 7000);
+        fams[ff] = await famOf(base0);
       }
       return fams[ff];
     };
@@ -1330,5 +1449,6 @@
     return box;
   }
 
+  FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
   window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON };
 })();

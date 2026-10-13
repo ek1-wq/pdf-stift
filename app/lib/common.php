@@ -265,8 +265,10 @@ function stroke_obj($e): ?array
     if (in_array($e['va'] ?? '', ['t', 'm', 'b'], true)) {
         $o['va'] = $e['va'];
     }
-    if (in_array($e['ff'] ?? '', ['sans', 'serif', 'mono', 'carlito', 'opensans', 'caveat'], true)) {
-        $o['ff'] = $e['ff'];
+    // Schrift: Kürzel einer mitgelieferten Schrift oder „L:Name“ einer Schrift dieses Computers
+    $ff = (string) ($e['ff'] ?? '');
+    if (preg_match('/^[a-z0-9]{2,30}$/', $ff) || preg_match('/^L:[^"<>\\;{}]{1,100}$/u', $ff)) {
+        $o['ff'] = $ff;
     }
     if (isset($e['html']) && is_string($e['html'])) {
         $o['html'] = mb_substr($e['html'], 0, 50000);

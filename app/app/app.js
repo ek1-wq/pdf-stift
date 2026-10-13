@@ -4700,7 +4700,7 @@
     return {
       box: () => obLayer(P, true),
       stage: () => pagesEl,
-      fmtBar: () => $('#obRibbon .rb-fmt'),
+      fmtBar: () => (OB.P === P ? $('#obRibbon .rb-fmt') : null),
       W: () => P.w, H: () => P.h, k,
       unit: Math.max(0.45, Math.min(1.2, P.w / 960)), pad: 5,
       els: () => OB.els, setEls: (a) => { OB.els = a; },
@@ -4793,7 +4793,7 @@
     const DK = window.PDFSTIFT_DECK;
     if (!DK) return null;
     OB.idle = OB.idle || DK.makeEditor({
-      box: () => null, stage: () => pagesEl, fmtBar: () => $('#obRibbon .rb-fmt'), W: () => 1, H: () => 1, k: () => 1,
+      box: () => null, stage: () => pagesEl, fmtBar: () => (OB.ed ? null : $('#obRibbon .rb-fmt')), W: () => 1, H: () => 1, k: () => 1,
       els: () => [], setEls() {}, theme: () => OB_TH, snap: () => '[]', commit() {}, surface: () => null,
       placing: (on, kind) => obPlacing(on ? kind : null), pickImage: () => obPickImage(), alignWord: true,
       onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
@@ -4933,6 +4933,8 @@
         loadLibrary();
         return j;
       },
+      // Schriftliste geladen: Objekte auf den Seiten neu zeichnen (richtige Schrift)
+      fontsReady: () => { for (const P of V.pages || []) { const l = P.el && P.el.querySelector(':scope > .ob-layer'); if (l) { l.dataset.sig = ''; obRender(P); } } },
       deckTitle: (path, title) => {
         S.decks = S.decks || [];
         const d = S.decks.find((x) => x.path === path);
