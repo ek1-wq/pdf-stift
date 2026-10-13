@@ -299,12 +299,25 @@ function search_notes(string $q, array $files): array
             continue;
         }
         $raw = @file_get_contents(notes_file($f['path']));
-        if ($raw === false || !str_contains($raw, '"txt"')) {
+        if ($raw === false || (!str_contains($raw, '"txt"') && !str_contains($raw, '"ob"'))) {
             continue;
         }
         $doc = json_decode($raw, true);
         foreach ((array) ($doc['strokes'] ?? []) as $s) {
-            if (($s['t'] ?? '') !== 'txt') {
+            if (($s['t'] ?? '') === 'ob') {
+                // Objekt (Textfeld, Form, Tabelle): sichtbarer Text
+                $e = (array) ($s['e'] ?? []);
+                $parts = [(string) ($e['html'] ?? '')];
+                foreach ((array) ($e['rows'] ?? []) as $row) {
+                    foreach ((array) $row as $cell) {
+                        $parts[] = (string) $cell;
+                    }
+                }
+                $s['text'] = trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags(str_replace(['</div>', '</li>', '<br>', '</td>'], ' ', implode(' ', $parts))), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+                if ($s['text'] === '') {
+                    continue;
+                }
+            } elseif (($s['t'] ?? '') !== 'txt') {
                 continue;
             }
             $text = (string) ($s['text'] ?? '');

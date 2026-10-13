@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.68.0';
+const PDFSTIFT_VERSION = '1.69.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -239,6 +239,69 @@ function stroke_link(array $s): array
         ? ['ln' => ['path' => $s['ln']['path'], 'pg' => max(0, min(100000, (int) ($s['ln']['pg'] ?? 0)))]] : [];
 }
 
+/** Inhalt eines Objekts prüfen (nur bekannte Felder, Längen begrenzt; Text wird beim Anzeigen zusätzlich gesäubert) */
+function stroke_obj($e): ?array
+{
+    if (!is_array($e) || !in_array($e['t'] ?? '', ['text', 'img', 'shape', 'table'], true)) {
+        return null;
+    }
+    $t = $e['t'];
+    $num = static fn (string $k, float $lo, float $hi, float $def): float => max($lo, min($hi, round(is_numeric($e[$k] ?? null) ? (float) $e[$k] : $def, 2)));
+    $o = [
+        'id' => preg_match('/^[A-Za-z0-9_-]{4,40}$/', (string) ($e['id'] ?? '')) ? (string) $e['id'] : bin2hex(random_bytes(4)),
+        't' => $t, 'x' => $num('x', -100000, 100000, 0), 'y' => $num('y', -100000, 100000, 0),
+        'w' => $num('w', 1, 100000, 10), 'h' => $num('h', 1, 100000, 10), 'r' => $num('r', -360, 360, 0),
+    ];
+    foreach (['fs' => [2, 400], 'lw' => [0.1, 50], 'pad' => [0, 200], 'iw' => [1, 100000], 'ih' => [1, 100000]] as $k => [$lo, $hi]) {
+        if (is_numeric($e[$k] ?? null)) {
+            $o[$k] = max($lo, min($hi, round((float) $e[$k], 2)));
+        }
+    }
+    foreach (['c', 'fill', 'line'] as $k) {
+        if (preg_match('/^#[0-9A-Fa-f]{6}$/', (string) ($e[$k] ?? ''))) {
+            $o[$k] = (string) $e[$k];
+        }
+    }
+    if (in_array($e['va'] ?? '', ['t', 'm', 'b'], true)) {
+        $o['va'] = $e['va'];
+    }
+    if (isset($e['html']) && is_string($e['html'])) {
+        $o['html'] = mb_substr($e['html'], 0, 50000);
+    }
+    if ($t === 'shape') {
+        $o['k'] = in_array($e['k'] ?? '', ['rect', 'round', 'ellipse', 'tri', 'arrowR', 'line', 'arrow'], true) ? $e['k'] : 'rect';
+    }
+    if ($t === 'img') {
+        if (!preg_match('/^[a-f0-9]{40}\.(jpg|png|gif|webp)$/', (string) ($e['src'] ?? ''))) {
+            return null;
+        }
+        $o['src'] = (string) $e['src'];
+    }
+    if ($t === 'table') {
+        $rows = [];
+        foreach (array_slice((array) ($e['rows'] ?? []), 0, 60) as $row) {
+            $rows[] = array_map(static fn ($c) => mb_substr(is_string($c) ? $c : '', 0, 5000), array_slice(array_values((array) $row), 0, 20));
+        }
+        $cols = max(1, max(array_map('count', $rows ?: [[0]])));
+        if (!$rows) {
+            return null;
+        }
+        foreach ($rows as &$row) {
+            $row = array_pad($row, $cols, '');
+        }
+        unset($row);
+        $o['rows'] = $rows;
+        $cw = array_values(array_filter((array) ($e['cw'] ?? []), 'is_numeric'));
+        if (count($cw) === $cols) {
+            $o['cw'] = array_map(static fn ($v) => max(0.01, min(1, round((float) $v, 4))), $cw);
+        }
+        if (!empty($e['head'])) {
+            $o['head'] = true;
+        }
+    }
+    return $o;
+}
+
 function valid_stroke_inner(array $s): ?array
 {
     $id = (string) ($s['id'] ?? '');
@@ -246,8 +309,8 @@ function valid_stroke_inner(array $s): ?array
         return null;
     }
     $pts = $s['pts'] ?? null;
-    $t = in_array($s['t'] ?? '', ['pen', 'hl', 'tx', 'sh', 'txt', 'img'], true) ? $s['t'] : 'pen';
-    $min = ['pen' => 3, 'hl' => 3, 'tx' => 4, 'sh' => 4, 'txt' => 2, 'img' => 2][$t];
+    $t = in_array($s['t'] ?? '', ['pen', 'hl', 'tx', 'sh', 'txt', 'img', 'ob'], true) ? $s['t'] : 'pen';
+    $min = ['pen' => 3, 'hl' => 3, 'tx' => 4, 'sh' => 4, 'txt' => 2, 'img' => 2, 'ob' => 2][$t];
     if (!is_array($pts) || count($pts) < $min || count($pts) > 60000) {
         return null;
     }
@@ -267,6 +330,15 @@ function valid_stroke_inner(array $s): ?array
         }
         $k = in_array($s['k'] ?? '', ['hl', 'ul', 'st'], true) ? $s['k'] : 'hl';
         return ['id' => $id, 'p' => $p, 't' => 'tx', 'k' => $k, 'c' => $c, 'pts' => $clean];
+    }
+    if ($t === 'ob') {
+        // Objekt wie auf einer Folie (Textfeld, Bild, Form, Tabelle) – bleibt änderbar, wird nie eingebrannt
+        $e = stroke_obj($s['e'] ?? null);
+        if ($e === null) {
+            return null;
+        }
+        return ['id' => $id, 'p' => $p, 't' => 'ob', 'sn' => 1, 'zi' => max(0, min(100000, (int) ($s['zi'] ?? 0))), 'c' => '#1A1A1A',
+            'pts' => [$e['x'], $e['y']], 'e' => $e];
     }
     if ($t === 'img') {
         $src = (string) ($s['src'] ?? '');
@@ -371,6 +443,15 @@ function rotate_stroke(array $s, float $w, float $h): array
             [$x, $y, $rw, $rh] = [$p[$i], $p[$i + 1], $p[$i + 2], $p[$i + 3]];
             [$p[$i], $p[$i + 1], $p[$i + 2], $p[$i + 3]] = [round($h - $y - $rh, 2), round($x, 2), $rh, $rw];
         }
+    } elseif ($s['t'] === 'ob' && is_array($s['e'] ?? null)) {
+        $e = $s['e'];
+        $ncx = $h - ($e['y'] + $e['h'] / 2);
+        $ncy = $e['x'] + $e['w'] / 2;
+        $e['x'] = round($ncx - $e['w'] / 2, 2);
+        $e['y'] = round($ncy - $e['h'] / 2, 2);
+        $e['r'] = fmod(($e['r'] ?? 0) + 90, 360);
+        $s['e'] = $e;
+        $p = [$e['x'], $e['y']];
     } elseif ($s['t'] === 'txt') {
         [$p[0], $p[1]] = [round($h - $p[1] - (float) ($s['bh'] ?? 0), 2), round($p[0], 2)];
     } elseif ($s['t'] === 'sh') {

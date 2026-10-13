@@ -1296,3 +1296,17 @@ body[data-demo] #btnShortcut, body[data-demo] #btnBackup, body[data-demo] #btnLo
 body.on-deck #toolbar, body.on-deck #pageBadge { display: none !important; }
 .card.dk-card .thumb { padding: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #fff; }
 .card.dk-new .thumb { font-size: 34px; color: var(--accent); }
+/* Objekte auf PDF-Seiten (wie in den Präsentationen) */
+.ob-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
+.page canvas.ink, .page canvas.live, .page canvas.ink-d, .page canvas.live-d { z-index: 2; }
+.ob-layer.ob-on { z-index: 6; }
+.ob-layer .dk-h, .ob-layer .dk-el.editing { pointer-events: auto; }
+.ob-layer .dk-live .dk-el { cursor: move; }
+.ob-layer .dk-live .dk-el.editing { cursor: text; }
+.ob-layer .dk-live .dk-el:hover { outline: none; }
+.ob-layer .dk-live .dk-el.sel { outline: 1.5px solid #1F4FD6; }
+.pages.ob-hover .page { cursor: move !important; }
+body.ob-placing .page { cursor: crosshair !important; }
+.ob-fmt { position: fixed; z-index: 40; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.ob-fmt .ob-del { color: #D6262B; }
+.ob-layer .dk-el.editing, .ob-layer .dk-el.editing * { -webkit-user-select: text; user-select: text; }

@@ -191,7 +191,7 @@ function build(check) {
       if (!check) fs.writeFileSync(R(out), content);
     }
   }
-  if (missing.size) console.log('noch ohne Übersetzung:', missing.size, [...missing].slice(0, 15).map((x) => JSON.stringify(x.slice(0, 60))).join(', '));
+  if (missing.size) console.log('noch ohne Übersetzung:', missing.size, [...missing].slice(0, process.env.ALL ? 999 : 15).map((x) => JSON.stringify(process.env.ALL ? x : x.slice(0, 60))).join(', '));
   if (check && stale) { console.error('Englische Dateien sind veraltet – bitte "node tools/i18n/i18n.js build" ausführen.'); process.exit(1); }
   console.log(check ? 'aktuell' : 'erzeugt', results.length, 'Dateien');
 }

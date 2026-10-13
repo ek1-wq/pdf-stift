@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.68.0';
+  const VERSION = '1.69.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -1866,6 +1866,7 @@
   for (const ev of ['wheel', 'pointerdown', 'keydown']) viewer.addEventListener(ev, () => { if (SNAP.ov) snapHide(); }, { passive: true });
 
   function unloadViewer() {
+    obDeactivate(); obPlacing(null);
     snapHide();
     if (V.io) V.io.disconnect();
     for (const P of V.pages) if (P.task) P.task.cancel();
@@ -2248,6 +2249,7 @@
   // Zeichnen der Striche
   function strokePath(ctx, s, k) {
     const p = s.pts;
+    if (s.t === 'ob') return; // Objekte (Text, Formen, Bilder, Tabellen) liegen als eigene Ebene über der Seite
     if (s.t === 'sh') {
       ctx.strokeStyle = s.c;
       ctx.lineWidth = Math.max(0.5, s.w * k);
@@ -2392,9 +2394,10 @@
     P.ink.classList.toggle('blend', list.some((x) => rank(x) < 2));
     list.forEach((x) => strokePath(ctx, x, P.k));
     drawDetailInk(P);
+    obRender(P);
   }
   // Reihenfolge: Text-Hervorhebung, freier Marker, dann Stift und Linien obenauf
-  const rank = (s) => (s.t === 'img' ? -1 : s.t === 'tx' && s.k === 'hl' ? 0 : s.t === 'hl' ? 1 : s.t === 'txt' ? 3 : 2);
+  const rank = (s) => (s.t === 'ob' ? -2 : s.t === 'img' ? -1 : s.t === 'tx' && s.k === 'hl' ? 0 : s.t === 'hl' ? 1 : s.t === 'txt' ? 3 : 2);
   let editingId = null;
   let SEL = null, hiddenIds = null; // Lasso-Auswahl
   function pageStrokes(i) {
@@ -2538,6 +2541,10 @@
           b[0] = Math.min(b[0], p[i]); b[1] = Math.min(b[1], p[i + 1]);
           b[2] = Math.max(b[2], p[i] + p[i + 2]); b[3] = Math.max(b[3], p[i + 1] + p[i + 3]);
         }
+      } else if (s.t === 'ob' && s.e) {
+        const e = s.e, a = (e.r || 0) * Math.PI / 180, cx = e.x + e.w / 2, cy = e.y + e.h / 2;
+        const ex = (Math.abs(Math.cos(a)) * e.w + Math.abs(Math.sin(a)) * e.h) / 2, ey = (Math.abs(Math.sin(a)) * e.w + Math.abs(Math.cos(a)) * e.h) / 2;
+        b = [cx - ex, cy - ey, cx + ex, cy + ey];
       } else if (s.t === 'sh') {
         for (const line of shapeLines(s)) for (const [x, y] of line) {
           b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y);
@@ -2573,7 +2580,7 @@
     const hit = [];
     const base = 7 / Math.max(1, V.zoom); // Radiergröße bleibt auf dem Bildschirm gleich
     for (const s of V.doc.strokes.values()) {
-      if (s.p !== P.i) continue;
+      if (s.p !== P.i || s.t === 'ob') continue; // Objekte: anklicken und Entf
       const r = base + (s.w || 0) / 2;
       const b = bbox(s);
       if (x < b[0] - r || x > b[2] + r || y < b[1] - r || y > b[3] + r) continue;
@@ -2624,6 +2631,7 @@
     if (e.target.closest('.sel-bar, .fm-field, .im-box, .fb-box, .pe-edit')) return;
     if (e.pointerType === 'touch') touches.add(e.pointerId);
     if (e.pointerType === 'pen') penDown = true;
+    if (obDown(e)) { e.stopImmediatePropagation(); return; }
     if (S.tool === 'tt') {
       // Textfeld: wird beim Loslassen geöffnet, wenn nicht gewischt wurde
       if (!e.target.closest('.txt-editor')) {
@@ -4628,6 +4636,283 @@
     boardRender();
   }
   // ---- Präsentationen (eigener Baustein deck.js, wird erst bei Bedarf geladen)
+  // ================================================================== Objekte auf PDF-Seiten (wie in PowerPoint)
+  // Textfelder, Formen, Bilder und Tabellen liegen als eigene Ebene über der Seite. Sie werden nie eingebrannt (sn: 1),
+  // bleiben also jederzeit änderbar; „PDF mit Notizen speichern“ schreibt sie in die heruntergeladene Kopie.
+  const OB_TH = { bg: 'transparent', fg: '#1A1A1A', accent: '#1E2F6E', font: 'sans' };
+  const OB = { P: null, ed: null, els: [], sid: new Map(), insert: null, clip: null, bar: null, file: null };
+  let deckP = null;
+  function ensureDeck() {
+    if (window.PDFSTIFT_DECK) return Promise.resolve(window.PDFSTIFT_DECK);
+    deckP = deckP || deckCore().then(() => new Promise((res, rej) => {
+      let n = 0;
+      const t = () => (window.PDFSTIFT_DECK ? res(window.PDFSTIFT_DECK) : ++n > 100 ? rej(new Error('Objekte konnten nicht geladen werden.')) : setTimeout(t, 30));
+      t();
+    }));
+    deckP.catch(() => { deckP = null; });
+    return deckP;
+  }
+  const obClone = (o) => JSON.parse(JSON.stringify(o));
+  function obStrokes(i) {
+    const out = [];
+    if (V.doc) for (const s of V.doc.strokes.values()) if (s.t === 'ob' && s.p === i && s.e) out.push(s);
+    return out.sort((a, b) => (a.zi || 0) - (b.zi || 0));
+  }
+  function obLayer(P, make) {
+    let l = P.el.querySelector(':scope > .ob-layer');
+    if (!l && make) {
+      l = document.createElement('div');
+      l.className = 'ob-layer';
+      if (P.ink && P.ink.parentNode === P.el) P.el.insertBefore(l, P.ink); else P.el.appendChild(l);
+    }
+    return l;
+  }
+  // Ebene einer Seite zeichnen (ohne Bearbeitung); die gerade bearbeitete Seite zeichnet der Editor
+  function obRender(P) {
+    if (!P || !V.doc || V.board) return;
+    const list = obStrokes(P.i);
+    P.obEls = list.map((s) => s.e);
+    if (OB.ed && OB.P === P) { obSync(); return; }
+    const l = obLayer(P, list.length > 0);
+    if (!l) return;
+    const sig = list.map((s) => s.id).join(',') + '|' + P.cssW;
+    if (l.dataset.sig === sig) return;
+    if (!list.length) { l.innerHTML = ''; l.dataset.sig = sig; return; }
+    if (!window.PDFSTIFT_DECK) { ensureDeck().then(() => { if (V.pages[P.i] === P) obRender(P); }).catch(() => {}); return; }
+    l.dataset.sig = sig;
+    l.innerHTML = '';
+    l.appendChild(window.PDFSTIFT_DECK.layerNode(P.obEls, P.w, P.h, P.cssW / P.w, OB_TH));
+  }
+  // Notizen haben sich von außen geändert (Rückgängig, anderes Gerät): Editor nachziehen
+  function obSync() {
+    const P = OB.P;
+    const list = obStrokes(P.i);
+    const ids = list.map((s) => s.id).sort().join(',');
+    if (ids === [...OB.sid.values()].sort().join(',')) { if (OB.ed && !OB.ed.edit) OB.ed.renderStage(); return; }
+    OB.els = list.map((s) => obClone(s.e));
+    OB.sid = new Map(list.map((s) => [s.e.id, s.id]));
+    OB.ed.edit = null;
+    OB.ed.sel = OB.ed.sel.filter((id) => OB.sid.has(id));
+    OB.ed.render();
+  }
+  function obHost(P) {
+    const k = () => (P.cssW || 1) / P.w;
+    return {
+      box: () => obLayer(P, true),
+      stage: () => pagesEl,
+      fmtBar: () => obBar(),
+      W: () => P.w, H: () => P.h, k,
+      unit: Math.max(0.45, Math.min(1.2, P.w / 960)), pad: 5,
+      els: () => OB.els, setEls: (a) => { OB.els = a; },
+      theme: () => OB_TH,
+      snap: () => JSON.stringify(OB.els),
+      commit: (before) => obCommit(P, before),
+      surface: () => window.PDFSTIFT_DECK.layerNode(OB.els, P.w, P.h, k(), OB_TH),
+      rendered: () => { const l = obLayer(P, true); l.dataset.sig = ''; l.classList.toggle('ob-on', !!(OB.ed && (OB.ed.sel.length || OB.ed.edit))); },
+      placing: (on) => document.body.classList.toggle('ob-placing', !!on),
+      pickImage: () => obPickImage(),
+      center: () => obCenter(P),
+      alignWord: true, passThrough: true,
+      editOnFirstClick: (e) => !!e && e.t === 'text',
+      copied: (list) => { OB.clip = list; },
+      fmtShown: (on) => obBarPlace(on),
+      fmtExtra: () => `<span class="dk-sep"></span><button type="button" class="dk-fb wide" data-f="x:front" title="Nach vorne">Vorne</button><button type="button" class="dk-fb wide" data-f="x:back" title="Nach hinten">Hinten</button><button type="button" class="dk-fb wide" data-f="x:align" title="Ausrichten">Ausrichten</button><button type="button" class="dk-fb wide" data-f="x:dup" title="Duplizieren (Strg+D)">Duplizieren</button><button type="button" class="dk-fb wide ob-del" data-f="x:del" title="Löschen (Entf)">Löschen</button>`,
+      fmtAct: (a) => { if (OB.ed) OB.ed.act(a, obBar().querySelector(`[data-f="x:${a}"]`)); },
+    };
+  }
+  function obActivate(P) {
+    if (OB.P === P && OB.ed) return OB.ed;
+    obDeactivate();
+    const DK = window.PDFSTIFT_DECK;
+    if (!DK || !P) return null;
+    const list = obStrokes(P.i);
+    OB.P = P;
+    OB.els = list.map((s) => obClone(s.e));
+    OB.sid = new Map(list.map((s) => [s.e.id, s.id]));
+    OB.ed = DK.makeEditor(obHost(P));
+    OB.ed.clip = OB.clip;
+    return OB.ed;
+  }
+  function obDeactivate() {
+    if (!OB.ed) return;
+    const P = OB.P, ed = OB.ed;
+    ed.endEdit();
+    ed.insert = null;
+    OB.ed = null; OB.P = null;
+    const bar = obBar(); bar.hidden = true; bar.innerHTML = ''; obBarPlace(false);
+    document.body.classList.remove('ob-placing');
+    if (P && V.pages[P.i] === P) {
+      const l = obLayer(P, false);
+      if (l) { l.classList.remove('ob-on'); l.dataset.sig = ''; }
+      obRender(P);
+    }
+  }
+  // Änderungen als Notizen speichern: geänderte Objekte ersetzen (neue ID), gelöschte entfernen – mit Rückgängig
+  function obCommit(P, before) {
+    if (!V.doc || !V.path) return;
+    let old = [];
+    try { old = JSON.parse(before); } catch (e) { /* */ }
+    const oldMap = new Map(old.map((e) => [e.id, e]));
+    const del = [], add = [];
+    const now = new Set(OB.els.map((e) => e.id));
+    OB.els.forEach((e, i) => {
+      const sid = OB.sid.get(e.id);
+      const s0 = sid && V.doc.strokes.get(sid);
+      const prev = oldMap.get(e.id);
+      if (s0 && prev && JSON.stringify(prev) === JSON.stringify(e) && (s0.zi || 0) === i) return;
+      if (s0) del.push(s0);
+      const st = { id: uid(), p: P.i, t: 'ob', sn: 1, zi: i, c: '#1A1A1A', pts: [r2(e.x), r2(e.y)], e: obClone(e) };
+      add.push(st);
+      OB.sid.set(e.id, st.id);
+    });
+    for (const id of oldMap.keys()) {
+      if (now.has(id)) continue;
+      const s0 = V.doc.strokes.get(OB.sid.get(id));
+      if (s0) del.push(s0);
+      OB.sid.delete(id);
+    }
+    const acts = [];
+    if (del.length) { opDel(V.path, del.map((s) => s.id)); acts.push({ t: 'del', strokes: del }); }
+    if (add.length) { opAdd(V.path, add); acts.push({ t: 'add', strokes: add }); }
+    if (acts.length) pushHistory(acts.length === 1 ? acts[0] : { t: 'multi', acts });
+    P.obEls = OB.els;
+  }
+  function obBar() {
+    if (!OB.bar) {
+      OB.bar = document.createElement('div');
+      OB.bar.className = 'dk-fmt ob-fmt';
+      OB.bar.hidden = true;
+      document.body.appendChild(OB.bar);
+    }
+    return OB.bar;
+  }
+  function obBarPlace(on) {
+    const bar = obBar();
+    document.body.classList.toggle('ob-fmt-on', !!on);
+    if (!on) return;
+    const r = viewer.getBoundingClientRect();
+    bar.style.left = Math.max(4, r.left + 8) + 'px';
+    bar.style.top = Math.max(4, r.top + 6) + 'px';
+    bar.style.maxWidth = Math.max(280, r.width - 16) + 'px';
+  }
+  function obCenter(P) {
+    const r = P.el.getBoundingClientRect(), vr = viewer.getBoundingClientRect(), k = (P.cssW || 1) / P.w;
+    const cx = (Math.max(r.left, vr.left) + Math.min(r.right, vr.right)) / 2, cy = (Math.max(r.top, vr.top) + Math.min(r.bottom, vr.bottom)) / 2;
+    return [clamp((cx - r.left) / k, 0, P.w), clamp((cy - r.top) / k, 0, P.h)];
+  }
+  function obPage() { return V.pages[currentPageIndex()] || V.pages[0]; }
+  function obPickImage() {
+    if (!OB.file) {
+      OB.file = document.createElement('input');
+      OB.file.type = 'file'; OB.file.accept = 'image/*'; OB.file.hidden = true;
+      OB.file.onchange = () => { const f = OB.file.files[0]; OB.file.value = ''; if (f) obAddImage(f); };
+      document.body.appendChild(OB.file);
+    }
+    OB.file.click();
+  }
+  async function obAddImage(f) {
+    const P = (OB.ed && OB.P) || obPage();
+    if (!P) return;
+    await ensureDeck();
+    const ed = obActivate(P);
+    if (ed) ed.addImage(f);
+  }
+  function obPlacing(kind) {
+    OB.insert = kind;
+    document.body.classList.toggle('ob-placing', !!kind);
+  }
+  // Menü „Einfügen“ (Werkzeugleiste, Rechtsklick)
+  async function obInsertMenu(x, y) {
+    if (!V.doc || V.board || V.deck) { toast('Bitte zuerst eine PDF öffnen.'); return; }
+    let DK;
+    try { DK = await ensureDeck(); } catch (e) { toast(e.message); return; }
+    const place = (kind, msg) => () => { if (OB.ed) OB.ed.endEdit(); obPlacing(kind); toast(msg, 4000); };
+    const shapes = [['rect', 'Rechteck'], ['round', 'Abgerundetes Rechteck'], ['ellipse', 'Kreis / Ellipse'], ['tri', 'Dreieck'], ['arrowR', 'Blockpfeil'], ['line', 'Linie'], ['arrow', 'Pfeil']];
+    DK.popMenu(x, y, [
+      ['text', 'Textfeld (formatiert)', place('text', 'Auf die Seite klicken, wo der Text hin soll (Esc = abbrechen).')],
+      ['shape', 'Form …', () => DK.popMenu(x, y, shapes.map(([id, l]) => [id, l, place('shape:' + id, 'Auf die Seite klicken, wo die Form hin soll (Esc = abbrechen).')]))],
+      ['img', 'Bild …', () => obPickImage()],
+      ['table', 'Tabelle …', async () => { const P = obPage(); if (!P) return; const ed = obActivate(P); if (ed) ed.addTable(); }],
+    ]);
+  }
+  // Treffer auf einer Seite (oberstes Objekt zuerst, auch gedreht)
+  function obHit(P, x, y) {
+    const list = OB.ed && OB.P === P ? OB.els : P.obEls || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const e = list[i];
+      const cx = e.x + e.w / 2, cy = e.y + e.h / 2, a = -(e.r || 0) * Math.PI / 180;
+      const lx = (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), ly = (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a);
+      const t = (e.t === 'shape' && (e.k === 'line' || e.k === 'arrow') ? 6 : 2) / ((P.cssW || 1) / P.w);
+      if (Math.abs(lx) <= e.w / 2 + t && Math.abs(ly) <= e.h / 2 + t) return e;
+    }
+    return null;
+  }
+  function obLocal(P, e) {
+    const r = P.el.getBoundingClientRect(), k = (P.cssW || 1) / P.w;
+    return [(e.clientX - r.left) / k, (e.clientY - r.top) / k];
+  }
+  // Zeiger auf einer Seite: true = vom Objekt-Editor übernommen
+  function obDown(e) {
+    if (!V.doc || V.board || V.deck || editor || cur || pinch.active || (e.pointerType === 'touch' && touches.size > 1)) return false;
+    const pe = e.target.closest('.page');
+    const P = pe && V.pages[+pe.dataset.i];
+    if (OB.insert) {
+      if (!P || e.button > 0) return false;
+      e.preventDefault();
+      const kind = OB.insert;
+      obPlacing(null);
+      const ed = obActivate(P);
+      if (!ed) return true;
+      const [x, y] = obLocal(P, e);
+      ed.insertAt(kind, x, y);
+      return true;
+    }
+    if (!P) return false;
+    // Griffe und Text des ausgewählten Objekts
+    if (OB.ed && OB.P === P && e.target.closest('.ob-layer')) return OB.ed.down(e) !== false;
+    const tool = S.tool;
+    const allowed = tool !== 'er' && tool !== 'la' && tool !== 'lp' && (e.pointerType === 'mouse' || tool === 'sel' || tool === 'hand');
+    const h = allowed && e.button === 0 && window.PDFSTIFT_DECK ? obHit(P, ...obLocal(P, e)) : null;
+    if (!h) {
+      if (OB.ed && (OB.ed.sel.length || OB.ed.edit)) { obDeactivate(); return e.pointerType === 'mouse' && tool !== 'hand' && tool !== 'sel'; }
+      if (OB.ed) obDeactivate();
+      return false;
+    }
+    const ed = obActivate(P);
+    return !!ed && ed.down(e, h.id) !== false;
+  }
+  // Mauszeiger über einem Objekt: Verschieben-Zeiger
+  pagesEl.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse' || e.buttons || !V.doc || V.board) return;
+    const pe = e.target.closest('.page');
+    const P = pe && V.pages[+pe.dataset.i];
+    const on = !!(P && (P.obEls || []).length && !['er', 'la', 'lp'].includes(S.tool) && obHit(P, ...obLocal(P, e)));
+    pagesEl.classList.toggle('ob-hover', on);
+  });
+  pagesEl.addEventListener('dblclick', (e) => {
+    if (!OB.ed || !OB.P) return;
+    const pe = e.target.closest('.page');
+    if (!pe || V.pages[+pe.dataset.i] !== OB.P) return;
+    const h = obHit(OB.P, ...obLocal(OB.P, e));
+    if (h) { e.preventDefault(); e.stopPropagation(); OB.ed.startEdit(h.id, e); }
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (!OB.ed && !OB.insert) return;
+    if (document.querySelector('dialog[open]')) return;
+    if (OB.insert && e.key === 'Escape') { obPlacing(null); e.preventDefault(); e.stopImmediatePropagation(); return; }
+    if (!OB.ed || (e.target.closest && e.target.closest('input, textarea, select'))) return;
+    if (OB.ed.key(e) === true) e.stopImmediatePropagation();
+  }, true);
+  document.addEventListener('paste', (e) => {
+    if (!OB.ed || OB.ed.edit || !OB.clip || (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]'))) return;
+    const items = [...(e.clipboardData ? e.clipboardData.items : [])];
+    if (items.some((i) => i.type.startsWith('image/'))) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    OB.ed.clip = OB.clip;
+    OB.ed.pasteEls();
+  }, true);
+  window.addEventListener('resize', () => { if (document.body.classList.contains('ob-fmt-on')) obBarPlace(true); });
+
   function deckCore() {
     window.PDFSTIFT_CORE = window.PDFSTIFT_CORE || {
       API, VERSION, LANG, esc, ls, apiJson, toast, confirmDlg, askText, prepareImage, uploadImage, downloadBlob,
@@ -4671,7 +4956,7 @@
     document.title = docTitle(path) + ' – PDF-Stift';
     renderToolbar();
     try {
-      await deckCore();
+      await ensureDeck();
       if (V.path !== path) return;
       await window.PDFSTIFT_DECK.open(path, el);
     } catch (e) {
@@ -6382,7 +6667,7 @@
     }
     const ids = [];
     for (const s of V.doc.strokes.values()) {
-      if (s.p !== c.P.i) continue;
+      if (s.p !== c.P.i || s.t === 'ob') continue;
       if (s.t === 'pen' || s.t === 'hl') {
         let n = 0, inn = 0;
         for (let i = 0; i + 1 < s.pts.length; i += 3) { n++; if (pip(s.pts[i], s.pts[i + 1], poly)) inn++; }
@@ -6877,7 +7162,7 @@
       const R = rot && rot[np];
       if (R) {
         const p = s2.pts.slice(), h = R.h;
-        if (s2.t === 'tx') { for (let k = 0; k + 3 < p.length; k += 4) { const [x, y, w, hh] = [p[k], p[k + 1], p[k + 2], p[k + 3]]; [p[k], p[k + 1], p[k + 2], p[k + 3]] = [Math.round((h - y - hh) * 100) / 100, x, hh, w]; } } else if (s2.t === 'txt' || s2.t === 'img') { [p[0], p[1]] = [Math.round((h - p[1] - (s2.bh || 0)) * 100) / 100, p[0]]; } else if (s2.t === 'sh') { [p[0], p[1]] = rp(p[0], p[1], h); [p[2], p[3]] = rp(p[2], p[3], h); } else { for (let k = 0; k + 1 < p.length; k += 3) [p[k], p[k + 1]] = rp(p[k], p[k + 1], h); }
+        if (s2.t === 'tx') { for (let k = 0; k + 3 < p.length; k += 4) { const [x, y, w, hh] = [p[k], p[k + 1], p[k + 2], p[k + 3]]; [p[k], p[k + 1], p[k + 2], p[k + 3]] = [Math.round((h - y - hh) * 100) / 100, x, hh, w]; } } else if (s2.t === 'ob' && s2.e) { const e = { ...s2.e }; const ncx = h - (e.y + e.h / 2), ncy = e.x + e.w / 2; e.x = Math.round((ncx - e.w / 2) * 10) / 10; e.y = Math.round((ncy - e.h / 2) * 10) / 10; e.r = ((e.r || 0) + 90) % 360; s2.e = e; p[0] = e.x; p[1] = e.y; } else if (s2.t === 'txt' || s2.t === 'img') { [p[0], p[1]] = [Math.round((h - p[1] - (s2.bh || 0)) * 100) / 100, p[0]]; } else if (s2.t === 'sh') { [p[0], p[1]] = rp(p[0], p[1], h); [p[2], p[3]] = rp(p[2], p[3], h); } else { for (let k = 0; k + 1 < p.length; k += 3) [p[k], p[k + 1]] = rp(p[k], p[k + 1], h); }
         s2.pts = p;
       }
       d.strokes.set(id, s2);
@@ -10265,7 +10550,7 @@
   $('#undo').onclick = undo;
   $('#redo').onclick = redo;
   document.addEventListener('keydown', (e) => {
-    if (!V.path || e.target.matches('input')) return;
+    if (!V.path || (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]'))) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
   });
@@ -10443,7 +10728,8 @@
     toolsIn = true;
     try { Object.assign(S, { tool: t.tool, color: { ...S.color, ...t.color }, wi: { ...S.wi, ...t.wi }, txKind: t.txKind, shKind: t.shKind, ttSize: t.ttSize, favs: t.favs || S.favs, finger: !!t.finger }); renderToolbar(); } finally { toolsIn = false; }
   }
-  document.querySelectorAll('.tool').forEach((b) => { b.onclick = () => { S.tool = b.dataset.tool; persistTools(); renderToolbar(); }; });
+  document.querySelectorAll('.tool[data-tool]').forEach((b) => { b.onclick = () => { S.tool = b.dataset.tool; persistTools(); renderToolbar(); }; });
+  $('#obIns').onclick = (e) => { const r = e.currentTarget.getBoundingClientRect(); obInsertMenu(r.left, r.bottom + 6); };
   document.querySelectorAll('#txKinds .kind').forEach((b) => { b.onclick = () => { S.txKind = b.dataset.k; persistTools(); renderToolbar(); }; });
   document.querySelectorAll('#shKinds .kind').forEach((b) => { b.onclick = () => { S.shKind = b.dataset.k; persistTools(); renderToolbar(); }; });
   document.querySelectorAll('#ttSizes .kind').forEach((b) => { b.onclick = () => { S.ttSize = +b.dataset.fs; persistTools(); renderToolbar(); }; });
@@ -10527,12 +10813,12 @@
   }
   async function buildAnnotated(snap) {
     const { PDFDocument, rgb, LineCapStyle, BlendMode, StandardFonts, degrees } = PDFLib;
-    let font = null;
+    let font = null, obPaint = null;
     const txtFonts = {};
     const out = await PDFDocument.load(await snap.bytes, { ignoreEncryption: true });
     const pages = out.getPages();
     const hex = (h) => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
-    const strokes = [...snap.strokes].sort((a, b) => rank(a) - rank(b));
+    const strokes = [...snap.strokes].sort((a, b) => rank(a) - rank(b) || (a.zi || 0) - (b.zi || 0));
     // Seiten, die bei großen PDFs noch nicht gelesen sind
     for (const p of new Set(strokes.map((s) => s.p))) {
       const v = snap.vps[p];
@@ -10549,6 +10835,20 @@
           clipped.add(s.p);
           const [cx, cy, cw, ch] = snap.clips[s.p];
           pg.pushOperators(PDFLib.pushGraphicsState(), PDFLib.rectangle(cx, cy, cw, ch), PDFLib.clip(), PDFLib.endPath());
+        }
+        if (s.t === 'ob') {
+          // Objekt wie auf der Folie zeichnen: Ursprung oben links der Seitenansicht, y nach unten
+          if (!s.e) continue;
+          try {
+            const DK = await ensureDeck();
+            obPaint = obPaint || await DK.painter(out, OB_TH, strokes.filter((x) => x.t === 'ob' && x.e).map((x) => x.e));
+            const [a, b, c, d, e, f] = P.vp.transform, det = a * d - b * c;
+            const ia = d / det, ib = -b / det, ic = -c / det, id = a / det, ie = (c * f - d * e) / det, iff = (b * e - a * f) / det;
+            pg.pushOperators(PDFLib.pushGraphicsState(), PDFLib.concatTransformationMatrix(ia, ib, -ic, -id, ie, iff));
+            await obPaint.drawEl(pg, s.e, 1);
+            pg.pushOperators(PDFLib.popGraphicsState());
+          } catch (e) { console.warn('Objekt', e); }
+          continue;
         }
         if (s.t === 'sh') {
           for (const line of shapeLines(s)) {
@@ -10842,9 +11142,17 @@
   viewer.addEventListener('pointerdown', (e) => {
     if (V.board || e.pointerType === 'touch') return;
     const hand = (S.tool === 'hand' && e.button === 0) || e.button === 1 || (spaceHand && e.button === 0);
-    if (hand && e.target.closest('.page, #pages') && !(e.button === 0 && (noteUnder(e) || snipUnder(e)))) { e.stopPropagation(); startPan(e); }
+    if (hand && e.target.closest('.page, #pages') && !(e.button === 0 && (noteUnder(e) || snipUnder(e) || obUnder(e)))) { e.stopPropagation(); startPan(e); }
   }, true);
   // Textbaustein unter dem Zeiger (dann nicht verschieben, sondern den Baustein anfassen)
+  // Objekt (oder Griff des ausgewählten Objekts) unter dem Zeiger: die Hand verschiebt dann das Objekt statt der Seite
+  function obUnder(e) {
+    if (OB.insert || (e.target.closest && e.target.closest('.ob-layer'))) return true;
+    const pageEl = e.target.closest && e.target.closest('.page');
+    const P = pageEl && V.pages[+pageEl.dataset.i];
+    if (!P || !V.doc || !window.PDFSTIFT_DECK) return false;
+    return !!obHit(P, ...obLocal(P, e));
+  }
   function snipUnder(e) {
     const pageEl = e.target.closest && e.target.closest('.page');
     const P = pageEl && V.pages[+pageEl.dataset.i];
@@ -10924,7 +11232,10 @@
     if (hasSel) {
       items.push(['copy', 'Kopieren', 'Strg+C'], ['hl', 'Hervorheben'], ['ul', 'Unterstreichen'], ['st', 'Durchstreichen'], ['find', 'In der PDF suchen'], ['-']);
     }
-    items.push(['tt', 'Textfeld hier einfügen'], ['-'],
+    const oxy = obLocal(P, e);
+    const oh = window.PDFSTIFT_DECK && !V.board ? obHit(P, ...oxy) : null;
+    if (oh) items.push(['obedit', oh.t === 'img' ? 'Objekt auswählen' : 'Text im Objekt bearbeiten'], ['obdup', 'Objekt duplizieren', 'Strg+D'], ['obfront', 'Nach vorne'], ['obback', 'Nach hinten'], ['obdel', 'Objekt löschen', 'Entf'], ['-']);
+    items.push(['tt', 'Textfeld hier einfügen'], ['obtext', 'Formatiertes Textfeld hier (wie PowerPoint)'], ['obshape', 'Form hier einfügen …'], ['obimg', 'Bild einfügen …'], ['obtab', 'Tabelle einfügen …'], ['-'],
       ['sel', 'Werkzeug: Text auswählen'], ['hand', 'Werkzeug: Hand'], ['pen', 'Werkzeug: Stift'], ['-'],
       ['fitw', 'Seitenbreite', 'Strg+2'], ['fitp', 'Ganze Seite', 'Strg+0'], ['two', viewMode() === 'single' ? 'Zwei Seiten nebeneinander' : 'Einzelseiten'], ['vrot', 'Ansicht drehen', 'Strg+Umschalt++'], ['-'],
       ['rot', 'Diese Seite drehen'], ['tonb', 'Ins Notizbuch übernehmen …'], ...(SPLIT.frame && SPLIT.path && isBoard(SPLIT.path) ? [['tonbr', 'Rechts auf die Notizseite legen']] : []), ['print', 'Drucken …', 'Strg+P'], ['save', 'PDF mit Notizen speichern …', 'Strg+S']);
@@ -10953,7 +11264,27 @@
       if (a === 'tonbr') slideToPane(P.i);
       if (a === 'print') printDialog();
       if (a === 'save') exportPdf();
+      if (a.startsWith('ob')) obCtx(a, P, oxy, oh, ev);
     };
+  }
+  async function obCtx(a, P, [x, y], oh, ev) {
+    let DK;
+    try { DK = await ensureDeck(); } catch (er) { toast(er.message); return; }
+    const ed = obActivate(P);
+    if (!ed) return;
+    if (oh && ['obedit', 'obdup', 'obfront', 'obback', 'obdel'].includes(a)) {
+      ed.select([oh.id]);
+      if (a === 'obedit') { if (oh.t !== 'img') ed.startEdit(oh.id, null); return; }
+      ed.act({ obdup: 'dup', obfront: 'front', obback: 'back', obdel: 'del' }[a]);
+      return;
+    }
+    if (a === 'obtext') ed.insertAt('text', x, y);
+    if (a === 'obshape') {
+      const shapes = [['rect', 'Rechteck'], ['round', 'Abgerundetes Rechteck'], ['ellipse', 'Kreis / Ellipse'], ['tri', 'Dreieck'], ['arrowR', 'Blockpfeil'], ['line', 'Linie'], ['arrow', 'Pfeil']];
+      DK.popMenu(ev.clientX, ev.clientY, shapes.map(([id, l]) => [id, l, () => { const e2 = obActivate(P); if (e2) e2.insertAt('shape:' + id, x, y); }]));
+    }
+    if (a === 'obimg') obPickImage();
+    if (a === 'obtab') ed.addTable();
   }
   pagesEl.addEventListener('contextmenu', (e) => {
     if (V.board || (e.pointerType || '') === 'pen' || penDown) return;
