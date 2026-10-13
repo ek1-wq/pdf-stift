@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.67.4';
+  const VERSION = '1.67.5';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -2640,7 +2640,8 @@
         const r0 = P0.el.getBoundingClientRect(), sc0 = P0.cssW / P0.w;
         const hx = (isMirror() ? r0.right - e.clientX : e.clientX - r0.left) / sc0, hy = (e.clientY - r0.top) / sc0;
         const hit = textAt(P0, hx, hy);
-        if (hit && hit.sn) {
+        // Textbausteine immer; andere Textfelder per Maus bzw. mit Pfeil/Hand (mit dem Stift darf man darüber schreiben)
+        if (hit && (hit.sn || e.pointerType === 'mouse' || S.tool === 'sel' || S.tool === 'hand')) {
           e.preventDefault();
           ttDown = { id: e.pointerId, x: e.clientX, y: e.clientY, el: pe0, hit, P: P0 };
           try { pagesEl.setPointerCapture(e.pointerId); } catch (er) { /* */ }
@@ -10727,7 +10728,7 @@
     if (!P || !V.doc) return null;
     const r = P.el.getBoundingClientRect(), sc = P.cssW / P.w;
     const t = textAt(P, (isMirror() ? r.right - e.clientX : e.clientX - r.left) / sc, (e.clientY - r.top) / sc);
-    return t && t.sn ? t : null;
+    return t || null;
   }
   function noteUnder(e) {
     const pageEl = e.target.closest && e.target.closest('.page');
