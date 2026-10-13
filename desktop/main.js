@@ -15,7 +15,6 @@ const PART = 'persist:pdfstift';
 const DROP0 = LANG === 'en' ? 'Documents' : 'Dokumente';
 // Anfragen an PDF-Stift aus dem Programm selbst (in der freien Ausgabe mit dem Schlüssel des internen Servers)
 const sfetch = (url, opt = {}) => fetch(url, LOCAL ? { ...opt, headers: { ...(opt.headers || {}), 'X-PDFStift-Local': local.KEY } } : opt);
-const helpName = () => (LANG === 'en' ? 'hilfe.en.html' : 'hilfe.html');
 let win = null;
 let ready = false;
 const waiting = [];
@@ -112,15 +111,12 @@ async function start() {
 }
 
 // ---------------------------------------------------------------- Hilfe: Kurzanleitung und „Über“ mit allen Versionsnummern
-let helpWin = null;
+// die Kurzanleitung ist eine PDF in der Bibliothek (Ordner „Hilfe“) – die Seite legt sie dort ab und öffnet sie
 function openHelp() {
-  if (helpWin && !helpWin.isDestroyed()) { helpWin.focus(); return; }
-  helpWin = new BrowserWindow({ width: 1180, height: 900, title: 'PDF-Stift – Kurzanleitung', icon: path.join(__dirname, 'icon.png'), autoHideMenuBar: true, webPreferences: { partition: PART } });
-  helpWin.setMenu(null);
-  // neueste Fassung vom Server; ohne Internet die mitgelieferte
-  helpWin.webContents.on('did-fail-load', (_e, code, _d, url, isMain) => { if (isMain && code !== -3 && url.startsWith(BASE)) helpWin.loadFile(path.join(__dirname, helpName()), { query: LOCAL ? { ed: 'local' } : {} }); });
-  helpWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  helpWin.loadURL(BASE + helpName() + (LOCAL ? '?ed=local' : ''));
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+  win.webContents.send('cmd', 'help');
 }
 async function about() {
   if (LOCAL) {

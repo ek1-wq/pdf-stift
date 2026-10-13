@@ -3172,5 +3172,8 @@
   "<a:path path=\"circle\"><a:fillToRect l=\"50000\" t=\"50000\" r=\"50000\" b=\"50000\"/></a:path>": null,
   "\" scaled=\"0\"/>": null,
   "PowerPoint-Dateien als Präsentationen öffnen …": "Open PowerPoint files as presentations …",
-  "Ordner mit PowerPoint-Dateien übernehmen …": "Import folder of PowerPoint files …"
+  "Ordner mit PowerPoint-Dateien übernehmen …": "Import folder of PowerPoint files …",
+  "Die Kurzanleitung lässt sich gerade nicht öffnen": "The quick guide cannot be opened right now",
+  "Die Kurzanleitung fehlt im Programmpaket.": "The quick guide is missing from the program package.",
+  "Die Kurzanleitung konnte nicht in die Bibliothek gelegt werden.": "The quick guide could not be added to the library."
 }

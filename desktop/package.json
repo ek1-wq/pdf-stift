@@ -1,7 +1,7 @@
 {
   "name": "pdf-stift",
   "productName": "PDF-Stift",
-  "version": "1.2.32",
+  "version": "1.2.33",
   "description": "PDF-Stift – annotate PDFs with pen and keyboard. Free software (GPL-3.0).",
   "author": {
     "name": "PDF-Stift contributors",
@@ -28,9 +28,7 @@
       "preload.js",
       "offline.html",
       "icon.png",
-      "ocr.ps1",
-      "hilfe.html",
-      "hilfe.en.html"
+      "ocr.ps1"
     ],
     "win": {
       "target": [

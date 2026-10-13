@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.80.3';
+  const VERSION = '1.81.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -11854,6 +11854,7 @@
     switch (c) {
       case 'upload': showLibrary(); $('#btnUpload').click(); break;
       case 'library': showLibrary(); break;
+      case 'help': openHelp(); break;
       case 'save': if (V.board) boardPdfDialog('save'); else if (needDoc()) exportPdf(); break;
       case 'original': if (needDoc()) downloadOriginal(V.path); break;
       case 'print': if (V.board) boardPdfDialog('print'); else if (needDoc()) printDialog(); break;
@@ -12107,6 +12108,7 @@
     document.documentElement.style.setProperty('--spw', spW() + 'px');
   }
   window.PDFSTIFT_MAIN = {
+    help: () => openHelp(),
     paneActive: () => splitAct('r'),
     paneTools: (t) => toolsTake(t),
     paneUndo: (u, r) => { SPLIT.undo = [u, r]; if (SPLIT.act === 'r') updateUndo(); },
@@ -12955,7 +12957,17 @@
   }
 
   // ---- Hilfe: Kurzanleitung und Versionsnummern
-  function openHelp() { track('tool', 'Kurzanleitung'); window.open((LANG === 'en' ? 'hilfe.en.html' : 'hilfe.html') + (LOCAL ? '?ed=local' : ''), '_blank'); }
+  // Kurzanleitung: liegt als PDF in der Bibliothek (Ordner „Hilfe“) und öffnet sich wie jedes andere Dokument
+  async function openHelp() {
+    track('tool', 'Kurzanleitung');
+    if (EMBED) { try { window.parent.PDFSTIFT_MAIN.help(); } catch (e) { /* */ } return; }
+    try {
+      const r = await apiJson('help');
+      if (!r || !r.path) throw new Error('');
+      if (!fileMeta(r.path)) await loadLibrary();
+      openDoc(r.path);
+    } catch (e) { toast('Die Kurzanleitung lässt sich gerade nicht öffnen' + (e && e.message ? ': ' + e.message : '.')); }
+  }
   async function aboutDlg() {
     if (LOCAL) {
       let win = '';
