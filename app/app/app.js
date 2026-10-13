@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.72.0';
+  const VERSION = '1.73.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -4717,6 +4717,7 @@
       copied: (list) => { OB.clip = list; },
       onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
       replaceAll: (f, r) => obReplaceAll(f, r),
+      onInsertHtml: (html) => { const P = (OB.ed && OB.P) || obPage(); const ed = P && obActivate(P); if (ed) ed.insertHtmlAt(html); },
     };
   }
   function obActivate(P) {
@@ -4799,6 +4800,7 @@
       placing: (on, kind) => obPlacing(on ? kind : null), pickImage: () => obPickImage(), alignWord: true,
       onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
       replaceAll: (f, r) => obReplaceAll(f, r),
+      onInsertHtml: (html) => { const P = (OB.ed && OB.P) || obPage(); const ed = P && obActivate(P); if (ed) ed.insertHtmlAt(html); },
     });
     return OB.idle;
   }
@@ -4834,7 +4836,11 @@
   function obIns(kind) {
     if (!V.doc || V.board) return;
     if (kind === 'img') { obPickImage(); return; }
-    if (kind === 'table') { const P = (OB.ed && OB.P) || obPage(); const ed = P && obActivate(P); if (ed) ed.addTable(); return; }
+    if (kind === 'table' || kind === 'chart' || kind === 'crop') {
+      const P = (OB.ed && OB.P) || obPage(); const ed = P && obActivate(P);
+      if (ed) (kind === 'table' ? ed.addTable() : kind === 'chart' ? ed.addChart() : ed.addCrop());
+      return;
+    }
     if (OB.insert === kind) { obPlacing(null); return; }
     if (OB.ed) OB.ed.endEdit();
     obPlacing(kind);
@@ -4957,6 +4963,14 @@
         if (!r.ok) throw new Error(j.error || 'Fehler ' + r.status);
         loadLibrary();
         return j;
+      },
+      // eine PDF wählen (Bibliothek oder Datei vom Gerät) und ihre Bytes liefern
+      pickPdf: async (title) => {
+        const r = await pickPdfs({ title, text: 'Eine PDF antippen (oder unten eine Datei vom Gerät wählen).', go: 'Weiter' });
+        if (!r || !r.files.length) return null;
+        const it = r.files[0];
+        if (typeof it === 'string') return { name: stem(it), bytes: await getPdfBytes(it) };
+        return { name: it.file.name.replace(/\.[^.]+$/, ''), bytes: new Uint8Array(await it.file.arrayBuffer()) };
       },
       // Schriftliste geladen: Objekte auf den Seiten neu zeichnen (richtige Schrift)
       fontsReady: () => { for (const P of V.pages || []) { const l = P.el && P.el.querySelector(':scope > .ob-layer'); if (l) { l.dataset.sig = ''; obRender(P); } } },
@@ -10880,7 +10894,7 @@
             const [a, b, c, d, e, f] = P.vp.transform, det = a * d - b * c;
             const ia = d / det, ib = -b / det, ic = -c / det, id = a / det, ie = (c * f - d * e) / det, iff = (b * e - a * f) / det;
             pg.pushOperators(PDFLib.pushGraphicsState(), PDFLib.concatTransformationMatrix(ia, ib, -ic, -id, ie, iff));
-            await obPaint.drawEl(pg, s.e, 1);
+            await obPaint.drawEl(pg, s.e, 1, [ia, ib, -ic, -id, ie, iff]);
             pg.pushOperators(PDFLib.popGraphicsState());
           } catch (e) { console.warn('Objekt', e); }
           continue;

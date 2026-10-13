@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.72.0';
+const PDFSTIFT_VERSION = '1.73.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -242,7 +242,7 @@ function stroke_link(array $s): array
 /** Inhalt eines Objekts prüfen (nur bekannte Felder, Längen begrenzt; Text wird beim Anzeigen zusätzlich gesäubert) */
 function stroke_obj($e): ?array
 {
-    if (!is_array($e) || !in_array($e['t'] ?? '', ['text', 'img', 'shape', 'table'], true)) {
+    if (!is_array($e) || !in_array($e['t'] ?? '', ['text', 'img', 'shape', 'table', 'chart'], true)) {
         return null;
     }
     $t = $e['t'];
@@ -280,6 +280,16 @@ function stroke_obj($e): ?array
     }
     if (isset($e['html']) && is_string($e['html'])) {
         $o['html'] = mb_substr($e['html'], 0, 50000);
+    }
+    if ($t === 'chart') {
+        $o['ct'] = in_array($e['ct'] ?? '', ['col', 'bar', 'line', 'pie'], true) ? $e['ct'] : 'col';
+        $o['labels'] = array_map(static fn ($l) => mb_substr(is_scalar($l) ? (string) $l : '', 0, 200), array_slice(array_values((array) ($e['labels'] ?? [])), 0, 60));
+        $o['series'] = [];
+        foreach (array_slice((array) ($e['series'] ?? []), 0, 12) as $sr) {
+            $o['series'][] = ['n' => mb_substr((string) ($sr['n'] ?? ''), 0, 200), 'v' => array_map(static fn ($v) => is_numeric($v) ? round((float) $v, 6) : 0, array_slice(array_values((array) ($sr['v'] ?? [])), 0, 60))];
+        }
+        $o['title'] = mb_substr((string) ($e['title'] ?? ''), 0, 300);
+        $o['legend'] = empty($e['legend']) ? 0 : 1;
     }
     if ($t === 'shape') {
         $o['k'] = preg_match('/^[A-Za-z0-9]{2,12}$/', (string) ($e['k'] ?? '')) ? (string) $e['k'] : 'rect';

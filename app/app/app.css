@@ -1388,3 +1388,27 @@ body.ob-placing .page { cursor: crosshair !important; }
 .dk-tx s, .dk-cell s { text-decoration: line-through; }
 .dk-tx sup, .dk-tx sub, .dk-cell sup, .dk-cell sub { font-size: .65em; line-height: 0; }
 .dk-fmt.rb-band { flex-direction: column; align-items: stretch; }
+/* Diagramme, Sonderzeichen, Dialoge der Präsentationen */
+.dk-chart svg text { font-family: inherit; }
+.dk-hf { pointer-events: none !important; }
+.dk-tx a, .dk-cell a { color: #1F4FD6; text-decoration: underline; }
+.dk-sym { width: 360px; }
+.dk-sym button { width: 30px; height: 30px; font-size: 16px; }
+.dk-dlg { border: 1px solid var(--line); border-radius: 14px; padding: 0; background: var(--bar); color: var(--fg); max-width: min(980px, 96vw); box-shadow: var(--shadow); }
+.dk-dlg form { padding: 18px 20px 16px; }
+.dk-dlg h3 { margin: 0 0 12px; font-size: 17px; }
+.dk-dlg-body { display: flex; flex-direction: column; gap: 8px; max-height: 70vh; overflow: auto; }
+.dk-dlg-body label.chk { display: flex; gap: 8px; align-items: center; }
+.dk-dlg-body label.sub { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; margin-left: 26px; }
+.dk-dlg-body input:not([type=checkbox]), .dk-dlg-body select { height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; background: var(--desk); color: var(--fg); font: inherit; }
+.dk-dlg-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.ch-top { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.ch-top label { display: flex; gap: 6px; align-items: center; }
+.ch-grid table { border-collapse: collapse; }
+.ch-grid th, .ch-grid td { padding: 2px; }
+.ch-grid input { width: 110px; height: 28px !important; }
+.ch-grid th input { font-weight: 600; }
+.crop-nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.crop-box { position: relative; display: inline-block; cursor: crosshair; user-select: none; touch-action: none; border: 1px solid var(--line); }
+.crop-box canvas { display: block; max-width: 100%; }
+.crop-sel { position: absolute; border: 2px dashed #1F4FD6; background: rgba(31, 79, 214, .12); pointer-events: none; }

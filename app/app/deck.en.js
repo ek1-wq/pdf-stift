@@ -155,6 +155,10 @@
         else if (tag === 'u') el = document.createElement('u');
         else if (tag === 's' || tag === 'strike' || tag === 'del') el = document.createElement('s');
         else if (tag === 'sup' || tag === 'sub') el = document.createElement(tag);
+        else if (tag === 'a') {
+          const href = (n.getAttribute('href') || '').trim();
+          if (/^(https?:\/\/|mailto:)/i.test(href)) { el = document.createElement('a'); el.setAttribute('href', href); el.setAttribute('target', '_blank'); el.setAttribute('rel', 'noopener'); }
+        }
         else if (tag === 'span' || tag === 'font') {
           const c = st.color || n.getAttribute('color');
           const bg = st.backgroundColor && !/transparent|rgba\(0, 0, 0, 0\)/.test(st.backgroundColor) ? st.backgroundColor : '';
@@ -280,6 +284,9 @@
         tx.innerHTML = clean(e.html);
         n.appendChild(tx);
       }
+    } else if (e.t === 'chart') {
+      n.innerHTML = chartSvg(e, th);
+      if (e.fill) n.style.background = e.fill;
     } else if (e.t === 'table') {
       const tb = document.createElement('table');
       tb.style.fontSize = (e.fs || 18) + 'px';
@@ -298,7 +305,19 @@
     sl.className = 'dk-slide';
     sl.style.cssText = `width:${W}px;height:${H}px;background:${s.bg || th.bg};font-family:${fontCss(th.font)};transform:scale(${scale});transform-origin:0 0`;
     for (const e of s.els) if (live || !isPh(e)) sl.appendChild(elNode(e, th));
+    for (const e of hfEls(D.deck ? D.deck.slides.indexOf(s) : -1)) { const n = elNode(e, th); n.classList.add('dk-hf'); sl.appendChild(n); }
     return sl;
+  }
+  // Kopf- und Fußzeile (Datum, Text, Foliennummer) als feste Textfelder
+  function hfEls(i) {
+    const hf = D.deck && D.deck.hf;
+    if (!hf || i < 0 || (hf.notFirst && i === 0)) return [];
+    const out = [];
+    const mk = (x, w, txt, al) => out.push({ id: 'hf' + x, t: 'text', x, y: H - 42, w, h: 32, fs: 14, c: '#868E96', pad: 4, va: 'm', html: `<div${al ? ` style="text-align: ${al};"` : ''}>${esc(txt)}</div>` });
+    if (hf.date) mk(40, 260, hf.dateText || new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }), '');
+    if (hf.foot) mk(300, 360, hf.foot, 'center');
+    if (hf.num) mk(660, 260, String(i + 1), 'right');
+    return out;
   }
   // Ebene mit Objekten (z. B. über einer PDF-Seite): w × h Einheiten, durchsichtig
   function layerNode(els, w, h, scale, th) {
@@ -352,6 +371,11 @@
     rowAdd: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M12 16.5v5M9.5 19h5"/>', rowDel: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M9.5 19h5"/>',
     colAdd: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5M19 9.5v5"/>', colDel: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5"/>',
     newslide: '<rect x="3.5" y="5" width="13" height="10" rx="1"/><path d="M19 13v6M16 16h6"/>', layout: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9h17M10 9v10.5"/>',
+    chart: '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="7"/><rect x="10.5" y="6" width="3" height="12"/><rect x="15.5" y="9" width="3" height="9"/>',
+    omega: '<path d="M5 19h4.5v-2.2A6.5 6.5 0 1 1 14.5 16.8V19H19"/>', crop: '<path d="M7 3v14h14"/><path d="M3 7h14v14"/>', link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    date: '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>', hf: '<rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M7 16.5h10M7 7h10" stroke-dasharray="2 1.5"/>',
+    num: '<rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M14 17h3M15.5 14v3"/>', legend: '<rect x="4" y="5" width="4" height="4"/><path d="M11 7h9"/><rect x="4" y="11" width="4" height="4"/><path d="M11 13h9"/>',
+    slidesPdf: '<path d="M7 3h7l4 4v6"/><path d="M14 3v4h4"/><rect x="3.5" y="13" width="13" height="8" rx="1"/><path d="M19 15v6M16 18h6"/>',
     painter: '<rect x="4" y="3.5" width="14" height="6" rx="1.5"/><path d="M18 6.5h2v5h-8.5v3"/><rect x="10" y="14.5" width="3" height="6.5" rx="1"/>',
     strike: '<path d="M16.5 7.5c-.8-1.6-2.4-2.5-4.5-2.5-2.6 0-4.5 1.4-4.5 3.4 0 1.5 1 2.4 3 3"/><path d="M4 12h16"/><path d="M8 16.5c.6 1.6 2.2 2.5 4.3 2.5 2.7 0 4.7-1.4 4.7-3.5 0-.8-.3-1.5-.9-2"/>',
     sup: '<path d="M4 8l8 11M12 8l-8 11"/><path d="M15.5 5.5c.4-1 1.2-1.5 2.2-1.5 1.2 0 2 .7 2 1.7 0 1.6-2.4 2.3-4.2 4.3h4.4"/>',
@@ -370,6 +394,256 @@
       `<button type="button" class="rb-big" data-ins="img" title="Insert image"><svg viewBox="0 0 24 24">${ICON.img}</svg><span>Bild</span></button>` +
       `<button type="button" class="rb-big" data-ins="table" title="Insert table"><svg viewBox="0 0 24 24">${ICON.table}</svg><span>Tabelle</span></button>` +
       `<span class="rb-cap">Insert</span></div>`;
+  }
+
+  // ================================================================== Diagramme (Säulen, Balken, Linien, Kreis)
+  const CHART_TYPES = [['col', "Columns"], ['bar', "Bars"], ['line', "Lines"], ['pie', "Circle"]];
+  const chartColors = (th) => [th.accent, '#E8590C', '#1B8A3A', '#D6409F', '#0091FF', '#B8E62E', '#7048E8', '#868E96', '#D6262B', '#1F4FD6'];
+  const fmtNum = (v) => (Math.abs(v) >= 1000 || Number.isInteger(v) ? Math.round(v).toLocaleString('de-DE') : (+v.toFixed(2)).toLocaleString('de-DE'));
+  function niceTicks(min, max) {
+    if (min === max) { max = min + 1; }
+    const span = max - min, raw = span / 5, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+    const step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag;
+    const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step, out = [];
+    for (let v = lo; v <= hi + step / 2; v += step) out.push(+v.toFixed(10));
+    return out;
+  }
+  // Diagramm als einfache Zeichenbefehle (gleich für Bildschirm und PDF)
+  function chartPrims(e, th) {
+    const P = [], fs = e.fs || 14, w = e.w, h = e.h, col = chartColors(th), fg = th.fg, grid = '#D5D9E0';
+    const labels = e.labels || [], ser = (e.series || []).filter((s0) => s0 && Array.isArray(s0.v));
+    const tw = (t, z = fs) => String(t).length * z * 0.55;
+    let top = fs * 0.6, bottom = h - fs * 0.5;
+    if (e.title) { P.push({ k: 'text', x: w / 2, y: fs * 1.45, s: e.title, fs: fs * 1.25, a: 'middle', c: fg, b: 1 }); top = fs * 2.4; }
+    const legendItems = e.ct === 'pie' ? labels : ser.map((s0) => s0.n || '');
+    if (e.legend !== 0 && legendItems.length && (e.ct === 'pie' || ser.length > 1)) {
+      const items = legendItems.map((t, i) => ({ t: String(t), c: col[i % col.length], wd: fs * 1.6 + tw(t) }));
+      const total = items.reduce((a, it) => a + it.wd, 0);
+      let x = Math.max(fs * 0.5, (w - total) / 2);
+      const y = h - fs * 0.9;
+      for (const it of items) { P.push({ k: 'rect', x, y: y - fs * 0.75, w: fs * 0.8, h: fs * 0.8, fill: it.c }); P.push({ k: 'text', x: x + fs * 1.1, y, s: it.t, fs, a: 'start', c: fg }); x += it.wd; }
+      bottom = h - fs * 2.2;
+    }
+    if (e.ct === 'pie') {
+      const vals = (ser[0] ? ser[0].v : []).map((v) => Math.max(0, +v || 0));
+      const sum = vals.reduce((a, b) => a + b, 0) || 1;
+      const cx = w / 2, cy = (top + bottom) / 2, r = Math.max(4, Math.min(w * 0.45, (bottom - top) / 2));
+      let a0 = -Math.PI / 2;
+      vals.forEach((v, i) => {
+        const a1 = a0 + (v / sum) * Math.PI * 2;
+        if (v > 0) {
+          const big = a1 - a0 > Math.PI ? 1 : 0;
+          const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0), x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+          const d = v >= sum ? `M${cx - r} ${cy}A${r} ${r} 0 1 0 ${cx + r} ${cy}A${r} ${r} 0 1 0 ${cx - r} ${cy}Z` : `M${cx} ${cy}L${x0} ${y0}A${r} ${r} 0 ${big} 1 ${x1} ${y1}Z`;
+          P.push({ k: 'path', d, fill: col[i % col.length], stroke: '#FFFFFF', sw: 1.5 });
+          const am = (a0 + a1) / 2, pct = Math.round((v / sum) * 100);
+          if (pct >= 4) P.push({ k: 'text', x: cx + r * 0.62 * Math.cos(am), y: cy + r * 0.62 * Math.sin(am) + fs * 0.35, s: pct + ' %', fs, a: 'middle', c: '#FFFFFF', b: 1 });
+        }
+        a0 = a1;
+      });
+      return P;
+    }
+    const all = ser.flatMap((s0) => s0.v.map((v) => +v || 0));
+    const ticks = niceTicks(Math.min(0, ...all), Math.max(0, ...all, 1));
+    const lo = ticks[0], hi = ticks[ticks.length - 1];
+    const horiz = e.ct === 'bar';
+    const valW = Math.max(...ticks.map((t) => tw(fmtNum(t)))) + fs * 0.6;
+    const catW = Math.max(0, ...labels.map((t) => tw(t))) + fs * 0.6;
+    const L = horiz ? Math.min(w * 0.35, catW) : valW, B = bottom - (horiz ? fs * 1.5 : fs * 1.6), R = w - fs * 0.6, T = top;
+    const pw = Math.max(10, R - L), ph = Math.max(10, B - T);
+    const vpos = (v) => (horiz ? L + ((v - lo) / (hi - lo)) * pw : B - ((v - lo) / (hi - lo)) * ph);
+    // Gitter und Werte-Achse
+    for (const t of ticks) {
+      if (horiz) { const x = vpos(t); P.push({ k: 'line', x1: x, y1: T, x2: x, y2: B, c: grid, sw: 0.8 }); P.push({ k: 'text', x, y: B + fs * 1.2, s: fmtNum(t), fs: fs * 0.9, a: 'middle', c: fg }); }
+      else { const y = vpos(t); P.push({ k: 'line', x1: L, y1: y, x2: R, y2: y, c: grid, sw: 0.8 }); P.push({ k: 'text', x: L - fs * 0.4, y: y + fs * 0.32, s: fmtNum(t), fs: fs * 0.9, a: 'end', c: fg }); }
+    }
+    const n = Math.max(1, labels.length), slot = (horiz ? ph : pw) / n;
+    labels.forEach((t, i) => {
+      if (horiz) P.push({ k: 'text', x: L - fs * 0.4, y: T + slot * (i + 0.5) + fs * 0.35, s: t, fs, a: 'end', c: fg });
+      else P.push({ k: 'text', x: L + slot * (i + 0.5), y: B + fs * 1.25, s: t, fs, a: 'middle', c: fg });
+    });
+    const zero = vpos(Math.max(lo, Math.min(hi, 0)));
+    if (e.ct === 'line') {
+      ser.forEach((s0, si) => {
+        const pts = s0.v.slice(0, n).map((v, i) => [L + slot * (i + 0.5), vpos(+v || 0)]);
+        if (pts.length > 1) P.push({ k: 'path', d: 'M' + pts.map((q) => q.map((z) => +z.toFixed(2)).join(' ')).join('L'), stroke: col[si % col.length], sw: Math.max(1.5, fs * 0.16) });
+        for (const [x, y] of pts) P.push({ k: 'circle', cx: x, cy: y, r: Math.max(2, fs * 0.22), fill: col[si % col.length] });
+      });
+    } else {
+      const m = Math.max(1, ser.length), gap = slot * 0.2, bw = (slot - 2 * gap) / m;
+      ser.forEach((s0, si) => s0.v.slice(0, n).forEach((v, i) => {
+        const p0 = vpos(+v || 0), off = slot * i + gap + bw * si;
+        if (horiz) P.push({ k: 'rect', x: Math.min(zero, p0), y: T + off, w: Math.abs(p0 - zero), h: bw * 0.92, fill: col[si % col.length] });
+        else P.push({ k: 'rect', x: L + off, y: Math.min(zero, p0), w: bw * 0.92, h: Math.abs(p0 - zero), fill: col[si % col.length] });
+      }));
+    }
+    P.push(horiz ? { k: 'line', x1: zero, y1: T, x2: zero, y2: B, c: '#868E96', sw: 1 } : { k: 'line', x1: L, y1: zero, x2: R, y2: zero, c: '#868E96', sw: 1 });
+    return P;
+  }
+  function chartSvg(e, th) {
+    const q = (t) => esc(String(t));
+    const body = chartPrims(e, th).map((p) => {
+      if (p.k === 'rect') return `<rect x="${p.x}" y="${p.y}" width="${Math.max(0, p.w)}" height="${Math.max(0, p.h)}" fill="${p.fill}"/>`;
+      if (p.k === 'line') return `<line x1="${p.x1}" y1="${p.y1}" x2="${p.x2}" y2="${p.y2}" stroke="${p.c}" stroke-width="${p.sw}"/>`;
+      if (p.k === 'path') return `<path d="${p.d}" fill="${p.fill || 'none'}" stroke="${p.stroke || 'none'}" stroke-width="${p.sw || 0}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      if (p.k === 'circle') return `<circle cx="${p.cx}" cy="${p.cy}" r="${p.r}" fill="${p.fill}"/>`;
+      return `<text x="${p.x}" y="${p.y}" font-size="${p.fs}" text-anchor="${p.a}" fill="${p.c}"${p.b ? ' font-weight="700"' : ''}>${q(p.s)}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${e.w} ${e.h}" width="${e.w}" height="${e.h}" style="width:${e.w}px;height:${e.h}px;max-width:none;overflow:visible">${body}</svg>`;
+  }
+  // kleines Fenster (eigene Dialoge der Präsentationen)
+  function modal(title, html, okLabel) {
+    return new Promise((res) => {
+      const d = document.createElement('dialog');
+      d.className = 'dk-dlg';
+      d.innerHTML = `<form method="dialog"><h3>${esc(title)}</h3><div class="dk-dlg-body">${html}</div><div class="dk-dlg-btns"><button type="button" class="btn" value="no">Cancel</button><button type="submit" class="btn primary" value="yes">${esc(okLabel || 'OK')}</button></div></form>`;
+      document.body.appendChild(d);
+      d.querySelector('[value=no]').onclick = () => d.close('no');
+      d.addEventListener('close', () => { setTimeout(() => d.remove(), 0); res(d.returnValue === 'yes' ? d : null); }, { once: true });
+      d.addEventListener('cancel', () => d.close('no'));
+      d.querySelector('form').onsubmit = (ev) => { ev.preventDefault(); d.close('yes'); };
+      d.showModal();
+      res.d = d;
+    });
+  }
+  function modalEl(title, html, okLabel, init) {
+    const pr = modal(title, html, okLabel);
+    const d = document.body.lastElementChild;
+    if (init) init(d);
+    return pr;
+  }
+  // Daten eines Diagramms bearbeiten (wie eine kleine Tabelle; aus Excel einfügen geht auch)
+  async function chartDialog(e) {
+    let labels = (e.labels || []).slice(), ser = (e.series || []).map((s0) => ({ n: s0.n, v: s0.v.slice() }));
+    let html = '';
+    const grid = () => `<div class="ch-grid"><table><tr><th></th>${ser.map((s0, j) => `<th><input data-s="${j}" value="${esc(s0.n || '')}" placeholder="Series ${j + 1}"></th>`).join('')}<th><button type="button" class="btn small" data-a="addS">+ Series</button></th></tr>` +
+      labels.map((l, i) => `<tr><th><input data-l="${i}" value="${esc(l)}"></th>${ser.map((s0, j) => `<td><input data-v="${i},${j}" inputmode="decimal" value="${s0.v[i] != null ? String(s0.v[i]).replace('.', ',') : ''}"></td>`).join('')}<td><button type="button" class="icon-btn" data-a="delL" data-i="${i}" title="Delete row">✕</button></td></tr>`).join('') +
+      `<tr><th><button type="button" class="btn small" data-a="addL">+ Category</button></th>${ser.map((s0, j) => `<td>${ser.length > 1 ? `<button type="button" class="icon-btn" data-a="delS" data-j="${j}" title="Delete series">✕</button>` : ''}</td>`).join('')}</tr></table></div>`;
+    html = `<div class="ch-top"><label>Type <select name="ct">${CHART_TYPES.map(([k, l]) => `<option value="${k}"${k === e.ct ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <label>Title <input name="title" value="${esc(e.title || '')}"></label><label class="chk"><input type="checkbox" name="legend"${e.legend !== 0 ? ' checked' : ''}> Legend</label></div>
+      <p class="muted small">Tip: copy numbers from Excel and paste them into a field – the table fills from there.</p><div class="ch-wrap">${grid()}</div>`;
+    const read = (d) => {
+      d.querySelectorAll('[data-l]').forEach((i) => { labels[+i.dataset.l] = i.value; });
+      d.querySelectorAll('[data-s]').forEach((i) => { ser[+i.dataset.s].n = i.value; });
+      d.querySelectorAll('[data-v]').forEach((i) => { const [r, c] = i.dataset.v.split(',').map(Number); const t = i.value.trim().replace(/\./g, '').replace(',', '.'); ser[c].v[r] = t === '' ? 0 : +t || 0; });
+    };
+    const d0 = await modalEl("Chart data", html, "Apply", (d) => {
+      const wrap = d.querySelector('.ch-wrap');
+      const redraw = () => { wrap.innerHTML = grid(); };
+      wrap.onclick = (ev) => {
+        const b = ev.target.closest('[data-a]'); if (!b) return;
+        read(d);
+        if (b.dataset.a === 'addL') { labels.push("Clear"); ser.forEach((s0) => s0.v.push(0)); }
+        if (b.dataset.a === 'addS') { ser.push({ n: "Series " + (ser.length + 1), v: labels.map(() => 0) }); }
+        if (b.dataset.a === 'delL') { const i = +b.dataset.i; labels.splice(i, 1); ser.forEach((s0) => s0.v.splice(i, 1)); }
+        if (b.dataset.a === 'delS') { ser.splice(+b.dataset.j, 1); }
+        redraw();
+      };
+      // aus Excel/Calc einfügen: Tabulatoren und Zeilen
+      wrap.addEventListener('paste', (ev) => {
+        const t = (ev.clipboardData && ev.clipboardData.getData('text/plain')) || '';
+        if (!/[\t\n]/.test(t)) return;
+        ev.preventDefault();
+        read(d);
+        const rowsT = t.replace(/\r/g, '').split('\n').filter((r) => r.length).map((r) => r.split('\t'));
+        const inp = ev.target;
+        let r0 = 0, c0 = 0;
+        if (inp.dataset.v) [r0, c0] = inp.dataset.v.split(',').map(Number);
+        if (inp.dataset.l) { r0 = +inp.dataset.l; c0 = -1; }
+        if (inp.dataset.s) { r0 = -1; c0 = +inp.dataset.s; }
+        rowsT.forEach((row, ri) => row.forEach((cell, ci) => {
+          const r = r0 + ri, c = c0 + ci;
+          if (r < 0 && c >= 0) { while (ser.length <= c) ser.push({ n: '', v: labels.map(() => 0) }); ser[c].n = cell; return; }
+          while (labels.length <= r) { labels.push(''); ser.forEach((s0) => s0.v.push(0)); }
+          if (c < 0) { labels[r] = cell; return; }
+          while (ser.length <= c) ser.push({ n: "Series " + (ser.length + 1), v: labels.map(() => 0) });
+          const num = cell.trim().replace(/\./g, '').replace(',', '.');
+          ser[c].v[r] = +num || 0;
+        }));
+        redraw();
+      });
+    });
+    if (!d0) return null;
+    read(d0);
+    return { labels, series: ser, ct: d0.querySelector('[name=ct]').value, title: d0.querySelector('[name=title]').value.trim(), legend: d0.querySelector('[name=legend]').checked ? 1 : 0 };
+  }
+  // ================================================================== Sonderzeichen
+  const SYMBOLS = [
+    ["Greek", 'α β γ δ ε ζ η θ ι κ λ μ ν ξ π ρ σ τ υ φ χ ψ ω Γ Δ Θ Λ Ξ Π Σ Φ Ψ Ω'],
+    ["Math", '± × ÷ ≈ ≠ ≡ ≤ ≥ < > ∞ √ ∑ ∏ ∫ ∂ ∇ ∈ ∉ ⊂ ⊆ ∪ ∩ ∅ ∀ ∃ ¬ ∧ ∨ ° ′ ″ ‰ ½ ⅓ ¼ ¾ ² ³ ¹ ⁿ ₀ ₁ ₂ ₃ ₙ'],
+    ["Arrows", '→ ← ↑ ↓ ↔ ↕ ⇒ ⇐ ⇔ ↗ ↘ ↖ ↙ ⟶ ↻'],
+    ["Business", '€ $ £ ¥ ¢ % § © ® ™ № Ø'],
+    ["Characters", "“ ” ” ‚ ‘ ’ « » – — … • · ✓ ✗ ★ ☆ ☐ ☑ ☒ ● ○ ■ □ ▲ ▼ ◆ ♦"],
+  ];
+  function symbolPicker(btn, pick) {
+    document.querySelectorAll('.dk-gal-pop').forEach((g) => g.remove());
+    const g = document.createElement('div');
+    g.className = 'dk-gal-pop dk-sym';
+    g.innerHTML = SYMBOLS.map(([cap, chars]) => `<div class="gp-cap">${esc(cap)}</div><div class="gp-row">${chars.split(' ').map((c) => `<button type="button" data-c="${esc(c)}" title="${esc(c)}">${esc(c)}</button>`).join('')}</div>`).join('');
+    document.body.appendChild(g);
+    const r = btn.getBoundingClientRect();
+    g.style.left = Math.max(4, Math.min(r.left, innerWidth - g.offsetWidth - 8)) + 'px';
+    g.style.top = Math.min(r.bottom + 4, innerHeight - g.offsetHeight - 8) + 'px';
+    g.onmousedown = (ev) => ev.preventDefault();
+    g.onpointerdown = (ev) => ev.stopPropagation();
+    g.onclick = (ev) => { const b = ev.target.closest('[data-c]'); if (b) pick(b.dataset.c); };
+    setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!g.contains(ev.target)) { g.remove(); document.removeEventListener('pointerdown', off, true); } }, true), 0);
+  }
+  // ================================================================== aus einer PDF: Ausschnitt als Bild, Seiten als Folien
+  async function openPdf(title) {
+    const r = await C.pickPdf(title);
+    if (!r) return null;
+    const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(r.bytes).slice(), isEvalSupported: false }).promise;
+    return { name: r.name, pdf };
+  }
+  async function renderPage(pdf, n, width) {
+    const pg = await pdf.getPage(n);
+    const vp0 = pg.getViewport({ scale: 1 });
+    const vp = pg.getViewport({ scale: width / vp0.width });
+    const c = document.createElement('canvas');
+    c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await pg.render({ canvasContext: ctx, viewport: vp }).promise;
+    return c;
+  }
+  const canvasFile = (c, type, name) => new Promise((res) => c.toBlob((b) => res(new File([b], name, { type })), type, 0.9));
+  // Ausschnitt aufziehen und als Bild hochladen → { src, w, h }
+  async function pdfCrop() {
+    const doc = await openPdf("Clip from a PDF");
+    if (!doc) return null;
+    let page = 1, cv = null, sel = null, ratio = 1;
+    const W0 = Math.min(900, innerWidth - 120);
+    const d0 = await modalEl("Choose a clip", `<div class="crop-nav"><button type="button" class="btn small" data-a="prev">◀</button> <span class="crop-pg"></span> <button type="button" class="btn small" data-a="next">▶</button> <span class="muted small">Drag a frame around the area you want.</span></div><div class="crop-box"><div class="crop-sel" hidden></div></div>`, "Insert", (d) => {
+      const box = d.querySelector('.crop-box'), sr = d.querySelector('.crop-sel');
+      const show = async () => {
+        d.querySelector('.crop-pg').textContent = `Page ${page} of ${doc.pdf.numPages}`;
+        cv = await renderPage(doc.pdf, page, W0);
+        box.querySelectorAll('canvas').forEach((c) => c.remove());
+        box.prepend(cv);
+        sel = null; sr.hidden = true;
+      };
+      d.querySelector('.crop-nav').onclick = (ev) => { const b = ev.target.closest('[data-a]'); if (!b) return; page = Math.max(1, Math.min(doc.pdf.numPages, page + (b.dataset.a === 'next' ? 1 : -1))); show(); };
+      box.onpointerdown = (ev) => {
+        const r = box.getBoundingClientRect(), x0 = ev.clientX - r.left, y0 = ev.clientY - r.top;
+        ratio = cv ? cv.width / r.width : 1;
+        box.setPointerCapture(ev.pointerId);
+        const mv = (m) => { const x1 = Math.max(0, Math.min(r.width, m.clientX - r.left)), y1 = Math.max(0, Math.min(r.height, m.clientY - r.top)); sel = [Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)]; Object.assign(sr.style, { left: sel[0] + 'px', top: sel[1] + 'px', width: sel[2] + 'px', height: sel[3] + 'px' }); sr.hidden = false; };
+        const up = () => { box.removeEventListener('pointermove', mv); box.removeEventListener('pointerup', up); };
+        box.addEventListener('pointermove', mv); box.addEventListener('pointerup', up);
+      };
+      show();
+    });
+    if (!d0 || !cv) return null;
+    C.toast("Inserting clip …", 20000);
+    // scharf neu zeichnen (3-fache Auflösung)
+    const big = await renderPage(doc.pdf, page, W0 * 3);
+    const [sx, sy, sw, sh] = sel && sel[2] > 8 && sel[3] > 8 ? sel.map((v) => v * ratio * 3) : [0, 0, big.width, big.height];
+    const out = document.createElement('canvas');
+    out.width = Math.round(sw); out.height = Math.round(sh);
+    out.getContext('2d').drawImage(big, sx, sy, sw, sh, 0, 0, sw, sh);
+    const res = await C.uploadImage(await canvasFile(out, 'image/png', 'ausschnitt.png'));
+    return { src: res.src, w: res.w || out.width, h: res.h || out.height };
   }
 
   // Text in Elementen ersetzen (Textknoten, Formatierung bleibt); gibt die Anzahl zurück
@@ -473,6 +747,7 @@
       const line = !!e && isLine(e), open = !!e && isOpen(e);
       const textish = !!e && (e.t === 'text' || e.t === 'table' || (e.t === 'shape' && !line && !open));
       const shapeish = !!e && (e.t === 'shape' || e.t === 'text' || e.t === 'img');
+      const fontish = textish || (!!e && e.t === 'chart');
       const dis = (en) => (en ? '' : ' disabled');
       const svg = (ic) => `<svg viewBox="0 0 24 24">${ic}</svg>`;
       // kleiner Knopf (Symbol, optional Text), großer Knopf, Farbknopf mit ▾, Auswahlmenü mit ▾
@@ -499,9 +774,9 @@
         const sizes = !e || SIZES.includes(fs0) ? SIZES : [...SIZES, fs0].sort((x, y) => x - y);
         const ff0 = (e && e.ff) || host.theme().font || 'sans';
         h += grp("Font", rows(
-          fontSelect(ff0, textish) +
-          `<select data-f="fs" class="rb-size" title="Font size"${dis(textish)}>${e ? '' : '<option></option>'}${sizes.map((x) => `<option value="${x}"${x === fs0 ? ' selected' : ''}>${x}</option>`).join('')}</select>` +
-          sb('fs+', "Increase font size", RI.grow, { en: textish }) + sb('fs-', "Decrease font size", RI.shrink, { en: textish }) + sb('clear', "Clear formatting", RI.clear, { en: textish }),
+          fontSelect(ff0, fontish) +
+          `<select data-f="fs" class="rb-size" title="Font size"${dis(fontish)}>${e ? '' : '<option></option>'}${sizes.map((x) => `<option value="${x}"${x === fs0 ? ' selected' : ''}>${x}</option>`).join('')}</select>` +
+          sb('fs+', "Increase font size", RI.grow, { en: fontish }) + sb('fs-', "Decrease font size", RI.shrink, { en: fontish }) + sb('clear', "Clear formatting", RI.clear, { en: textish }),
           `<button type="button" class="rb-s rb-t" data-f="bold" title="Bold (Ctrl+B)"${dis(textish)}><b>B</b></button><button type="button" class="rb-s rb-t" data-f="italic" title="Italic (Ctrl+I)"${dis(textish)}><i>I</i></button><button type="button" class="rb-s rb-t" data-f="underline" title="Underline (Ctrl+U)"${dis(textish)}><u>U</u></button>` +
           sb('strike', "Strikethrough", RI.strike, { en: textish }) + sb('sup', "Superscript (x²)", RI.sup, { en: textish }) + sb('sub', "Subscript (x₂)", RI.sub, { en: textish }) + sep +
           cb('hl', "Text highlight", ED.lastHl || '#FFE066', true, svg(RI.marker), textish) + cb('color', "Font color", ED.lastColor || '#D6262B', false, '<span class="cb-a">A</span>', textish)));
@@ -525,14 +800,17 @@
             sb('row-', "Delete row", RI.rowDel, { label: "Row" }) + sb('col-', "Delete column", RI.colDel, { label: "Column" })) + big('data-f="head"', "Header row", ICON.table, true), 'ctx');
         }
         if (e && e.t === 'img') h += grp("image", big('data-f="imgreset"', "Original shape", ICON.img, true), 'ctx');
+        if (e && e.t === 'chart') h += grp("Chart", big('data-f="chartdata"', "Edit data", RI.chart) + rows(mb('ctype', "Chart type", RI.chart, true, (CHART_TYPES.find((c) => c[0] === e.ct) || CHART_TYPES[0])[1]), sb('legend', "Legend on/off", RI.legend, { label: "Legend", on: e.legend !== 0 })), 'ctx');
         // Bearbeiten
         h += grp("Editing", rows(sb('replace', "Find and replace", RI.replace, { label: "Replace …", en: true }), sb('selall', "Select all (Ctrl+A)", RI.selall, { label: "Select All", en: els().length > 0 }), sb('x:del', "Delete (Del)", ICON.del, { label: "Delete", en: has })));
       } else if (RB.tab === 'insert') {
         if (host.ribbonPre) h += host.ribbonPre(kit, 'insert');
         h += grp("Tables", big('data-ins="table"', "Table", ICON.table));
-        h += grp("images", big('data-ins="img"', "image", ICON.img));
+        h += grp("images", big('data-ins="img"', "image", ICON.img) + big('data-ins="crop"', "PDF clip", RI.crop));
+        h += grp("Illustrations", big('data-ins="chart"', "Chart", RI.chart));
         h += grp("Shapes", `<div class="rb-gal rb-gal-all">${SHAPES.map(([k, l]) => shBtn(k, l)).join('')}</div>`);
-        h += grp('Text', big('data-ins="text"', "Text box", ICON.textbox));
+        h += grp('Text', big('data-ins="text"', "Text box", ICON.textbox) + rows(sb('date', "Insert today's date", RI.date, { label: "Date" }), sb('link', "Link: select text in a text box first", RI.link, { label: 'Link', en: !!ED.edit }), ...(host.insertText ? [host.insertText(kit)] : [])));
+        h += grp("Symbols", big('data-menu="sym"', "Special characters", RI.omega, true, true));
         if (host.insertExtra) h += host.insertExtra(kit);
       } else if (host.tabContent) h += host.tabContent(RB.tab, kit);
       bar.innerHTML = `<div class="rb-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" class="rb-tab${k === RB.tab ? ' on' : ''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div><div class="rb-body">${h}</div>`;
@@ -583,6 +861,8 @@
         return;
       }
       if (m === 'shapes') { gallery(btn); return; }
+      if (m === 'sym') { symbolPicker(btn, (c) => insertChars(c)); return; }
+      if (m === 'ctype') { popMenu(x, y, CHART_TYPES.map(([k, l]) => [k, esc(l), () => fmt('ct', k)])); return; }
       if (host.menu) host.menu(m, btn);
     }
     // alle Formen nach Gruppen (wie die Formen-Auswahl in Office)
@@ -645,6 +925,11 @@
         return;
       }
       if (f === 'replace') { replaceDlg(); return; }
+      if (f === 'date') { insertChars(new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })); return; }
+      if (f === 'link') { linkDlg(); return; }
+      if (f === 'chartdata') { if (ids[0]) openChart(ids[0]); return; }
+      if (f === 'legend') { each((x) => { x.legend = x.legend === 0 ? 1 : 0; }); return; }
+      if (f === 'ct') { each((x) => { if (x.t === 'chart') x.ct = v; }); return; }
       const inline = ['bold', 'italic', 'underline', 'color', 'ul', 'ol', 'al', 'clear', 'indent', 'outdent', 'strike', 'sup', 'sub', 'hl'];
       if (inline.includes(f)) {
         if (ED.edit) { execFmt(f, v); const n = host.box() && host.box().querySelector('.dk-el.editing'); if (n) syncEdit(n); return; }
@@ -712,6 +997,59 @@
         }
       }, true);
     }
+    // Zeichen an der Schreibmarke einfügen – oder als neues Textfeld
+    function insertChars(t) {
+      if (ED.edit) { document.execCommand('insertText', false, t); const n = host.box() && host.box().querySelector('.dk-el.editing'); if (n) syncEdit(n); return; }
+      if (host.onInsertHtml) { host.onInsertHtml(esc(t)); return; }
+      insertHtmlAt(esc(t));
+    }
+    function insertHtmlAt(html) {
+      const q = u(), [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
+      const e = { id: uid(), r: 0, t: 'text', x: r1(cx - 120 * q), y: r1(cy - 25 * q), w: r1(240 * q), h: r1(50 * q), fs: Math.round(24 * q), html: `<div>${html}</div>` };
+      if (host.pad != null) e.pad = host.pad;
+      change(() => { els().push(e); ED.sel = [e.id]; }, true);
+    }
+    async function linkDlg() {
+      if (!ED.edit) { C.toast("Please first select the word in a text box that should become a link.", 4000); return; }
+      const sel0 = getSelection();
+      const rng = sel0.rangeCount ? sel0.getRangeAt(0).cloneRange() : null;
+      if (!rng || rng.collapsed) { C.toast("Please first select the word that should become a link.", 4000); return; }
+      const url = await C.askText("Insert link", "Web address (https://…) or e-mail (mailto:…):", 'https://', "Insert");
+      if (!url) return;
+      const href = /^(https?:\/\/|mailto:)/i.test(url.trim()) ? url.trim() : 'https://' + url.trim().replace(/^\/+/, '');
+      const n = host.box() && host.box().querySelector('.dk-el.editing');
+      const tx = n && (n.querySelector('.dk-tx') || n.querySelector('.dk-cell'));
+      if (!tx) return;
+      tx.focus();
+      const s2 = getSelection(); s2.removeAllRanges(); s2.addRange(rng);
+      document.execCommand('createLink', false, href);
+      syncEdit(n);
+    }
+    async function openChart(id) {
+      const e = byId(id);
+      if (!e) return;
+      const r = await chartDialog(e);
+      if (r) change(() => { const t = byId(id); if (t) Object.assign(t, r); }, true);
+    }
+    async function addChart() {
+      const q = u(), [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
+      const w = Math.min(host.W() * 0.8, 560 * q), h = Math.min(host.H() * 0.7, 340 * q);
+      const e = { id: uid(), r: 0, t: 'chart', ct: 'col', x: r1(cx - w / 2), y: r1(cy - h / 2), w: r1(w), h: r1(h), fs: Math.max(8, Math.round(14 * q)), labels: ['2023', '2024', '2025'], series: [{ n: "Revenue", v: [120, 150, 180] }, { n: "Costs", v: [90, 100, 115] }], legend: 1 };
+      change(() => { els().push(e); ED.sel = [e.id]; }, true);
+      openChart(e.id);
+    }
+    async function addCrop() {
+      try {
+        const r = await pdfCrop();
+        if (!r) return;
+        const [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
+        let w = Math.min(host.W() * 0.6, r.w), h = w * r.h / r.w;
+        if (h > host.H() * 0.6) { h = host.H() * 0.6; w = h * r.w / r.h; }
+        const e = { id: uid(), r: 0, t: 'img', src: r.src, iw: r.w, ih: r.h, x: r1(cx - w / 2), y: r1(cy - h / 2), w: r1(w), h: r1(h) };
+        change(() => { els().push(e); ED.sel = [e.id]; }, true);
+        C.toast("Clip inserted.", 1500);
+      } catch (err) { C.toast("Clip not possible: " + err.message, 6000); }
+    }
     // Text in allen Feldern ersetzen (nur der sichtbare Text, Formatierung bleibt)
     async function replaceDlg() {
       endEdit();
@@ -743,7 +1081,8 @@
     // ---------------------------------------------------------------- Text bearbeiten (wie in PowerPoint: Feld anklicken, dann tippen)
     function startEdit(id, ev) {
       const e = byId(id);
-      if (!e || e.t === 'img' || isLine(e)) return;
+      if (e && e.t === 'chart') { openChart(id); return; }
+      if (!e || e.t === 'img' || isLine(e) || isOpen(e)) return;
       if (ED.edit && ED.edit.id === id) return;
       endEdit();
       ED.sel = [id];
@@ -1041,6 +1380,8 @@
     // Knopf im Menüband „Einfügen“
     function ins(kind) {
       if (kind === 'img') { host.pickImage(); return; }
+      if (kind === 'chart') { addChart(); return; }
+      if (kind === 'crop') { addCrop(); return; }
       if (kind === 'table') { addTable(); return; }
       if (ED.insert === kind) { ED.insert = null; host.placing(false); return; }
       startInsert(kind, host.alignWord ? "Click on the page or drag with the mouse button held (Esc = cancel)." : "Click on the slide or drag with the mouse button held (Esc = cancel).");
@@ -1051,6 +1392,7 @@
     }
     // gemeinsame Knöpfe
     function act(a, b) {
+      if (host.act && host.act(a, b)) return true;
       const r = b ? b.getBoundingClientRect() : { left: 200, bottom: 120 };
       if (a === 'text') { startInsert('text', host.alignWord ? "Click on the page where the text should go." : "Click on the slide where the text should go."); return true; }
       if (a === 'img') { host.pickImage(); return true; }
@@ -1094,7 +1436,7 @@
       return false;
     }
     function select(ids) { endEdit(); ED.sel = ids.filter((id) => byId(id)); render(); }
-    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal });
+    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop });
     return ED;
   }
 
@@ -1132,8 +1474,12 @@
     replaceAll: (f, r) => { let n = 0; D.ed.change(() => { for (const s0 of D.deck.slides) n += replaceInEls(s0.els, f, r); }, true); return n; },
     ribbonPre: ({ grp, rows, big, mb }) => grp("slides", big('data-menu="newslide"', "New slide", RI.newslide, true, true) +
       rows(mb('layout', "Layout of this slide", RI.layout, true, 'Layout'), mb('bg', "Background", RI.bg, true, "Background"), mb('design', "Design of all slides", RI.design, true, 'Design'))),
+    act: (a) => { if (a === 'hf') { hfDialog(); return true; } return false; },
+    insertText: ({ sb }) => sb('x:hf', "Header and footer, Foliennummer, Date", RI.hf, { label: "Footer …" }),
+    insertExtra: ({ grp, big }) => grp("slides", big('data-menu="pdfslides"', "Slides from PDF", RI.slidesPdf)),
     menu: (m, btn) => {
       const r = btn.getBoundingClientRect(), x = r.left, y = r.bottom + 4;
+      if (m === 'pdfslides') { importSlides(); return; }
       if (m === 'newslide') layoutMenu(x, y);
       if (m === 'layout') popMenu(x, y, Object.entries(LAYOUTS).map(([k, l]) => [k, esc(l.name), () => change(() => {
         // Platzhalter tauschen, eigene Inhalte bleiben
@@ -1305,6 +1651,54 @@
       if (all) { theme().bg = c; theme().fg = ['#1E2F6E', '#1A1A1A', '#0B3D2E'].includes(c) ? '#FFFFFF' : '#1A1A1A'; D.deck.slides.forEach((s) => delete s.bg); } else slide().bg = c;
     })]));
   }
+  // Kopf- und Fußzeile für alle Folien
+  async function hfDialog() {
+    const hf = D.deck.hf || {};
+    const d = await modal("Header and footer", `<label class="chk"><input type="checkbox" name="date"${hf.date ? ' checked' : ''}> Date</label>
+      <label class="sub">Fester Text statt des heutigen Dates (leer = immer aktuell): <input name="dateText" value="${esc(hf.dateText || '')}" placeholder="e.g. Winter term 2026/27"></label>
+      <label class="chk"><input type="checkbox" name="num"${hf.num ? ' checked' : ''}> Slide number</label>
+      <label class="chk"><input type="checkbox" name="footOn"${hf.foot ? ' checked' : ''}> Footer:</label><input name="foot" value="${esc(hf.foot || '')}" placeholder="e.g. Microeconomics · Prof. …">
+      <label class="chk"><input type="checkbox" name="notFirst"${hf.notFirst !== false ? ' checked' : ''}> Not on the first slide (title slide)</label>`, "Apply to all slides");
+    if (!d) return;
+    const v = (n) => d.querySelector(`[name=${n}]`);
+    change(() => {
+      const foot = v('footOn').checked ? v('foot').value.trim() : '';
+      D.deck.hf = { date: v('date').checked, dateText: v('dateText').value.trim(), num: v('num').checked, foot, notFirst: v('notFirst').checked };
+      if (!D.deck.hf.date && !D.deck.hf.num && !foot) delete D.deck.hf;
+    });
+  }
+  // Seiten einer PDF als Folien übernehmen (je Seite ein Bild, Seitenverhältnis bleibt)
+  async function importSlides() {
+    let doc;
+    try { doc = await openPdf("Slides from PDF"); } catch (err) { C.toast(err.message); return; }
+    if (!doc) return;
+    const n = doc.pdf.numPages;
+    const ans = await C.askText("Slides from PDF", `“${doc.name}” has ${n} pages. Which ones? (e.g. 1-5, 8)`, n > 1 ? `1-${n}` : '1', "Apply");
+    if (!ans) return;
+    const pages = [];
+    for (const part of ans.split(/[,;\s]+/)) {
+      const m = part.match(/^(\d+)(?:-(\d+))?$/);
+      if (!m) continue;
+      const a = Math.max(1, +m[1]), b = Math.min(n, +(m[2] || m[1]));
+      for (let i = a; i <= b; i++) if (!pages.includes(i)) pages.push(i);
+    }
+    if (!pages.length) { C.toast("No valid pages given."); return; }
+    const made = [];
+    try {
+      for (const [k, pn] of pages.entries()) {
+        C.toast(`Page ${pn} is being imported (${k + 1} of ${pages.length}) …`, 60000);
+        const cv = await renderPage(doc.pdf, pn, 1920);
+        const res = await C.uploadImage(await canvasFile(cv, 'image/jpeg', 'seite-' + pn + '.jpg'));
+        const a = cv.width / cv.height;
+        let w = W, h = W / a;
+        if (h > H) { h = H; w = H * a; }
+        made.push({ id: uid(), els: [{ id: uid(), r: 0, t: 'img', src: res.src, iw: cv.width, ih: cv.height, x: r1((W - w) / 2), y: r1((H - h) / 2), w: r1(w), h: r1(h) }] });
+      }
+    } catch (err) { C.toast("Import stopped: " + err.message, 6000); }
+    if (!made.length) return;
+    change(() => { D.deck.slides.splice(D.cur + 1, 0, ...made); D.cur += 1; D.ed.sel = []; });
+    C.toast(`${made.length} slides imported.`, 3000);
+  }
   function designMenu(x, y) {
     const th = theme();
     popMenu(x, y, [
@@ -1380,7 +1774,7 @@
       else if (ev.key === 'Escape') end();
       else if (ev.key === 'Home') { i = 0; draw(); } else if (ev.key === 'End') { i = D.deck.slides.length - 1; draw(); }
     };
-    ov.onclick = (ev) => { if (ev.clientX < innerWidth * 0.25) { if (i > 0) { i--; draw(); } } else if (i < D.deck.slides.length - 1) { i++; draw(); } else end(); };
+    ov.onclick = (ev) => { const ln = ev.target.closest && ev.target.closest('a[href]'); if (ln) { ev.preventDefault(); window.open(ln.href, '_blank', 'noopener'); return; } if (ev.clientX < innerWidth * 0.25) { if (i > 0) { i--; draw(); } } else if (i < D.deck.slides.length - 1) { i++; draw(); } else end(); };
     document.addEventListener('keydown', kd, true);
     window.addEventListener('resize', draw);
     draw();
@@ -1423,6 +1817,7 @@
         if (tag === 'sup') { s2.sup = 1; delete s2.sub; } if (tag === 'sub') { s2.sub = 1; delete s2.sup; }
         if (tag === 'span' && c.style.color) s2.c = c.style.color;
         if (tag === 'span' && c.style.backgroundColor) s2.bg = c.style.backgroundColor;
+        if (tag === 'a') { s2.href = c.getAttribute('href'); s2.u = 1; if (!st.c || st.c === base) s2.c = '#1F4FD6'; }
         walk(c, s2, blk);
       }
     };
@@ -1489,7 +1884,7 @@
     };
     const F = await famOf(th.font === 'serif' ? 'serif' : 'sans');
     let uni = null; // DejaVu für Zeichen außerhalb von WinAnsi (z. B. Pfeile, griechische Buchstaben)
-    const needUni = (allEls || []).some((e) => [e.html || '', ...(e.rows || []).flat()].join('').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').split('').some((ch) => !winOk(ch) && ch !== '\n'));
+    const needUni = (allEls || []).some((e) => [e.html || '', ...(e.rows || []).flat(), e.title || '', ...(e.labels || []), ...(e.series || []).map((x) => x.n || '')].join('').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').split('').some((ch) => !winOk(ch) && ch !== '\n'));
     if (needUni) {
       if (!kitOk) { await C.ensureFontkit(); doc.registerFontkit(window.fontkit); kitOk = true; }
       const get = async (n) => new Uint8Array(await (await fetch('vendor/fonts/' + n + '?v=' + C.VERSION)).arrayBuffer());
@@ -1517,7 +1912,18 @@
       return im;
     };
     // Schatten-Durchgang: alles in Schwarz, halb durchsichtig, versetzt
-    let SH = false, OP = 1;
+    let SH = false, OP = 1, CUR = [1, 0, 0, 1, 0, 0];
+    const mmul = (A, B) => [A[0] * B[0] + A[1] * B[2], A[0] * B[1] + A[1] * B[3], A[2] * B[0] + A[3] * B[2], A[2] * B[1] + A[3] * B[3], A[4] * B[0] + A[5] * B[2] + B[4], A[4] * B[1] + A[5] * B[3] + B[5]];
+    // Link als klickbare Fläche in der PDF (Rechteck in Seitenkoordinaten)
+    const addLink = (pg, href, x0, y0, x1, y1) => {
+      try {
+        const pts = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].map(([x, y]) => [x * CUR[0] + y * CUR[2] + CUR[4], x * CUR[1] + y * CUR[3] + CUR[5]]);
+        const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+        const ctx = doc.context;
+        const an = ctx.obj({ Type: 'Annot', Subtype: 'Link', Rect: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], Border: [0, 0, 0], A: { Type: 'Action', S: 'URI', URI: PDFLib.PDFString.of(href) } });
+        pg.node.addAnnot(ctx.register(an));
+      } catch (er) { /* Link weglassen */ }
+    };
     const col = (c) => (SH ? PDFLib.rgb(0, 0, 0) : hexRgb(c));
     const opa = () => { const o = SH ? 0.3 * OP : OP; return o < 1 ? { opacity: o, borderOpacity: o } : {}; };
     const tsz = (tk, fs) => (tk.sup || tk.sub ? fs * 0.65 : fs);
@@ -1558,6 +1964,7 @@
           const lineAt = (yy) => pg.drawLine({ start: { x: x * K, y: -yy * K }, end: { x: (x + w) * K, y: -yy * K }, thickness: Math.max(0.5, fs * 0.06 * K), color: col(tk.c || color), ...(opa().opacity != null ? { opacity: opa().opacity } : {}) });
           if (tk.u) lineAt(base + dy + z * 0.12);
           if (tk.s) lineAt(base + dy - z * 0.3);
+          if (tk.href && !SH) addLink(pg, tk.href, x * K, -(yTop + fs * lhm) * K, (x + w) * K, -yTop * K);
           x += w; seg = '';
         };
         for (const ch of tk.t) {
@@ -1602,8 +2009,9 @@
       }
       void extra;
     };
-    async function drawEl(pg, e, K) {
+    async function drawEl(pg, e, K, base) {
       FF = await famOf(e.ff);
+      const B0 = base || [1, 0, 0, 1, 0, 0];
       OP = e.op != null ? Math.max(0, Math.min(1, e.op)) : 1;
       const cx = (e.x + e.w / 2) * K, cy = -(e.y + e.h / 2) * K;
       const a = -(e.r || 0) * Math.PI / 180;
@@ -1611,8 +2019,9 @@
       for (const shadow of e.sh ? [true, false] : [false]) {
         SH = shadow;
         const d = shadow ? 3 * K : 0;
-        pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(1, 0, 0, 1, d, -d), concatTransformationMatrix(Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), cx, cy),
-          concatTransformationMatrix(e.fx ? -1 : 1, 0, 0, e.fy ? -1 : 1, 0, 0), concatTransformationMatrix(1, 0, 0, 1, -e.w / 2 * K, e.h / 2 * K));
+        const M1 = [1, 0, 0, 1, d, -d], M2 = [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), cx, cy], M3 = [e.fx ? -1 : 1, 0, 0, e.fy ? -1 : 1, 0, 0], M4 = [1, 0, 0, 1, -e.w / 2 * K, e.h / 2 * K];
+        CUR = mmul(M4, mmul(M3, mmul(M2, mmul(M1, B0))));
+        pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(...M1), concatTransformationMatrix(...M2), concatTransformationMatrix(...M3), concatTransformationMatrix(...M4));
         try { await body(pg, e, K); } finally { pg.pushOperators(popGraphicsState()); }
       }
       SH = false; OP = 1;
@@ -1644,6 +2053,22 @@
           if (e.html) drawTextBox(pg, e.html, 0, 0, e.w, e.h, e.fs || 20, e.c || (e.fill ? '#FFFFFF' : th.fg), e.va || 'm', e.pad != null ? e.pad : 10, K, e.lh);
         }
         for (const hd of arrowHeads(e, sw)) pg.drawSvgPath(hd, { ...opt, borderColor: col(stroke), borderWidth: sw * K, borderLineCap: 1 });
+      } else if (e.t === 'chart') {
+        if (SH) { box('#000000', null); return; }
+        if (e.fill) box(e.fill, null);
+        for (const p of chartPrims(e, th)) {
+          if (p.k === 'rect') { if (p.w > 0 && p.h > 0) pg.drawRectangle({ x: p.x * K, y: -(p.y + p.h) * K, width: p.w * K, height: p.h * K, color: hexRgb(p.fill), ...opa() }); }
+          else if (p.k === 'line') pg.drawLine({ start: { x: p.x1 * K, y: -p.y1 * K }, end: { x: p.x2 * K, y: -p.y2 * K }, thickness: p.sw * K, color: hexRgb(p.c) });
+          else if (p.k === 'path') pg.drawSvgPath(p.d, { x: 0, y: 0, scale: K, color: p.fill ? hexRgb(p.fill) : undefined, borderColor: p.stroke ? hexRgb(p.stroke) : undefined, borderWidth: (p.sw || 0) * K, ...opa() });
+          else if (p.k === 'circle') pg.drawEllipse({ x: p.cx * K, y: -p.cy * K, xScale: p.r * K, yScale: p.r * K, color: hexRgb(p.fill) });
+          else if (p.k === 'text') {
+            const f = p.b ? FF.b : FF.r;
+            const str = [...String(p.s)].filter((ch) => (FF.custom ? FF.set.has(ch.codePointAt(0)) : winOk(ch))).join('');
+            let tw0 = 0; try { tw0 = f.widthOfTextAtSize(str, p.fs); } catch (er) { tw0 = str.length * p.fs * 0.5; }
+            const x = p.a === 'middle' ? p.x - tw0 / 2 : p.a === 'end' ? p.x - tw0 : p.x;
+            if (str) pg.drawText(str, { x: x * K, y: -p.y * K, size: p.fs * K, font: f, color: hexRgb(p.c) });
+          }
+        }
       } else if (e.t === 'table') {
         const rows = e.rows.length, cols = e.rows[0].length;
         const cw = e.cw || Array(cols).fill(1 / cols);
@@ -1681,7 +2106,7 @@
         // Ursprung oben links, y nach unten negativ
         pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(1, 0, 0, 1, 0, H * K));
         pg.drawRectangle({ x: 0, y: -H * K, width: W * K, height: H * K, color: hexRgb(s.bg || th.bg) });
-        for (const e of s.els) if (!isPh(e)) await P.drawEl(pg, e, K);
+        for (const e of [...s.els, ...hfEls(D.deck.slides.indexOf(s))]) if (!isPh(e)) await P.drawEl(pg, e, K, [1, 0, 0, 1, 0, H * K]);
         pg.pushOperators(popGraphicsState());
       }
       const bytes = await doc.save();
