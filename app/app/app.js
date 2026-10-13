@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.78.2';
+  const VERSION = '1.79.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -432,6 +432,7 @@
     }
   }
   async function pull(path) {
+    if (!path || path.startsWith('@dk/')) return; // Präsentationen haben keine Notizebene
     if (upPending(path)) return; // eigene Änderung wird gerade hochgeladen – Server noch auf altem Stand
     try {
       const doc = await apiJson('notes', { params: { path } });

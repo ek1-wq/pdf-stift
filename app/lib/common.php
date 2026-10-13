@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.78.2';
+const PDFSTIFT_VERSION = '1.79.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -252,7 +252,7 @@ function stroke_obj($e): ?array
         't' => $t, 'x' => $num('x', -100000, 100000, 0), 'y' => $num('y', -100000, 100000, 0),
         'w' => $num('w', 1, 100000, 10), 'h' => $num('h', 1, 100000, 10), 'r' => $num('r', -360, 360, 0),
     ];
-    foreach (['fs' => [2, 400], 'lw' => [0.1, 50], 'pad' => [0, 200], 'iw' => [1, 100000], 'ih' => [1, 100000], 'lh' => [0.5, 4], 'op' => [0, 1]] as $k => [$lo, $hi]) {
+    foreach (['fs' => [2, 400], 'lw' => [0.1, 50], 'pad' => [0, 200], 'iw' => [1, 100000], 'ih' => [1, 100000], 'lh' => [0.5, 4], 'op' => [0, 1], 'fo' => [0, 1]] as $k => [$lo, $hi]) {
         if (is_numeric($e[$k] ?? null)) {
             $o[$k] = max($lo, min($hi, round((float) $e[$k], 2)));
         }
@@ -293,6 +293,12 @@ function stroke_obj($e): ?array
     }
     if ($t === 'shape') {
         $o['k'] = preg_match('/^[A-Za-z0-9]{2,12}$/', (string) ($e['k'] ?? '')) ? (string) $e['k'] : 'rect';
+        if (isset($e['d']) && is_string($e['d']) && strlen($e['d']) < 60000 && preg_match('/^[MLCQZ0-9 .,eE-]*$/', $e['d'])) {
+            $o['d'] = $e['d'];
+        }
+        if (in_array($e['ah'] ?? '', ['s', 'e', 'b'], true)) {
+            $o['ah'] = $e['ah'];
+        }
     }
     if ($t === 'img') {
         if (!preg_match('/^[a-f0-9]{40}\.(jpg|png|gif|webp)$/', (string) ($e['src'] ?? ''))) {

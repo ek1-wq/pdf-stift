@@ -31,7 +31,7 @@
   const FONT_ALIAS = { calibri: 'carlito', cambria: 'caladea', georgia: 'gelasio', 'comic sans ms': 'comicneue', arial: 'sans', helvetica: 'sans', 'times new roman': 'serif', times: 'serif', 'courier new': 'mono', courier: 'mono' };
   const FONT_OFFICE = { carlito: 'Calibri', caladea: 'Cambria', gelasio: 'Georgia', comicneue: 'Comic Sans MS', arimo: 'Arial', tinos: 'Times New Roman', cousine: 'Courier New', sans: 'Arial', serif: 'Times New Roman', mono: 'Courier New' };
   function fontKey(name) {
-    const n = String(name || '').trim(), l = n.toLowerCase();
+    const n = String(name || '').trim().replace(/\s+(regular|normal|standard)$/i, ''), l = n.toLowerCase().replace(/\s+(light|semilight)$/, '');
     if (!n) return '';
     if (FONT_ALIAS[l]) return FONT_ALIAS[l];
     const m = FM.list.find((x) => x.f.toLowerCase() === l.replace(/\s+/g, '') || x.n.replace(/\s*\(.*\)$/, '').toLowerCase() === l);
@@ -211,7 +211,19 @@
     const X = (x) => (flip ? w - x : x), m = w / 2;
     return `M${X(w)} 0C${X(m)} 0 ${X(m)} 0 ${X(m)} ${h * 0.12}V${h * 0.38}C${X(m)} ${h * 0.5} ${X(0)} ${h * 0.5} ${X(0)} ${h * 0.5}C${X(0)} ${h * 0.5} ${X(m)} ${h * 0.5} ${X(m)} ${h * 0.62}V${h * 0.88}C${X(m)} ${h} ${X(m)} ${h} ${X(w)} ${h}`;
   }
-  function shapePath(kind, w, h) {
+  // freie Form (aus PowerPoint): Pfad in 0…1000 × 0…1000, nur M L C Q Z – auf w × h strecken
+  function scalePath(d, w, h) {
+    let i = 0;
+    return String(d || '').replace(/-?\d*\.?\d+(e-?\d+)?/gi, (n) => { const v = +n * (i++ % 2 ? h : w) / 1000; return String(Math.round(v * 100) / 100); });
+  }
+  function pathEnds(d) {
+    const pts = []; const re = /-?\d*\.?\d+/g; let m; const nums = [];
+    while ((m = re.exec(d))) nums.push(+m[0]);
+    for (let i = 0; i + 1 < nums.length; i += 2) pts.push([nums[i], nums[i + 1]]);
+    return pts;
+  }
+  function shapePath(kind, w, h, e) {
+    if (kind === 'path') return scalePath(e && e.d, w, h);
     const a = Math.min(w * 0.4, h * 0.5), m = Math.min(w, h);
     switch (kind) {
       case 'round': { const r = m * 0.18; return `M${r} 0H${w - r}Q${w} 0 ${w} ${r}V${h - r}Q${w} ${h} ${w - r} ${h}H${r}Q0 ${h} 0 ${h - r}V${r}Q0 0 ${r} 0Z`; }
@@ -254,6 +266,12 @@
     const hp = sw / 2;
     if (e.k === 'arrow' || e.k === 'arrow2') out.push(`M${e.w - L - hp} ${e.h / 2 - B}L${e.w - hp} ${e.h / 2}L${e.w - L - hp} ${e.h / 2 + B}`);
     if (e.k === 'arrow2') out.push(`M${L + hp} ${e.h / 2 - B}L${hp} ${e.h / 2}L${L + hp} ${e.h / 2 + B}`);
+    if (e.k === 'path' && e.ah) {
+      const P = pathEnds(scalePath(e.d, e.w, e.h));
+      const head = (tip, from) => { const dx = tip[0] - from[0], dy = tip[1] - from[1], l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l; return `M${tip[0] - ux * L - uy * B} ${tip[1] - uy * L + ux * B}L${tip[0]} ${tip[1]}L${tip[0] - ux * L + uy * B} ${tip[1] - uy * L - ux * B}`; };
+      if (P.length > 1 && /[eb]/.test(e.ah)) out.push(head(P[P.length - 1], P[P.length - 2]));
+      if (P.length > 1 && /[sb]/.test(e.ah)) out.push(head(P[0], P[1]));
+    }
     if (e.k === 'elbow' && e.head !== 0) out.push(`M${e.w - L} ${e.h - B}L${e.w} ${e.h}L${e.w - L} ${e.h + B}`);
     return out;
   }
@@ -337,7 +355,7 @@
       tx.style.padding = pad + 'px';
       if (e.lh) tx.style.lineHeight = e.lh;
       tx.innerHTML = clean(e.html);
-      if (e.fill) n.style.background = e.fill;
+      if (e.fill) n.style.background = e.fo != null ? `color-mix(in srgb, ${e.fill} ${Math.round(e.fo * 100)}%, transparent)` : e.fill;
       if (e.line) n.style.boxShadow = `inset 0 0 0 ${e.lw || 2}px ${e.line}`;
       n.appendChild(tx);
     } else if (e.t === 'img') {
@@ -353,7 +371,7 @@
       const heads = arrowHeads(e, sw).map((d) => `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
       const pad2 = sw * 3; // Platz für Pfeilspitzen am Rand
       n.innerHTML = `<svg viewBox="${-hp - pad2} ${-hp - pad2} ${e.w + sw + 2 * pad2} ${e.h + sw + 2 * pad2}" width="${e.w + sw + 2 * pad2}" height="${e.h + sw + 2 * pad2}" style="margin:${-hp - pad2}px;width:${e.w + sw + 2 * pad2}px;height:${e.h + sw + 2 * pad2}px;max-width:none;overflow:visible" preserveAspectRatio="none">` +
-        `<path d="${shapePath(e.k, lineK && e.k !== 'line' ? e.w - hp : e.w, e.h).replace(/^M0 /, lineK && e.k === 'arrow2' ? `M${hp} ` : 'M0 ')}" fill="${lineK || openK ? 'none' : e.fill || 'none'}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>${heads}</svg>`;
+        `<path d="${shapePath(e.k, lineK && e.k !== 'line' ? e.w - hp : e.w, e.h, e).replace(/^M0 /, lineK && e.k === 'arrow2' ? `M${hp} ` : 'M0 ')}" fill="${lineK || openK ? 'none' : e.fill || 'none'}"${e.fo != null && e.fill ? ` fill-opacity="${e.fo}"` : ''} stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>${heads}</svg>`;
       if (e.html && !lineK && !openK) {
         const tx = document.createElement('div');
         tx.className = 'dk-tx va-' + (e.va || 'm'); tx.style.fontSize = (e.fs || 20) + 'px'; tx.style.color = e.c || (e.fill ? '#FFFFFF' : th.fg); tx.style.padding = pad + 'px';
@@ -2475,6 +2493,9 @@
   }
   /* Zeichnet Elemente in eine PDF (pdf-lib). Vor drawEl muss der Aufrufer den Ursprung oben links setzen (y nach unten negativ).
    * K = Einheit → pt (Folie 0,75; PDF-Seite 1). */
+  // Schriften, bei denen das Einbetten nur der benutzten Zeichen Buchstaben verliert: ganz einbetten
+  const NO_SUBSET = new Set(['Carlito']);
+  const NOLIG = { liga: false, clig: false, dlig: false, rlig: false, calt: false }; // Ligaturen (z. B. „ti“) verschieben sonst die Buchstaben
   async function painter(doc, th, allEls) {
     const { StandardFonts, pushGraphicsState, popGraphicsState, concatTransformationMatrix } = PDFLib;
     th = th || DEF_TH;
@@ -2513,12 +2534,12 @@
             const fd = pickS[x];
             const bin = ttcPick(new Uint8Array(await (await fd.blob()).arrayBuffer()), fd.postscriptName);
             if (!embedOk(bin)) throw new Error(`The font “${fam}“ darf laut Hersteller nicht in PDFs eingebettet werden`);
-            return doc.embedFont(bin, { subset: true });
+            return doc.embedFont(bin, { subset: bin.length > 3e6, features: NOLIG }); // Teilmengen verlieren bei manchen Schriften Buchstaben – kleinere Schriften ganz einbetten
           };
         } else {
           const m = FM.by[ff];
           has = (x) => m.s.includes(x);
-          get = async (x) => { const r = await fetch('vendor/fonts/' + m.f + '-' + x + '.ttf?v=' + C.VERSION); if (!r.ok) throw new Error("Font missing"); return doc.embedFont(new Uint8Array(await r.arrayBuffer()), { subset: true }); };
+          get = async (x) => { const r = await fetch('vendor/fonts/' + m.f + '-' + x + '.ttf?v=' + C.VERSION); if (!r.ok) throw new Error("Font missing"); return doc.embedFont(new Uint8Array(await r.arrayBuffer()), { subset: !NO_SUBSET.has(m.f), features: NOLIG }); };
         }
         const r = await get('Regular');
         const b = has('Bold') ? await get('Bold') : r;
@@ -2682,7 +2703,7 @@
       const pad = e.pad != null ? e.pad : 8;
       const box = (fill, line) => pg.drawRectangle({ x: 0, y: -e.h * K, width: e.w * K, height: e.h * K, color: fill ? col(fill) : undefined, borderColor: line ? col(line) : undefined, borderWidth: line ? lw : 0, ...opa() });
       if (e.t === 'text') {
-        if (e.fill || e.line) box(e.fill, e.line);
+        if (e.fill && e.fo != null && !SH) { pg.drawRectangle({ x: 0, y: -e.h * K, width: e.w * K, height: e.h * K, color: col(e.fill), opacity: OP * e.fo }); if (e.line) box(null, e.line); } else if (e.fill || e.line) box(e.fill, e.line);
         drawTextBox(pg, e.html || '', 0, 0, e.w, e.h, e.fs || 24, e.c || th.fg, e.va || 't', pad, K, e.lh);
       } else if (e.t === 'img') {
         if (SH) box('#000000', null);
@@ -2697,9 +2718,9 @@
           const x0 = e.k === 'arrow2' ? sw / 2 : 0, x1 = e.k === 'line' ? e.w : e.w - sw / 2;
           pg.drawLine({ start: { x: x0 * K, y: -e.h / 2 * K }, end: { x: x1 * K, y: -e.h / 2 * K }, thickness: sw * K, color: col(stroke), lineCap: 1, ...(opa().opacity != null ? { opacity: opa().opacity } : {}) });
         } else if (open) {
-          pg.drawSvgPath(shapePath(e.k, e.w, e.h), { ...opt, borderColor: col(stroke), borderWidth: sw * K, borderLineCap: 1 });
+          pg.drawSvgPath(shapePath(e.k, e.w, e.h, e), { ...opt, borderColor: col(stroke), borderWidth: sw * K, borderLineCap: 1 });
         } else {
-          pg.drawSvgPath(shapePath(e.k, e.w, e.h), { ...opt, color: e.fill ? col(e.fill) : undefined, borderColor: e.line ? col(e.line) : undefined, borderWidth: e.line ? sw * K : 0 });
+          pg.drawSvgPath(shapePath(e.k, e.w, e.h, e), { ...opt, color: e.fill ? col(e.fill) : undefined, borderColor: e.line ? col(e.line) : undefined, borderWidth: e.line ? sw * K : 0, ...(e.fo != null && e.fill && !SH ? { opacity: (opt.opacity != null ? opt.opacity : 1) * e.fo } : {}) });
           if (e.html) drawTextBox(pg, e.html, 0, 0, e.w, e.h, e.fs || 20, e.c || (e.fill ? '#FFFFFF' : th.fg), e.va || 'm', e.pad != null ? e.pad : 10, K, e.lh);
         }
         for (const hd of arrowHeads(e, sw)) pg.drawSvgPath(hd, { ...opt, borderColor: col(stroke), borderWidth: sw * K, borderLineCap: 1 });

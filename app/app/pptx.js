@@ -20,6 +20,7 @@
 
   // ------------------------------------------------------------------ Farben
   const PRST = { black: '000000', white: 'FFFFFF', red: 'FF0000', green: '008000', blue: '0000FF', yellow: 'FFFF00', gray: '808080', grey: '808080', darkGray: 'A9A9A9', lightGray: 'D3D3D3', orange: 'FFA500', navy: '000080' };
+  const lum = (c) => { const h = String(c || '#000000').replace('#', ''); const v = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255 || 0); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
   const hex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
   function rgb2hsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
@@ -146,13 +147,13 @@
       return { c: '#' + (hex2(r) + hex2(g) + hex2(b)).toUpperCase(), a: alpha };
     }
     // Füllung: solidFill, Verlauf (erste Farbe), Muster; sonst Stil-Referenz
-    function fillOf(spPr, style, T) {
+    function fillOf(spPr, style, T, grpF) {
       if (spPr) {
         if (kid(spPr, 'noFill')) return null;
         const sf = kid(spPr, 'solidFill'); if (sf) return color(sf, T);
         const gf = kid(spPr, 'gradFill'); if (gf) { const gs = all(gf, 'gs'); if (gs.length) return color(gs[0], T); }
         const pf = kid(spPr, 'pattFill'); if (pf) return color(kid(pf, 'fgClr'), T);
-        if (kid(spPr, 'grpFill')) return null;
+        if (kid(spPr, 'grpFill')) return grpF || null;
       }
       const fr = style && kid(style, 'fillRef');
       if (fr && num(at(fr, 'idx')) > 0) return color(fr, T);
@@ -190,6 +191,17 @@
         }
         if (!type) { warn.other++; return null; }
         blob = blob || new Blob([b], { type });
+        // SVG ohne Breite/Höhe (nur viewBox): Größe ergänzen, sonst zeichnet der Browser es nicht richtig
+        if (type === 'image/svg+xml') {
+          let txt = await blob.text();
+          const root = (txt.match(/<svg\b[^>]*>/i) || [''])[0];
+          const vb = root.match(/viewBox\s*=\s*["']\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i);
+          if (root && vb && !/\swidth\s*=/.test(root)) {
+            const f = 1000 / Math.max(+vb[3], +vb[4]);
+            txt = txt.replace(root, root.replace(/<svg\b/i, `<svg width="${Math.round(+vb[3] * f)}" height="${Math.round(+vb[4] * f)}"`));
+            blob = new Blob([txt], { type });
+          }
+        }
         const needCanvas = crop || type === 'image/svg+xml' || type === 'image/bmp' || blob.size > 6e6;
         if (needCanvas) {
           const url = URL.createObjectURL(blob);
@@ -237,7 +249,8 @@
       if (!doc || !ph) return null;
       const list = all(doc, 'sp').concat(all(doc, 'pic')).filter((x) => phOf(x));
       const idx = at(ph, 'idx'), t = phType(ph);
-      return (idx != null && list.find((x) => at(phOf(x), 'idx') === idx)) || list.find((x) => phType(phOf(x)) === t) || list.find((x) => masterType(phType(phOf(x))) === masterType(t)) || null;
+      const master = doc.documentElement && doc.documentElement.localName === 'sldMaster'; // im Master zählt nur die Art (idx gehört dort oft zu Datum/Fußzeile)
+      return (idx != null && !master && list.find((x) => at(phOf(x), 'idx') === idx)) || list.find((x) => phType(phOf(x)) === t) || list.find((x) => masterType(phType(phOf(x))) === masterType(t)) || null;
     }
 
     // Lage eines Objekts (EMU) und Abbildung in Folienkoordinaten (Gruppen verschachtelt)
@@ -309,16 +322,19 @@
         for (const r of p.children) {
           if (r.localName === 'br') { runs.push({ br: 1 }); continue; }
           if (r.localName !== 'r' && r.localName !== 'fld') continue;
-          const t = (kid(r, 't') || {}).textContent || '';
+          let t = (kid(r, 't') || {}).textContent || '';
           if (!t) continue;
           const rPr = kid(r, 'rPr');
           const rl = [rPr, ...defR].filter(Boolean);
+          if (/^(all|small)$/.test(firstAttr(rl, 'cap') || '')) t = t.split('ß').map((x) => x.toLocaleUpperCase('de-DE')).join('ß');
           const szv = firstAttr(rl, 'sz');
           const size = (szv ? num(szv) / 100 : base.sz || 18) * scale * K;
           let col = null;
           const ownL = [rPr, ...ownDef].filter(Boolean);
           const pick = (list) => { for (const e of list) { const f = kid(e, 'solidFill'); if (f) return color(f, T); } return null; };
           col = pick(ownL) || base.fontRef || pick(rl);
+          const hl0 = rPr && kid(rPr, 'hlinkClick');
+          if (hl0 && !pick([rPr].filter(Boolean)) && T.scheme.hlink) col = { c: '#' + T.scheme.hlink, a: 1 };
           let face = null;
           for (const e of rl) { const l = kid(e, 'latin'); if (l && at(l, 'typeface')) { face = at(l, 'typeface'); break; } }
           if (face === '+mj-lt') face = T.major; else if (face === '+mn-lt') face = T.minor;
@@ -377,6 +393,44 @@
       return { html, fs: Math.max(4, fs), c, ff, hasText };
     }
 
+    // freie Form: DrawingML-Pfade → SVG-Pfad in 0…1000 (Bögen werden zu Bézierkurven)
+    function custPath(geom, bw, bh) {
+      const lst = path(geom, 'pathLst');
+      if (!lst) return null;
+      let d = '', anyFill = false, anyStroke = false, bad = false;
+      const f = (v) => { if (v == null || v === '' || isNaN(+v)) { bad = true; return 0; } return +v; };
+      for (const p of kids(lst, 'path')) {
+        const pw = num(at(p, 'w')) || bw || 1, ph = num(at(p, 'h')) || bh || 1;
+        if (at(p, 'fill') !== 'none') anyFill = true;
+        if (at(p, 'stroke') !== '0') anyStroke = true;
+        const X = (v) => Math.round((f(v) * 1000 / pw) * 10) / 10, Y = (v) => Math.round((f(v) * 1000 / ph) * 10) / 10;
+        let cx = 0, cy = 0;
+        for (const c of p.children) {
+          const pts = kids(c, 'pt');
+          if (c.localName === 'moveTo' && pts[0]) { cx = f(at(pts[0], 'x')); cy = f(at(pts[0], 'y')); d += `M${X(cx)} ${Y(cy)}`; }
+          else if (c.localName === 'lnTo' && pts[0]) { cx = f(at(pts[0], 'x')); cy = f(at(pts[0], 'y')); d += `L${X(cx)} ${Y(cy)}`; }
+          else if (c.localName === 'cubicBezTo' && pts.length === 3) { d += 'C' + pts.map((q) => `${X(at(q, 'x'))} ${Y(at(q, 'y'))}`).join(' '); cx = f(at(pts[2], 'x')); cy = f(at(pts[2], 'y')); }
+          else if (c.localName === 'quadBezTo' && pts.length === 2) { d += 'Q' + pts.map((q) => `${X(at(q, 'x'))} ${Y(at(q, 'y'))}`).join(' '); cx = f(at(pts[1], 'x')); cy = f(at(pts[1], 'y')); }
+          else if (c.localName === 'arcTo') {
+            const wR = f(at(c, 'wR')), hR = f(at(c, 'hR')), st = (f(at(c, 'stAng')) / 60000) * Math.PI / 180, sw = (f(at(c, 'swAng')) / 60000) * Math.PI / 180;
+            const ox = cx - wR * Math.cos(st), oy = cy - hR * Math.sin(st);
+            const n = Math.max(1, Math.ceil(Math.abs(sw) / (Math.PI / 2))), da = sw / n, k = (4 / 3) * Math.tan(da / 4);
+            let a = st;
+            for (let i = 0; i < n; i++) {
+              const a2 = a + da;
+              const x1 = ox + wR * (Math.cos(a) - k * Math.sin(a)), y1 = oy + hR * (Math.sin(a) + k * Math.cos(a));
+              const x2 = ox + wR * (Math.cos(a2) + k * Math.sin(a2)), y2 = oy + hR * (Math.sin(a2) - k * Math.cos(a2));
+              cx = ox + wR * Math.cos(a2); cy = oy + hR * Math.sin(a2);
+              d += `C${X(x1)} ${Y(y1)} ${X(x2)} ${Y(y2)} ${X(cx)} ${Y(cy)}`;
+              a = a2;
+            }
+          } else if (c.localName === 'close') d += 'Z';
+        }
+      }
+      if (bad || !d || d.length > 50000) return null;
+      return { d, fill: anyFill, stroke: anyStroke };
+    }
+
     // ---- ein Objekt umwandeln
     const PRST_K = {
       rect: 'rect', roundRect: 'round', snipRoundRect: 'round', round1Rect: 'round', round2SameRect: 'round', round2DiagRect: 'round', ellipse: 'ellipse', triangle: 'tri', rtTriangle: 'rtri',
@@ -403,9 +457,17 @@
         const id = X().uid();
         const before = out.length;
         const gcid = at(path(sp, 'nvGrpSpPr', 'cNvPr'), 'id');
-        const ctx2 = ctx.anim ? { ...ctx, grpIds: [...(ctx.grpIds || []), gcid] } : ctx;
+        const gsp = kid(sp, 'grpSpPr');
+        const gfill = gsp && (kid(gsp, 'solidFill') || kid(gsp, 'gradFill') || kid(gsp, 'noFill') || kid(gsp, 'grpFill')) ? fillOf(gsp, null, ctx.T, ctx.grpFill) : ctx.grpFill;
+        const ctx2 = { ...ctx, grpFill: gfill, ...(ctx.anim ? { grpIds: [...(ctx.grpIds || []), gcid] } : {}) };
         for (const c of sp.children) await convert(c, ctx2, M2, out, gid || id);
         if (out.length - before < 2 && !gid) for (let i = before; i < out.length; i++) delete out[i].g;
+        return;
+      }
+      // neuere Inhalte (z. B. Formeln) mit Ersatzdarstellung: die Ersatzdarstellung nehmen (meist ein Bild)
+      if (ln === 'AlternateContent') {
+        const alt = kid(sp, 'Fallback') || kid(sp, 'Choice');
+        if (alt) for (const c of alt.children) await convert(c, ctx, M, out, gid);
         return;
       }
       if (!/^(sp|pic|cxnSp|graphicFrame)$/.test(ln)) return;
@@ -532,8 +594,18 @@
       // Form, Textfeld oder Linie
       const geom = spPr && kid(spPr, 'prstGeom');
       const prst = geom ? at(geom, 'prst') : spPr && kid(spPr, 'custGeom') ? 'custom' : 'rect';
-      let fill = fillOf(spPr, style, T);
-      const line = lineOf(spPr, style, T);
+      const cg = prst === 'custom' ? custPath(kid(spPr, 'custGeom'), b.w, b.h) : null;
+      const bfill = spPr && kid(spPr, 'blipFill');
+      if (bfill && !(kid(sp, 'txBody') && all(kid(sp, 'txBody'), 't').some((t) => t.textContent.trim()))) {
+        const blip = kid(bfill, 'blip');
+        const svgB = blip && all(blip, 'svgBlip')[0];
+        let target = blip && ctx.rels[rid(blip, 'embed')];
+        if ((!target || /\.(emf|wmf)$/i.test(target.target)) && svgB) target = ctx.rels[rid(svgB, 'embed')] || target;
+        const res = target && !target.ext ? await upload(target.target) : null;
+        if (res) { const e = { ...base, t: 'img', src: res.src, iw: res.w, ih: res.h }; if (b.fx) e.fx = 1; if (b.fy) e.fy = 1; out.push(e); return; }
+      }
+      let fill = fillOf(spPr, style, T, ctx.grpFill);
+      let line = lineOf(spPr, style, T);
       const fontRefEl = style && kid(style, 'fontRef');
       const fontRef = fontRefEl ? color(fontRefEl, T) : null;
       const isLineShape = ln === 'cxnSp' || LINE_PRST.test(prst);
@@ -569,21 +641,24 @@
       const chain = styleChain(sp, ctx);
       const tb = kid(sp, 'txBody');
       const t = tb ? textOf(tb, chain, ctx, { sz: 18, fontRef, major: !!ph && masterType(phType(ph)) === 'title' }) : null;
-      const k = PRST_K[prst] || (prst === 'custom' ? 'rect' : 'rect');
+      const k = cg ? 'path' : PRST_K[prst] || 'rect';
+      if (cg && !cg.fill) fill = null;
       const bodies = bodyPrChain(sp, ctx);
       const anchor = firstAttr(bodies, 'anchor');
       const va = anchor === 'ctr' ? 'm' : anchor === 'b' ? 'b' : 't';
       const ins = ['lIns', 'tIns', 'rIns', 'bIns'].map((n) => { const v = firstAttr(bodies, n); return v == null ? (n[0] === 'l' || n[0] === 'r' ? 91440 : 45720) : num(v); });
       const pad = r1(Math.max(0, Math.min(40, px((ins[0] + ins[1] + ins[2] + ins[3]) / 4))));
+      if (cg && !cg.stroke) line = null; // Pfad ohne Kontur
       const plainBox = k === 'rect' && !fill && !line;
       if (plainBox && !(t && t.hasText)) return; // leerer Rahmen
       const e = { ...base };
-      if (fill && fill.a < 1 && fill.a > 0) { if (!(t && t.hasText)) e.op = r1(fill.a); }
+      if (fill && fill.a < 1) { if (fill.a <= 0.02) fill = null; else e.fo = Math.round(fill.a * 100) / 100; }
       if (plainBox || (k === 'rect' && t && t.hasText && !line && fill)) {
         e.t = 'text';
         if (fill) e.fill = fill.c;
       } else {
         e.t = 'shape'; e.k = k;
+        if (cg) { e.d = cg.d; if (line && (line.head || line.tail)) e.ah = line.head && line.tail ? 'b' : line.tail ? 'e' : 's'; }
         e.fill = fill ? fill.c : undefined;
         if (!fill) delete e.fill;
         if (b.fx) e.fx = 1; if (b.fy) e.fy = 1;
@@ -592,11 +667,40 @@
       if (t && t.hasText) {
         e.html = t.html; e.fs = r1(t.fs); e.va = va; e.pad = pad;
         e.c = t.c || (e.t === 'shape' && fill ? '#FFFFFF' : T.scheme.dk1 ? '#' + T.scheme.dk1 : '#1A1A1A');
+        // Text in derselben Farbe wie die Füllung (kommt bei SmartArt vor): lesbare Farbe nehmen
+        if (fill && (!e.fo || e.fo > 0.6) && Math.abs(lum(e.c) - lum(fill.c)) < 0.18) {
+          const dk = T.scheme.dk1 ? '#' + T.scheme.dk1 : '#1A1A1A', lt = T.scheme.lt1 ? '#' + T.scheme.lt1 : '#FFFFFF';
+          e.c = Math.abs(lum(dk) - lum(fill.c)) > Math.abs(lum(lt) - lum(fill.c)) ? dk : lt;
+          e.html = e.html.replace(/color:\s*#[0-9A-F]{6};?/gi, (m) => (m.toUpperCase().includes(fill.c.slice(1).toUpperCase()) ? '' : m));
+        }
         const key = X().fontKey(t.ff);
         if (key && key !== ctx.deckFont) e.ff = key;
         const lnSp = firstAttr(chain.map((s) => kid(s, 'lvl1pPr')).filter(Boolean).map((x) => path(x, 'lnSpc', 'spcPct')).filter(Boolean), 'val');
         if (lnSp && Math.abs(num(lnSp) / 100000 - 1) > 0.05) e.lh = r1(num(lnSp) / 100000 * 1.2);
       } else if (e.t === 'text') return;
+      // Text ohne Zeilenumbruch (wrap="none"): Feld so breit machen wie die längste Zeile
+      const plainLines = e.html ? e.html.replace(/<br>/g, '\n').replace(/<\/(div|li)>/g, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').split('\n') : [];
+      const longWord = Math.max(0, ...plainLines.flatMap((l) => l.split(/\s+/)).map((w) => w.length)) * (e.fs || 18) * 0.6 + 2 * (e.pad || 0) + 4;
+      if (e.html && e.t === 'text' && longWord > e.w && longWord < e.w * 1.6) { const al = /text-align: center/.test(e.html) ? 0.5 : /text-align: right/.test(e.html) ? 1 : 0; e.x = r1(e.x - (longWord - e.w) * al); e.w = r1(longWord); }
+      if (e.html && firstAttr(bodies, 'wrap') === 'none') {
+        const lines = e.html.replace(/<br>/g, '\n').replace(/<\/(div|li)>/g, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').split('\n');
+        const need = Math.max(...lines.map((l) => l.length)) * e.fs * 0.56 + 2 * (e.pad || 0) + 4;
+        if (need > e.w) { const al = /text-align: center/.test(e.html) ? 0.5 : /text-align: right/.test(e.html) ? 1 : 0; e.x = r1(e.x - (need - e.w) * al); e.w = r1(need); }
+      }
+      // SmartArt: eigener Textrahmen (txXfrm) – Text als eigenes Feld an die richtige Stelle
+      const txf = kid(sp, 'txXfrm');
+      if (txf && e.t === 'shape' && e.html && kid(txf, 'ext')) {
+        const tb = box(txf);
+        const [tx0, ty0] = M.f(tb.x, tb.y), [tx1, ty1] = M.f(tb.x + tb.w, tb.y + tb.h);
+        const g2 = { x: r1(OX + (tx0 / EMU) * K), y: r1(OY + (ty0 / EMU) * K), w: r1(Math.max(1, ((tx1 - tx0) / EMU) * K)), h: r1(Math.max(1, ((ty1 - ty0) / EMU) * K)) };
+        if (Math.abs(g2.x - e.x) + Math.abs(g2.y - e.y) + Math.abs(g2.w - e.w) + Math.abs(g2.h - e.h) > 6) {
+          const te = { id: X().uid(), t: 'text', ...g2, r: e.r || 0, html: e.html, fs: e.fs, va: e.va, pad: 0, c: e.c };
+          if (e.ff) te.ff = e.ff; if (e.lh) te.lh = e.lh; if (e.g) te.g = e.g;
+          delete e.html; delete e.fs; delete e.va; delete e.c; delete e.ff; delete e.lh; delete e.pad;
+          out.push(e, te);
+          return;
+        }
+      }
       out.push(e);
     }
 
@@ -867,7 +971,7 @@
           const face = e.ff ? P.fontOffice(e.ff) : baseFont;
           if (e.t === 'text') {
             const o = { ...boxO, fontFace: face, fontSize: e.fs || 24, color: noHash(e.c || th.fg), valign: VA[e.va || 't'], margin: e.pad != null ? e.pad : 8, fit: 'none', shadow };
-            if (e.fill) o.fill = { color: noHash(e.fill), transparency: tr || undefined };
+            if (e.fill) o.fill = { color: noHash(e.fill), transparency: (e.fo != null ? Math.round((1 - e.fo) * 100) : tr) || undefined };
             if (e.line) o.line = { color: noHash(e.line), width: e.lw || 2 };
             if (e.lh) o.lineSpacingMultiple = Math.round((e.lh / 1.2) * 100) / 100;
             const rr = runsOf(e.html, { color: noHash(e.c || th.fg), fs: e.fs || 24 }); mark(e, rr.units);
@@ -879,10 +983,25 @@
               continue;
             }
             const o = { ...boxO, shape: SHAPE_P[e.k] || 'rect', shadow, flipH: !!e.fx, flipV: !!e.fy };
+            if (e.k === 'path' && e.d) {
+              // freie Form zurück als PowerPoint-Pfad (Punkte in Zoll, bezogen auf das Objekt)
+              const sx = e.w / 1000 / IN, sy = e.h / 1000 / IN, pts = [];
+              for (const m of String(e.d).matchAll(/([MLCQZ])([^MLCQZ]*)/g)) {
+                const v = (m[2].match(/-?\d*\.?\d+/g) || []).map(Number), P = (i) => [v[i] * sx, v[i + 1] * sy];
+                if (m[1] === 'M') { const [x, y] = P(0); pts.push({ x, y, moveTo: true }); }
+                else if (m[1] === 'L') { for (let i = 0; i + 1 < v.length; i += 2) { const [x, y] = P(i); pts.push({ x, y }); } }
+                else if (m[1] === 'C') { for (let i = 0; i + 5 < v.length; i += 6) { const [x1, y1] = P(i), [x2, y2] = P(i + 2), [x, y] = P(i + 4); pts.push({ x, y, curve: { type: 'cubic', x1, y1, x2, y2 } }); } }
+                else if (m[1] === 'Q') { for (let i = 0; i + 3 < v.length; i += 4) { const [x1, y1] = P(i), [x, y] = P(i + 2); pts.push({ x, y, curve: { type: 'quadratic', x1, y1 } }); } }
+                else if (m[1] === 'Z') pts.push({ close: true });
+              }
+              o.shape = 'custGeom'; o.points = pts;
+            }
             if (openK) { o.fill = { type: 'none' }; o.line = { color: noHash(e.line || th.fg), width: e.lw || 2 }; if (e.k === 'elbow' && e.head !== 0) o.line.endArrowType = 'triangle'; }
             else {
-              o.fill = e.fill ? { color: noHash(e.fill), transparency: tr || undefined } : { type: 'none' };
+              const ftr = e.fo != null ? Math.round((1 - e.fo * (e.op != null ? e.op : 1)) * 100) : tr;
+              o.fill = e.fill ? { color: noHash(e.fill), transparency: ftr || undefined } : { type: 'none' };
               o.line = e.line ? { color: noHash(e.line), width: e.lw || 2 } : { type: 'none' };
+              if (e.line && e.ah) { if (/[eb]/.test(e.ah)) o.line.endArrowType = 'triangle'; if (/[sb]/.test(e.ah)) o.line.beginArrowType = 'triangle'; }
             }
             if (e.html && !openK) {
               Object.assign(o, { fontFace: face, fontSize: e.fs || 20, color: noHash(e.c || (e.fill ? '#FFFFFF' : th.fg)), valign: VA[e.va || 'm'], margin: e.pad != null ? e.pad : 8, align: 'center' });
