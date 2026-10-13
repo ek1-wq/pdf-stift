@@ -1307,6 +1307,59 @@ body.on-deck #toolbar, body.on-deck #pageBadge { display: none !important; }
 .ob-layer .dk-live .dk-el.sel { outline: 1.5px solid #1F4FD6; }
 .pages.ob-hover .page { cursor: move !important; }
 body.ob-placing .page { cursor: crosshair !important; }
-.ob-fmt { position: fixed; z-index: 40; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
-.ob-fmt .ob-del { color: #D6262B; }
 .ob-layer .dk-el.editing, .ob-layer .dk-el.editing * { -webkit-user-select: text; user-select: text; }
+/* Menüband wie in PowerPoint/LibreOffice (PDF-Ansicht und Präsentationen) */
+.ob-ribbon { order: 99; }
+.ob-ribbon[hidden] { display: none !important; }
+.rb-band { display: flex; align-items: stretch; padding: 3px 6px 0; background: var(--bar); border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; flex-wrap: nowrap; gap: 0; }
+.rb-band[hidden] { display: none; }
+.rb-fmt { display: flex; align-items: stretch; }
+.rb-grp { position: relative; display: flex; align-items: center; gap: 2px; padding: 2px 8px 17px; border-right: 1px solid var(--line); flex: none; }
+.rb-grp:last-child { border-right: 0; }
+.rb-grp.ctx { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.rb-col { display: flex; flex-direction: column; gap: 1px; justify-content: center; }
+.rb-row { display: flex; align-items: center; gap: 1px; min-height: 27px; }
+.rb-cap { position: absolute; left: 0; right: 0; bottom: 1px; text-align: center; font-size: 10.5px; line-height: 14px; color: var(--muted); pointer-events: none; white-space: nowrap; }
+.rb-sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; flex: none; }
+.rb-band button { font: inherit; color: var(--fg); background: transparent; border: 1px solid transparent; cursor: pointer; }
+.rb-band button:disabled { opacity: .35; cursor: default; }
+.rb-band button:not(:disabled):hover, .rb-band button.on { background: var(--accent-soft, #E6EAF5); border-color: var(--line); }
+.rb-band button.on { color: var(--accent); }
+.rb-band svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.rb-big { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 52px; height: 56px; padding: 2px 6px; border-radius: 8px; font-size: 11.5px !important; line-height: 1.1; white-space: nowrap; }
+.rb-big svg { width: 26px; height: 26px; }
+.rb-s { display: inline-flex; align-items: center; gap: 5px; height: 26px; min-width: 27px; padding: 0 4px; border-radius: 6px; font-size: 12.5px !important; white-space: nowrap; }
+.rb-s svg { width: 18px; height: 18px; }
+.rb-s.lab { justify-content: flex-start; padding-right: 7px; }
+.rb-s.dd b, .dk-cb b { font-size: 8px; font-weight: 400; color: var(--muted); margin-left: 1px; }
+.rb-s.rb-t { font-size: 15px !important; justify-content: center; }
+.rb-band select { height: 25px; border: 1px solid var(--line); border-radius: 6px; background: var(--bar); color: var(--fg); padding: 0 3px; font: inherit; font-size: 12.5px; }
+.rb-band select:disabled { opacity: .4; }
+.rb-font { width: 150px; } .rb-size { width: 54px; } .rb-lw { width: 66px; }
+.rb-gal { display: grid; grid-template-columns: repeat(4, 27px); gap: 1px; padding: 2px; margin-right: 4px; border: 1px solid var(--line); border-radius: 7px; align-self: center; }
+.rb-sh { width: 27px; height: 25px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 5px; }
+.rb-sh svg { width: 18px; height: 18px; }
+.dk-cb { position: relative; display: inline-flex; align-items: center; gap: 1px; height: 26px; padding: 0 3px 0 5px; border-radius: 6px; }
+.dk-cb svg { width: 17px; height: 17px; margin-bottom: 4px; }
+.dk-cb .cb-a { font-weight: 700; font-size: 15px; line-height: 1; margin-bottom: 4px; padding: 0 2px; }
+.dk-cb .cb-bar { position: absolute; left: 5px; right: 13px; bottom: 3px; height: 4px; border-radius: 1px; }
+.dk-cb .cb-bar.empty { height: 0; border-top: 2px dotted var(--muted); }
+.dk-pal { position: fixed; z-index: 80; display: grid; grid-template-columns: repeat(6, 24px); gap: 6px; padding: 9px; background: var(--bar); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.dk-pal .sw { width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); background: var(--c); cursor: pointer; padding: 0; }
+.dk-pal .sw:hover { transform: scale(1.12); }
+.dk-pal .none { grid-column: 1 / -1; height: 26px; border: 1px dashed var(--line); border-radius: 7px; background: transparent; color: var(--fg); cursor: pointer; font: inherit; font-size: 12.5px; }
+.dk-ghost { position: absolute; border: 1.5px dashed #1F4FD6; background: rgba(31, 79, 214, .06); pointer-events: none; box-sizing: border-box; }
+.dk-fmt.rb-band { padding: 3px 6px 0; }
+.rb-band .dk-fb[data-f="x:del"], .rb-band [data-f="x:del"]:not(:disabled) svg { color: #D6262B; }
+/* freie Schriften für Textfelder (SIL Open Font License, siehe vendor/fonts) */
+@font-face { font-family: 'PS Carlito'; src: url(../vendor/fonts/Carlito-Regular.ttf) format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'PS Carlito'; src: url(../vendor/fonts/Carlito-Bold.ttf) format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'PS Carlito'; src: url(../vendor/fonts/Carlito-Italic.ttf) format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'PS Carlito'; src: url(../vendor/fonts/Carlito-BoldItalic.ttf) format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'PS Open Sans'; src: url(../vendor/fonts/OpenSans-Regular.ttf) format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'PS Open Sans'; src: url(../vendor/fonts/OpenSans-Bold.ttf) format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'PS Open Sans'; src: url(../vendor/fonts/OpenSans-Italic.ttf) format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'PS Open Sans'; src: url(../vendor/fonts/OpenSans-BoldItalic.ttf) format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'PS Caveat'; src: url(../vendor/fonts/Caveat-Regular.ttf) format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'PS Caveat'; src: url(../vendor/fonts/Caveat-Bold.ttf) format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+.rb-font { max-width: 150px; }

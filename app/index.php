@@ -290,11 +290,6 @@ header('Referrer-Policy: same-origin');
           <svg viewBox="0 0 24 24"><path d="M7 20h13"/><path d="M4.5 15.5l9-9a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L13 19H8.5z"/><path d="M9.5 10.5l5 5"/></svg>
         </button>
       </div>
-      <div class="group seg" aria-label="Einfügen">
-        <button type="button" class="tool ob-ins" id="obIns" aria-label="Einfügen" title="Einfügen wie in PowerPoint: Textfeld, Form, Bild, Tabelle – bleibt jederzeit änderbar (anklicken)">
-          <svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="9" height="9" rx="1"/><circle cx="15.5" cy="15.5" r="4.5"/><path d="M19.5 3v5M17 5.5h5"/></svg>
-        </button>
-      </div>
       <div id="txKinds" class="group seg" aria-label="Art der Textmarkierung">
         <button type="button" class="kind" data-k="hl" aria-label="Hervorheben" title="Hervorheben"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="15" rx="2" fill="currentColor" opacity=".22" stroke="none"/><path d="M8 16l4-9 4 9M9.6 13h4.8"/></svg></button>
         <button type="button" class="kind" data-k="ul" aria-label="Unterstreichen" title="Unterstreichen"><svg viewBox="0 0 24 24"><path d="M8 15l4-9 4 9M9.6 12h4.8"/><path d="M5 19.5h14"/></svg></button>
@@ -317,6 +312,7 @@ header('Referrer-Policy: same-origin');
       <div id="widths" class="group" aria-label="Strichstärke"></div>
     </div>
   </div>
+  <div id="obRibbon" class="ob-ribbon rb-band" role="toolbar" aria-label="Einfügen und Formatieren" hidden></div>
   </div>
   <div id="dockL" class="dock dock-v"></div>
   <div id="dockR" class="dock dock-v"></div>

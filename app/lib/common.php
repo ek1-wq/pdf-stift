@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.69.0';
+const PDFSTIFT_VERSION = '1.70.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -264,6 +264,9 @@ function stroke_obj($e): ?array
     }
     if (in_array($e['va'] ?? '', ['t', 'm', 'b'], true)) {
         $o['va'] = $e['va'];
+    }
+    if (in_array($e['ff'] ?? '', ['sans', 'serif', 'mono', 'carlito', 'opensans', 'caveat'], true)) {
+        $o['ff'] = $e['ff'];
     }
     if (isset($e['html']) && is_string($e['html'])) {
         $o['html'] = mb_substr($e['html'], 0, 50000);

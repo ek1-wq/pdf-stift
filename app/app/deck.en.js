@@ -11,7 +11,11 @@
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const r1 = (v) => Math.round(v * 10) / 10;
   const uid = () => Math.random().toString(36).slice(2, 10);
-  const FONTS = { sans: 'Helvetica, Arial, "Liberation Sans", sans-serif', serif: '"Times New Roman", Times, "Liberation Serif", serif' };
+  const FONTS = { sans: 'Helvetica, Arial, "Liberation Sans", sans-serif', serif: '"Times New Roman", Times, "Liberation Serif", serif', mono: '"Courier New", Courier, "Liberation Mono", monospace',
+    carlito: '"PS Carlito", Carlito, Calibri, sans-serif', opensans: '"PS Open Sans", "Open Sans", sans-serif', caveat: '"PS Caveat", Caveat, cursive' };
+  // freie Schriften (SIL Open Font License) liegen in vendor/fonts und werden erst bei Bedarf geladen
+  const FONT_LIST = [['sans', 'Helvetica / Arial'], ['carlito', "Carlito (like Calibri)"], ['opensans', 'Open Sans'], ['serif', 'Times'], ['mono', 'Courier'], ['caveat', "Caveat (handwriting)"]];
+  const FONT_FILES = { carlito: 'Carlito', opensans: 'OpenSans', caveat: 'Caveat' };
   const COLORS = ['#1A1A1A', '#FFFFFF', '#1E2F6E', '#1F4FD6', '#0091FF', '#1B8A3A', '#B8E62E', '#E8590C', '#D6262B', '#D6409F', '#7048E8', '#868E96'];
   const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 60, 72];
   const DEF_TH = { bg: '#FFFFFF', fg: '#1A1A1A', accent: '#1E2F6E', font: 'sans' };
@@ -106,6 +110,7 @@
     n.className = 'dk-el dk-' + e.t;
     n.dataset.id = e.id;
     n.style.cssText = pos(e);
+    if (e.ff && FONTS[e.ff]) n.style.fontFamily = FONTS[e.ff];
     const pad = e.pad != null ? e.pad : 8;
     if (e.t === 'text') {
       const tx = document.createElement('div');
@@ -163,6 +168,49 @@
     sl.style.cssText = `width:${w}px;height:${h}px;background:transparent;overflow:visible;font-family:${FONTS[th.font] || FONTS.sans};transform:scale(${scale});transform-origin:0 0`;
     for (const e of els) sl.appendChild(elNode(e, th));
     return sl;
+  }
+
+  const ICON = {
+    slide: '<path d="M4 5h16v12H4z"/><path d="M12 9v4M10 11h4"/>', text: '<path d="M5 6h14M12 6v13"/>', img: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5L20 17"/>',
+    shape: '<rect x="3.5" y="4" width="9" height="9" rx="1"/><circle cx="15.5" cy="15.5" r="4.5"/>', table: '<rect x="3.5" y="5" width="17" height="14" rx="1"/><path d="M3.5 10h17M3.5 14.5h17M9.5 5v14M15 5v14"/>',
+    undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>', redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
+    front: '<rect x="8" y="8" width="12" height="12" rx="1" fill="currentColor"/><rect x="4" y="4" width="12" height="12" rx="1"/>', back: '<rect x="4" y="4" width="12" height="12" rx="1" fill="currentColor"/><rect x="8" y="8" width="12" height="12" rx="1"/>',
+    dup: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>', del: '<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>',
+    design: '<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.2" fill="currentColor"/><circle cx="14" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="13" r="1.2" fill="currentColor"/>',
+    play: '<path d="M7 5l12 7-12 7z"/>', pdf: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 14h6M13 11v6"/>', align: '<path d="M4 4v16M8 8h10M8 16h6"/>',
+    textbox: '<rect x="3.5" y="5" width="17" height="14" rx="1.5" stroke-dasharray="2.5 2"/><path d="M8.5 9h7M12 9v7"/>', bold: '<path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z"/>',
+    fill: '<path d="M5 11l6-6 7 7-6 6z"/><path d="M19.5 15.5c0 1.2-.8 2-1.7 2s-1.6-.8-1.6-2c0-1 1.6-3 1.6-3s1.7 2 1.7 3z"/>', line: '<path d="M4 18L18 4"/><path d="M14 20h6"/>',
+  };
+  const SHAPES = [['rect', "Rectangle"], ['round', "Rounded rectangle"], ['ellipse', "Circle / ellipse"], ['tri', "Triangle"], ['arrowR', "Block arrow"], ['line', "Line"], ['arrow', "Arrow"]];
+  const SHAPE_IC = { rect: '<rect x="4" y="6.5" width="16" height="11"/>', round: '<rect x="4" y="6.5" width="16" height="11" rx="3.5"/>', ellipse: '<ellipse cx="12" cy="12" rx="8.5" ry="6"/>', tri: '<path d="M12 5l8.5 14h-17z"/>',
+    arrowR: '<path d="M3 9.5h10V5.5l8 6.5-8 6.5v-4H3z"/>', line: '<path d="M4 19L20 5"/>', arrow: '<path d="M4 19L20 5"/><path d="M12.5 5H20v7.5"/>' };
+  const RI = {
+    paste: '<rect x="5.5" y="5" width="13" height="16" rx="1.5"/><path d="M9 5V3.5h6V5"/><path d="M9 10.5h6M9 14h6M9 17.5h4"/>',
+    cut: '<circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M8.3 15.8L18 4M15.7 15.8L6 4"/>',
+    dup2: '<rect x="3.5" y="3.5" width="11" height="11" rx="1.5"/><rect x="9.5" y="9.5" width="11" height="11" rx="1.5"/><path d="M15 13v4M13 15h4"/>',
+    grow: '<path d="M3 19l5-13 5 13M5 14.5h6"/><path d="M18 10V4M15 7h6"/>', shrink: '<path d="M3 19l5-13 5 13M5 14.5h6"/><path d="M15 7h6"/>',
+    clear: '<path d="M4 19l5-13 5 13M6 14.5h6"/><path d="M15.5 14.5l5 5M20.5 14.5l-5 5"/>',
+    ul: '<circle cx="5" cy="7" r="1.2" fill="currentColor"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="5" cy="17" r="1.2" fill="currentColor"/><path d="M9 7h11M9 12h11M9 17h11"/>',
+    ol: '<path d="M4 4.5h1.5V9M3.8 9h3.2"/><path d="M3.8 14h3.2l-3.2 4.5h3.2"/><path d="M10 7h10M10 16h10"/>',
+    outdent: '<path d="M4 5h16M11 10h9M11 14h9M4 19h16"/><path d="M8 9.5L5 12l3 2.5"/>', indent: '<path d="M4 5h16M11 10h9M11 14h9M4 19h16"/><path d="M5 9.5L8 12l-3 2.5"/>',
+    al: '<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>', ac: '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>', ar: '<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>', aj: '<path d="M4 6h16M4 10h16M4 14h16M4 18h16"/>',
+    vt: '<path d="M4 4h16"/><path d="M8 8.5h8M8 12.5h8"/>', vm: '<path d="M8 9h8M8 15h8"/><path d="M3 12h3M18 12h3"/>', vb: '<path d="M4 20h16"/><path d="M8 11.5h8M8 15.5h8"/>',
+    arrange: '<rect x="3.5" y="3.5" width="10" height="10" rx="1.2"/><rect x="10.5" y="10.5" width="10" height="10" rx="1.2" fill="currentColor" fill-opacity=".25"/>',
+    selall: '<path d="M4 4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4"/><path d="M9 8l7 4-3 1-1.5 3z"/>',
+    rot: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4.5H15"/>',
+    rowAdd: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M12 16.5v5M9.5 19h5"/>', rowDel: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M9.5 19h5"/>',
+    colAdd: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5M19 9.5v5"/>', colDel: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5"/>',
+    newslide: '<rect x="3.5" y="5" width="13" height="10" rx="1"/><path d="M19 13v6M16 16h6"/>', layout: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9h17M10 9v10.5"/>',
+    bg: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5" fill="currentColor" fill-opacity=".2"/>', design: '<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.2" fill="currentColor"/><circle cx="14" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="13" r="1.2" fill="currentColor"/>',
+  };
+  // Menüband „Einfügen“ (Folien und PDF-Seiten)
+  function insertGroup() {
+    return `<div class="rb-grp rb-ins">` +
+      `<button type="button" class="rb-big" data-ins="text" title="Text box: click on the page or drag a box"><svg viewBox="0 0 24 24">${ICON.textbox}</svg><span>Textfeld</span></button>` +
+      `<div class="rb-shapes" role="group" aria-label="Shapes">${SHAPES.map(([k, l]) => `<button type="button" class="rb-sh" data-ins="shape:${k}" title="${esc(l)} – click or drag" aria-label="${esc(l)}"><svg viewBox="0 0 24 24">${SHAPE_IC[k]}</svg></button>`).join('')}</div>` +
+      `<button type="button" class="rb-big" data-ins="img" title="Insert image"><svg viewBox="0 0 24 24">${ICON.img}</svg><span>Bild</span></button>` +
+      `<button type="button" class="rb-big" data-ins="table" title="Insert table"><svg viewBox="0 0 24 24">${ICON.table}</svg><span>Tabelle</span></button>` +
+      `<span class="rb-cap">Insert</span></div>`;
   }
 
   // ================================================================== Bearbeitungskern (Folie oder PDF-Seite)
@@ -230,58 +278,128 @@
       if (!box) return;
       for (const e of list) {
         const n = box.querySelector(`.dk-el[data-id="${e.id}"]`);
-        if (n) n.style.cssText = pos(e);
+        if (n) { n.style.cssText = pos(e); if (e.ff && FONTS[e.ff]) n.style.fontFamily = FONTS[e.ff]; }
         if (n && (e.t === 'shape' || e.t === 'table')) { const nn = elNode(e, host.theme()); nn.className = n.className; n.replaceWith(nn); }
       }
       const h = box.querySelector('.dk-handles');
       if (h && list[0]) h.style.cssText = pos(list[0]);
     }
 
-    // ---------------------------------------------------------------- Format-Leiste (je nach Auswahl)
+    // ---------------------------------------------------------------- Menüband (immer sichtbar; was nicht passt, ist grau)
     function renderFmt() {
       const bar = host.fmtBar();
       if (!bar) return;
       const list = ED.sel.map(byId).filter(Boolean);
-      if (!list.length) { bar.hidden = true; bar.innerHTML = ''; if (host.fmtShown) host.fmtShown(false); return; }
-      const e = list[0];
-      const sw = (a, c, cur) => `<button type="button" class="dk-sw${cur === c ? ' on' : ''}" data-f="${a}" data-v="${c}" style="--c:${c}" title="${c}"></button>`;
-      const none = (a) => `<button type="button" class="dk-sw none" data-f="${a}" data-v="" title="Ohne">∅</button>`;
+      const e = list[0] || null, has = !!e;
+      const line = !!e && isLine(e);
+      const textish = !!e && (e.t === 'text' || e.t === 'table' || (e.t === 'shape' && !line));
+      const shapeish = !!e && (e.t === 'shape' || e.t === 'text' || e.t === 'img');
+      const dis = (en) => (en ? '' : ' disabled');
+      const svg = (ic) => `<svg viewBox="0 0 24 24">${ic}</svg>`;
+      // kleiner Knopf (Symbol, optional Text), großer Knopf, Farbknopf mit ▾, Auswahlmenü mit ▾
+      const sb = (f, title, ic, o = {}) => `<button type="button" class="rb-s${o.on ? ' on' : ''}${o.label ? ' lab' : ''}" data-f="${f}"${o.v != null ? ` data-v="${o.v}"` : ''} title="${esc(title)}" aria-label="${esc(title)}"${dis(o.en !== false)}>${svg(ic)}${o.label ? `<span>${esc(o.label)}</span>` : ''}</button>`;
+      const big = (attr, label, ic, en = true, dd = false) => `<button type="button" class="rb-big" ${attr} title="${esc(label)}"${dis(en)}>${svg(ic)}<span>${esc(label)}${dd ? ' ▾' : ''}</span></button>`;
+      const cb = (f, title, cur, none, ic, en) => `<button type="button" class="dk-cb" data-pal="${f}" data-none="${none ? 1 : ''}" title="${esc(title)}" aria-label="${esc(title)}"${dis(en)}>${ic}<span class="cb-bar${cur ? '' : ' empty'}" style="background:${cur || 'transparent'}"></span><b>▾</b></button>`;
+      const mb = (m, title, ic, en = true, label) => `<button type="button" class="rb-s dd${label ? ' lab' : ''}" data-menu="${m}" title="${esc(title)}" aria-label="${esc(title)}"${dis(en)}>${svg(ic)}${label ? `<span>${esc(label)}</span>` : ''}<b>▾</b></button>`;
+      const grp = (cap, inner, cls = '') => `<div class="rb-grp ${cls}">${inner}<span class="rb-cap">${esc(cap)}</span></div>`;
+      const rows = (...r) => `<div class="rb-col">${r.map((x) => `<div class="rb-row">${x}</div>`).join('')}</div>`;
+      const sep = '<span class="rb-sep"></span>';
       let h = '';
-      const textish = e.t === 'text' || e.t === 'table' || (e.t === 'shape' && !isLine(e));
-      if (textish) {
-        const fs0 = Math.round(e.fs || 24);
-        const sizes = SIZES.includes(fs0) ? SIZES : [...SIZES, fs0].sort((a, b) => a - b);
-        h += `<select data-f="fs" title="Font size">${sizes.map((s) => `<option value="${s}"${s === fs0 ? ' selected' : ''}>${s}</option>`).join('')}</select>
-          <button type="button" class="dk-fb" data-f="bold" title="Bold (Ctrl+B)"><b>B</b></button><button type="button" class="dk-fb" data-f="italic" title="Italic (Ctrl+I)"><i>I</i></button><button type="button" class="dk-fb" data-f="underline" title="Underline (Ctrl+U)"><u>U</u></button>
-          <span class="dk-sep"></span>${COLORS.map((c) => `<button type="button" class="dk-sw" data-f="color" data-v="${c}" style="--c:${c}" title="Text colour"></button>`).join('')}
-          <span class="dk-sep"></span><button type="button" class="dk-fb" data-f="ul" title="Bullets">•≡</button><button type="button" class="dk-fb" data-f="ol" title="Numbering">1≡</button>
-          <button type="button" class="dk-fb" data-f="al" data-v="left" title="Align left">⇤</button><button type="button" class="dk-fb" data-f="al" data-v="center" title="Center">↔</button><button type="button" class="dk-fb" data-f="al" data-v="right" title="Align right">⇥</button>`;
-        if (e.t !== 'table') h += `<button type="button" class="dk-fb" data-f="va" data-v="t" title="Oben">⤒</button><button type="button" class="dk-fb" data-f="va" data-v="m" title="Mitte">↕</button><button type="button" class="dk-fb" data-f="va" data-v="b" title="Unten">⤓</button>`;
+      if (host.ribbonPre) h += host.ribbonPre({ grp, rows, big, sb, mb, svg, sep });
+      // Zwischenablage
+      const canPaste = !!(ED.clip || (host.clipboard && host.clipboard()));
+      h += grp("Clipboard", big('data-f="paste"', "Insert", RI.paste, canPaste) + rows(sb('cut', "Cut (Ctrl+X)", RI.cut, { en: has, label: "Cut" }), sb('copy', "Copy (Ctrl+C)", ICON.dup, { en: has, label: "Copy" }), sb('x:dup', "Duplicate (Ctrl+D)", RI.dup2, { en: has, label: "Duplicate" })));
+      // Einfügen
+      h += grp("Insert", big('data-ins="text"', "Text box", ICON.textbox) + big('data-ins="img"', "image", ICON.img) + big('data-ins="table"', "Table", ICON.table));
+      // Schriftart
+      const fs0 = e ? Math.round(e.fs || 24) : '';
+      const sizes = !e || SIZES.includes(fs0) ? SIZES : [...SIZES, fs0].sort((x, y) => x - y);
+      const ff0 = (e && e.ff) || host.theme().font || 'sans';
+      h += grp("Font", rows(
+        `<select data-f="ff" class="rb-font" title="Font"${dis(textish)}>${FONT_LIST.map(([k, l]) => `<option value="${k}"${k === ff0 ? ' selected' : ''} style="font-family:${esc(FONTS[k])}">${esc(l)}</option>`).join('')}</select>` +
+        `<select data-f="fs" class="rb-size" title="Font size"${dis(textish)}>${e ? '' : '<option></option>'}${sizes.map((x) => `<option value="${x}"${x === fs0 ? ' selected' : ''}>${x}</option>`).join('')}</select>` +
+        sb('fs+', "Increase font size", RI.grow, { en: textish }) + sb('fs-', "Decrease font size", RI.shrink, { en: textish }) + sb('clear', "Clear formatting", RI.clear, { en: textish }),
+        `<button type="button" class="rb-s rb-t" data-f="bold" title="Bold (Ctrl+B)"${dis(textish)}><b>B</b></button><button type="button" class="rb-s rb-t" data-f="italic" title="Italic (Ctrl+I)"${dis(textish)}><i>I</i></button><button type="button" class="rb-s rb-t" data-f="underline" title="Underline (Ctrl+U)"${dis(textish)}><u>U</u></button>` +
+        sep + cb('color', "Font color", ED.lastColor || '#D6262B', false, '<span class="cb-a">A</span>', textish)));
+      // Absatz
+      const va = e && e.t !== 'table' ? (e.va || 't') : '';
+      const vaOk = textish && e.t !== 'table';
+      h += grp("Paragraph", rows(
+        sb('ul', "Bullets", RI.ul, { en: textish }) + sb('ol', "Numbering", RI.ol, { en: textish }) + sep + sb('outdent', "Decrease indent", RI.outdent, { en: textish }) + sb('indent', "Increase indent", RI.indent, { en: textish }),
+        sb('al', "Align left", RI.al, { v: 'left', en: textish }) + sb('al', "Center", RI.ac, { v: 'center', en: textish }) + sb('al', "Align right", RI.ar, { v: 'right', en: textish }) + sb('al', "Justify", RI.aj, { v: 'justify', en: textish }) + sep +
+        sb('va', "Align top", RI.vt, { v: 't', en: vaOk, on: va === 't' }) + sb('va', "Align middle", RI.vm, { v: 'm', en: vaOk, on: va === 'm' }) + sb('va', "Align bottom", RI.vb, { v: 'b', en: vaOk, on: va === 'b' })));
+      // Zeichnen: Formen-Galerie, Anordnen, Füllung, Kontur
+      const gal = `<div class="rb-gal">${SHAPES.map(([k, l]) => `<button type="button" class="rb-sh" data-ins="shape:${k}" title="${esc(l)} – click or drag" aria-label="${esc(l)}">${svg(SHAPE_IC[k])}</button>`).join('')}</div>`;
+      const lw0 = e ? (e.lw || (line ? 3 : 2)) : 2;
+      h += grp("Drawing", gal + big('data-menu="arrange"', "Arrange", RI.arrange, has, true) + rows(
+        cb('fill', "Fill", e && e.fill, true, svg(ICON.fill), !!e && (e.t === 'shape' && !line || e.t === 'text')),
+        cb('line', "Outline", e && (e.line || (e.t === 'table' ? '#868E96' : '')), e ? e.t !== 'table' : true, svg(ICON.line), shapeish || (!!e && e.t === 'table')),
+        `<select data-f="lw" class="rb-lw" title="Line width"${dis(!!e && (e.t === 'shape' || e.t === 'text'))}>${[0.5, 1, 2, 3, 4, 6, 8, 12].map((v) => `<option value="${v}"${v === lw0 ? ' selected' : ''}>${v} pt</option>`).join('')}</select>`), 'rb-draw');
+      // je nach Auswahl: Tabelle, Bild
+      if (e && e.t === 'table') {
+        h += grp("Table", rows(sb('row+', "Insert row below", RI.rowAdd, { label: "Row" }) + sb('col+', "Insert column right", RI.colAdd, { label: "Column" }),
+          sb('row-', "Delete row", RI.rowDel, { label: "Row" }) + sb('col-', "Delete column", RI.colDel, { label: "Column" })) + big('data-f="head"', "Header row", ICON.table, true), 'ctx');
       }
-      if (e.t === 'shape' || e.t === 'text') {
-        if (!isLine(e)) h += `<span class="dk-sep"></span><span class="dk-lbl">Fill</span>${none('fill')}${COLORS.map((c) => sw('fill', c, e.fill)).join('')}`;
-        h += `<span class="dk-sep"></span><span class="dk-lbl">Line</span>${none('line')}${COLORS.slice(0, 10).map((c) => sw('line', c, e.line)).join('')}<select data-f="lw" title="Line width">${[0.5, 1, 2, 3, 4, 6, 8, 12].map((v) => `<option value="${v}"${v === (e.lw || (isLine(e) ? 3 : 2)) ? ' selected' : ''}>${v} pt</option>`).join('')}</select>`;
-      }
-      if (e.t === 'table') {
-        h += `<span class="dk-sep"></span><button type="button" class="dk-fb wide" data-f="row+">+ Zeile</button><button type="button" class="dk-fb wide" data-f="row-">− Zeile</button><button type="button" class="dk-fb wide" data-f="col+">+ Spalte</button><button type="button" class="dk-fb wide" data-f="col-">− Spalte</button><button type="button" class="dk-fb wide${e.head ? ' on' : ''}" data-f="head">Header row</button>`;
-        h += `<span class="dk-lbl">Lines</span>${COLORS.slice(0, 10).map((c) => sw('line', c, e.line)).join('')}`;
-      }
-      if (e.t === 'img') h += `<span class="dk-lbl">Image:</span><button type="button" class="dk-fb wide" data-f="imgreset">Original proportions</button><span class="dk-lbl">Border</span>${none('line')}${COLORS.slice(0, 10).map((c) => sw('line', c, e.line)).join('')}`;
-      if (host.fmtExtra) h += host.fmtExtra();
+      if (e && e.t === 'img') h += grp("image", big('data-f="imgreset"', "Original shape", ICON.img, true), 'ctx');
+      // Bearbeiten
+      h += grp("Editing", rows(sb('selall', "Select all (Ctrl+A)", RI.selall, { label: "Select All", en: els().length > 0 }), sb('x:del', "Delete (Del)", ICON.del, { label: "Delete", en: has }), sb('rot90', "Rotate 90°", RI.rot, { label: "Rotate", en: has })));
       bar.innerHTML = h;
       bar.hidden = false;
-      if (host.fmtShown) host.fmtShown(true);
+      if (e && e.t === 'table' && e.head) { const hb = bar.querySelector('[data-f="head"]'); if (hb) hb.classList.add('on'); }
+      const insK = ED.insert || (host.insertKind && host.insertKind());
+      if (insK) bar.querySelectorAll(`[data-ins="${insK}"]`).forEach((x) => x.classList.add('on'));
       bar.onmousedown = (ev) => { if (!ev.target.closest('select')) ev.preventDefault(); }; // Auswahl im Text bleibt erhalten
       bar.onpointerdown = (ev) => ev.stopPropagation();
-      bar.onclick = (ev) => { const b = ev.target.closest('[data-f]'); if (b && b.tagName !== 'SELECT') fmt(b.dataset.f, b.dataset.v); };
-      bar.onchange = (ev) => { const s = ev.target.closest('select[data-f]'); if (s) fmt(s.dataset.f, s.value); };
+      bar.onclick = (ev) => {
+        const t = ev.target.closest('button');
+        if (!t || t.disabled) return;
+        if (t.dataset.ins) { if (host.onIns) host.onIns(t.dataset.ins); else ins(t.dataset.ins); return; }
+        if (t.dataset.pal) { palette(t, t.dataset.pal, !!t.dataset.none); return; }
+        if (t.dataset.menu) { menu(t.dataset.menu, t); return; }
+        if (t.dataset.f) fmt(t.dataset.f, t.dataset.v, t);
+      };
+      bar.onchange = (ev) => { const sl = ev.target.closest('select[data-f]'); if (sl) fmt(sl.dataset.f, sl.value); };
+    }
+    // Auswahlmenüs im Menüband
+    function menu(m, btn) {
+      const r = btn.getBoundingClientRect();
+      if (m === 'arrange') {
+        popMenu(r.left, r.bottom + 4, [
+          ['front', "Bring to front", () => act('front', btn)], ['back', "Send to back", () => act('back', btn)], ['-', ''],
+          ['al', host.alignWord ? "Align to page …" : "Align to slide …", () => act('align', btn)], ['r90', "Rotate 90°", () => fmt('rot90')], ['r0', "Reset rotation", () => fmt('rot0')],
+        ]);
+        return;
+      }
+      if (host.menu) host.menu(m, btn);
+    }
+    // Farbauswahl unter einem Knopf (Text bleibt markiert)
+    function palette(btn, f, none) {
+      document.querySelectorAll('.dk-pal').forEach((m) => m.remove());
+      const m = document.createElement('div');
+      m.className = 'dk-pal';
+      m.innerHTML = (none ? "<button type=\"button\" class=\"none\" data-v=\"\">None</button>" : '') + COLORS.map((c) => `<button type="button" class="sw" data-v="${c}" style="--c:${c}" title="${c}"></button>`).join('');
+      document.body.appendChild(m);
+      const r = btn.getBoundingClientRect();
+      m.style.left = Math.max(4, Math.min(r.left, innerWidth - m.offsetWidth - 8)) + 'px';
+      m.style.top = Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8) + 'px';
+      m.onmousedown = (ev) => ev.preventDefault();
+      m.onpointerdown = (ev) => ev.stopPropagation();
+      m.onclick = (ev) => { const b = ev.target.closest('[data-v]'); if (!b) return; m.remove(); if (f === 'color') ED.lastColor = b.dataset.v; fmt(f, b.dataset.v); };
+      setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off, true); } }, true), 0);
     }
     // Format anwenden: im Bearbeiten auf die Markierung, sonst aufs ganze Element
-    function fmt(f, v) {
+    function fmt(f, v, btn) {
       const ids = ED.sel.slice();
       const each = (fn) => change(() => ids.forEach((id) => { const e = byId(id); if (e) fn(e); }), true);
-      if (f.startsWith('x:') && host.fmtAct) { host.fmtAct(f.slice(2), v); return; }
-      const inline = ['bold', 'italic', 'underline', 'color', 'ul', 'ol', 'al'];
+      if (f.startsWith('x:')) { act(f.slice(2), btn); return; }
+      if (f === 'paste') { if (host.onPaste) host.onPaste(); else pasteEls(); return; }
+      if (f === 'copy') { copy(); C.toast("Copied – insert with “Paste” or Ctrl+V.", 2500); render(); return; }
+      if (f === 'cut') { copy(); act('del'); return; }
+      if (f === 'selall') { select(els().map((x) => x.id)); return; }
+      if (f === 'rot90') { each((x) => { x.r = ((x.r || 0) + 90) % 360; }); return; }
+      if (f === 'rot0') { each((x) => { x.r = 0; }); return; }
+      if (f === 'fs+' || f === 'fs-') { each((x) => { const c = x.fs || 24; x.fs = f === 'fs+' ? (SIZES.find((z) => z > c) || c + 8) : ([...SIZES].reverse().find((z) => z < c) || Math.max(4, c - 2)); }); return; }
+      const inline = ['bold', 'italic', 'underline', 'color', 'ul', 'ol', 'al', 'clear', 'indent', 'outdent'];
       if (inline.includes(f)) {
         if (ED.edit) { execFmt(f, v); const n = host.box() && host.box().querySelector('.dk-el.editing'); if (n) syncEdit(n); return; }
         // ganzes Feld: kurz alles markieren, anwenden, fertig
@@ -299,6 +417,7 @@
         return;
       }
       if (f === 'fs') { each((e) => { e.fs = +v; }); return; }
+      if (f === 'ff') { if (!FONTS[v]) return; each((e) => { e.ff = v; }); if (document.fonts && FONT_FILES[v]) document.fonts.load(`16px ${FONTS[v].split(',')[0]}`).then(() => { if (grow()) render(); }).catch(() => {}); return; }
       if (f === 'va') { each((e) => { e.va = v; }); return; }
       if (f === 'fill') { each((e) => { if (v) e.fill = v; else delete e.fill; }); return; }
       if (f === 'line') { each((e) => { if (v) e.line = v; else delete e.line; }); return; }
@@ -327,7 +446,9 @@
       else if (f === 'color') { document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, v); }
       else if (f === 'ul') document.execCommand('insertUnorderedList');
       else if (f === 'ol') document.execCommand('insertOrderedList');
-      else if (f === 'al') document.execCommand(v === 'center' ? 'justifyCenter' : v === 'right' ? 'justifyRight' : 'justifyLeft');
+      else if (f === 'al') document.execCommand(v === 'center' ? 'justifyCenter' : v === 'right' ? 'justifyRight' : v === 'justify' ? 'justifyFull' : 'justifyLeft');
+      else if (f === 'clear') document.execCommand('removeFormat');
+      else if (f === 'indent' || f === 'outdent') document.execCommand(f);
     }
 
     // ---------------------------------------------------------------- Text bearbeiten (wie in PowerPoint: Feld anklicken, dann tippen)
@@ -419,7 +540,7 @@
     // Zeiger gedrückt; id = getroffenes Element (wenn der Aufrufer es schon kennt). Rückgabe true = erledigt
     function down(ev, id) {
       if (ev.button > 0) return false;
-      if (ED.insert) { endEdit(); const kind = ED.insert; ED.insert = null; host.placing(false); insertAt(kind, ...toLocal(ev)); ev.preventDefault(); return true; }
+      if (ED.insert) { endEdit(); const kind = ED.insert; ED.insert = null; host.placing(false); ev.preventDefault(); drawInsert(kind, ev); return true; }
       const hEl = ev.target.closest && ev.target.closest('.dk-h');
       const n = id ? { dataset: { id } } : ev.target.closest && ev.target.closest('.dk-el');
       if (ED.edit && n && n.dataset.id === ED.edit.id) return true; // im Text: Schreibmarke setzen, markieren
@@ -507,7 +628,7 @@
     }
 
     // ---------------------------------------------------------------- Einfügen
-    function insertAt(kind, x, y) {
+    function insertAt(kind, x, y, rect) {
       const base = { id: uid(), r: 0 };
       const q = u();
       let e;
@@ -520,9 +641,55 @@
       }
       if (!e) return;
       if (host.pad != null) e.pad = host.pad;
-      e.x = r1(Math.max(0, e.x)); e.y = r1(Math.max(0, e.y));
+      if (rect) {
+        // aufgezogen: Rechteck übernehmen; Linien von Anfang bis Ende (gedreht)
+        const [x0, y0, x1, y1] = rect;
+        if (isLine(e)) {
+          const len = Math.max(10 * q, Math.hypot(x1 - x0, y1 - y0));
+          e.w = r1(len); e.x = r1((x0 + x1) / 2 - len / 2); e.y = r1((y0 + y1) / 2 - e.h / 2);
+          e.r = Math.round(((Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI) + 360) % 360);
+        } else {
+          e.x = r1(Math.min(x0, x1)); e.y = r1(Math.min(y0, y1));
+          e.w = r1(Math.max(12 * q, Math.abs(x1 - x0)));
+          if (e.t !== 'text') e.h = r1(Math.max(12 * q, Math.abs(y1 - y0)));
+          else e.h = r1(Math.max(e.h, Math.abs(y1 - y0)));
+        }
+      } else { e.x = r1(Math.max(0, e.x)); e.y = r1(Math.max(0, e.y)); }
       change(() => { els().push(e); ED.sel = [e.id]; }, true);
       if (e.t === 'text') startEdit(e.id, null);
+    }
+    // Einfügen per Klick (Standardgröße) oder Aufziehen (wie in PowerPoint)
+    function drawInsert(kind, ev) {
+      const [sx, sy] = toLocal(ev);
+      const pid = ev.pointerId;
+      const tgt = host.stage();
+      try { tgt.setPointerCapture(pid); } catch (er) { /* */ }
+      const surf = host.box() && host.box().querySelector('.dk-slide');
+      const g = document.createElement('div');
+      g.className = 'dk-ghost';
+      let ex = sx, ey = sy, sq = false;
+      const mv = (m) => {
+        if (m.pointerId !== pid) return;
+        m.stopImmediatePropagation();
+        [ex, ey] = toLocal(m);
+        sq = m.shiftKey;
+        if (sq && !kind.endsWith('line') && !kind.endsWith('arrow')) { const d = Math.max(Math.abs(ex - sx), Math.abs(ey - sy)); ex = sx + Math.sign(ex - sx || 1) * d; ey = sy + Math.sign(ey - sy || 1) * d; }
+        if (!surf) return;
+        if (!g.parentNode) surf.appendChild(g);
+        if (kind === 'shape:line' || kind === 'shape:arrow') {
+          const len = Math.hypot(ex - sx, ey - sy), a = Math.atan2(ey - sy, ex - sx) * 180 / Math.PI;
+          g.style.cssText = `left:${sx}px;top:${sy - 1}px;width:${len}px;height:2px;transform-origin:0 50%;transform:rotate(${a}deg)`;
+        } else g.style.cssText = `left:${Math.min(sx, ex)}px;top:${Math.min(sy, ey)}px;width:${Math.abs(ex - sx)}px;height:${Math.abs(ey - sy)}px`;
+      };
+      const up = (uev) => {
+        if (uev.pointerId !== pid) return;
+        uev.stopImmediatePropagation();
+        tgt.removeEventListener('pointermove', mv, true); tgt.removeEventListener('pointerup', up, true); tgt.removeEventListener('pointercancel', up, true);
+        g.remove();
+        if (Math.hypot(ex - sx, ey - sy) * (host.k() || 1) > 8) insertAt(kind, sx, sy, [sx, sy, ex, ey]);
+        else insertAt(kind, sx, sy);
+      };
+      tgt.addEventListener('pointermove', mv, true); tgt.addEventListener('pointerup', up, true); tgt.addEventListener('pointercancel', up, true);
     }
     async function addImage(file) {
       try {
@@ -571,8 +738,15 @@
     function startInsert(kind, msg) {
       endEdit();
       ED.insert = kind;
-      host.placing(true);
-      C.toast(msg, 4000);
+      host.placing(true, kind);
+      if (msg) C.toast(msg, 4000);
+    }
+    // Knopf im Menüband „Einfügen“
+    function ins(kind) {
+      if (kind === 'img') { host.pickImage(); return; }
+      if (kind === 'table') { addTable(); return; }
+      if (ED.insert === kind) { ED.insert = null; host.placing(false); return; }
+      startInsert(kind, host.alignWord ? "Click on the page or drag with the mouse button held (Esc = cancel)." : "Click on the slide or drag with the mouse button held (Esc = cancel).");
     }
     function shapeMenu(x, y) {
       const k = [['rect', "Rectangle"], ['round', "Rounded rectangle"], ['ellipse', "Circle / ellipse"], ['tri', "Triangle"], ['arrowR', "Block arrow"], ['line', "Line"], ['arrow', "Arrow"]];
@@ -623,7 +797,7 @@
       return false;
     }
     function select(ids) { endEdit(); ED.sel = ids.filter((id) => byId(id)); render(); }
-    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, toLocal });
+    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal });
     return ED;
   }
 
@@ -641,15 +815,6 @@
   }
 
   // ================================================================== Präsentationen
-  const ICON = {
-    slide: '<path d="M4 5h16v12H4z"/><path d="M12 9v4M10 11h4"/>', text: '<path d="M5 6h14M12 6v13"/>', img: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5L20 17"/>',
-    shape: '<rect x="3.5" y="4" width="9" height="9" rx="1"/><circle cx="15.5" cy="15.5" r="4.5"/>', table: '<rect x="3.5" y="5" width="17" height="14" rx="1"/><path d="M3.5 10h17M3.5 14.5h17M9.5 5v14M15 5v14"/>',
-    undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>', redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
-    front: '<rect x="8" y="8" width="12" height="12" rx="1" fill="currentColor"/><rect x="4" y="4" width="12" height="12" rx="1"/>', back: '<rect x="4" y="4" width="12" height="12" rx="1" fill="currentColor"/><rect x="8" y="8" width="12" height="12" rx="1"/>',
-    dup: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>', del: '<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>',
-    design: '<circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r="1.2" fill="currentColor"/><circle cx="14" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="13" r="1.2" fill="currentColor"/>',
-    play: '<path d="M7 5l12 7-12 7z"/>', pdf: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 14h6M13 11v6"/>', align: '<path d="M4 4v16M8 8h10M8 16h6"/>',
-  };
   const ib = (id, ic, title, label) => `<button type="button" class="dk-b" data-a="${id}" title="${esc(title)}" aria-label="${esc(title)}"><svg viewBox="0 0 24 24">${ic}</svg>${label ? `<span>${esc(label)}</span>` : ''}</button>`;
 
   const deckHost = {
@@ -665,8 +830,22 @@
     typing() { save(); clearTimeout(D.thumbT); D.thumbT = setTimeout(renderList, 500); },
     surface: () => (slide() ? slideNode(slide(), D.k || 1, true, theme()) : null),
     rendered: () => fit(),
-    placing: (on) => { if (D.root) D.root.classList.toggle('dk-placing', on); },
+    placing: (on, kind) => { if (!D.root) return; D.root.classList.toggle('dk-placing', !!on); D.root.querySelectorAll('[data-ins]').forEach((b) => b.classList.toggle('on', !!on && b.dataset.ins === kind)); },
     pickImage: () => $('.dk-file', D.root).click(),
+    ribbonPre: ({ grp, rows, big, mb }) => grp("slides", big('data-menu="newslide"', "New slide", RI.newslide, true, true) +
+      rows(mb('layout', "Layout of this slide", RI.layout, true, 'Layout'), mb('bg', "Background", RI.bg, true, "Background"), mb('design', "Design of all slides", RI.design, true, 'Design'))),
+    menu: (m, btn) => {
+      const r = btn.getBoundingClientRect(), x = r.left, y = r.bottom + 4;
+      if (m === 'newslide') layoutMenu(x, y);
+      if (m === 'layout') popMenu(x, y, Object.entries(LAYOUTS).map(([k, l]) => [k, esc(l.name), () => change(() => {
+        // Platzhalter tauschen, eigene Inhalte bleiben
+        const keep = slide().els.filter((e) => !e.ph);
+        slide().els = [...newSlide(k).els, ...keep];
+        D.ed.sel = [];
+      })]));
+      if (m === 'bg') bgMenu(x, y, false);
+      if (m === 'design') designMenu(x, y);
+    },
   };
 
   function build(root) {
@@ -674,23 +853,18 @@
       <div class="dk-top">
         <input class="dk-title" aria-label="Name der Präsentation" maxlength="200">
         <span class="dk-sep"></span>
-        ${ib('newslide', ICON.slide, "New slide", 'Folie')}${ib('text', ICON.text, "Text box", 'Text')}${ib('img', ICON.img, "Insert image", "image")}${ib('shape', ICON.shape, "Shape", "Shape")}${ib('table', ICON.table, "Table", "Table")}
-        <span class="dk-sep"></span>
         ${ib('undo', ICON.undo, "Undo (Ctrl+Z)")}${ib('redo', ICON.redo, "Redo (Ctrl+Y)")}
-        ${ib('front', ICON.front, "Bring to front")}${ib('back', ICON.back, "Send to back")}${ib('align', ICON.align, "Align")}${ib('dup', ICON.dup, "Duplicate (Ctrl+D)")}${ib('del', ICON.del, "Delete (Del)")}
-        <span class="dk-sep"></span>
-        ${ib('design', ICON.design, 'Design', 'Design')}
         <span class="dk-grow"></span>
         <span class="dk-state muted small"></span>
         ${ib('play', ICON.play, "Present (F5)", "Present")}${ib('pdf', ICON.pdf, "Save as PDF", 'PDF')}
       </div>
-      <div class="dk-fmt" hidden></div>
+      <div class="dk-fmt rb-band"></div>
       <div class="dk-main">
-        <aside class="dk-list" aria-label="Folien"></aside>
+        <aside class="dk-list" aria-label="Slides"></aside>
         <div class="dk-stage"><div class="dk-box"></div></div>
       </div>
       <input type="file" class="dk-file" accept="image/*" hidden>`;
-    root.querySelector('.dk-top').onclick = (ev) => { const b = ev.target.closest('[data-a]'); if (b) act(b.dataset.a, b); };
+    root.querySelector('.dk-top').onclick = (ev) => { const n = ev.target.closest('[data-ins]'); if (n) { if (D.deck) D.ed.ins(n.dataset.ins); return; } const b = ev.target.closest('[data-a]'); if (b) act(b.dataset.a, b); };
     const ti = $('.dk-title', root);
     ti.oninput = () => { D.deck.title = ti.value; save(); C.deckTitle(D.path, ti.value); };
     $('.dk-file', root).onchange = async (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) D.ed.addImage(f); };
@@ -960,23 +1134,44 @@
   async function painter(doc, th, allEls) {
     const { StandardFonts, pushGraphicsState, popGraphicsState, concatTransformationMatrix } = PDFLib;
     th = th || DEF_TH;
-    const serif = th.font === 'serif';
-    const F = {
-      r: await doc.embedFont(serif ? StandardFonts.TimesRoman : StandardFonts.Helvetica),
-      b: await doc.embedFont(serif ? StandardFonts.TimesRomanBold : StandardFonts.HelveticaBold),
-      i: await doc.embedFont(serif ? StandardFonts.TimesRomanItalic : StandardFonts.HelveticaOblique),
-      bi: await doc.embedFont(serif ? StandardFonts.TimesRomanBoldItalic : StandardFonts.HelveticaBoldOblique),
+    const STD = {
+      sans: [StandardFonts.Helvetica, StandardFonts.HelveticaBold, StandardFonts.HelveticaOblique, StandardFonts.HelveticaBoldOblique],
+      serif: [StandardFonts.TimesRoman, StandardFonts.TimesRomanBold, StandardFonts.TimesRomanItalic, StandardFonts.TimesRomanBoldItalic],
+      mono: [StandardFonts.Courier, StandardFonts.CourierBold, StandardFonts.CourierOblique, StandardFonts.CourierBoldOblique],
     };
+    const fams = {};
+    let kitOk = false;
+    // Schriftfamilie für ein Element (eingebettet, nur benutzte Zeichen)
+    const famOf = async (ff) => {
+      ff = FONTS[ff] ? ff : (th.font === 'serif' ? 'serif' : 'sans');
+      if (fams[ff]) return fams[ff];
+      if (STD[ff]) {
+        const [r, b, i, bi] = await Promise.all(STD[ff].map((n) => doc.embedFont(n)));
+        fams[ff] = { r, b, i, bi, custom: false };
+      } else {
+        if (!kitOk) { await C.ensureFontkit(); doc.registerFontkit(window.fontkit); kitOk = true; }
+        const base = FONT_FILES[ff];
+        const get = async (st) => { const r = await fetch('vendor/fonts/' + base + '-' + st + '.ttf?v=' + C.VERSION); if (!r.ok) throw new Error("Font missing"); return doc.embedFont(new Uint8Array(await r.arrayBuffer()), { subset: true }); };
+        const r = await get('Regular'), b = await get('Bold');
+        const i = ff === 'caveat' ? r : await get('Italic'), bi = ff === 'caveat' ? b : await get('BoldItalic');
+        fams[ff] = { r, b, i, bi, custom: true, set: new Set(r.getCharacterSet()) };
+      }
+      return fams[ff];
+    };
+    const F = await famOf(th.font === 'serif' ? 'serif' : 'sans');
     let uni = null; // DejaVu für Zeichen außerhalb von WinAnsi (z. B. Pfeile, griechische Buchstaben)
     const needUni = (allEls || []).some((e) => [e.html || '', ...(e.rows || []).flat()].join('').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').split('').some((ch) => !winOk(ch) && ch !== '\n'));
     if (needUni) {
-      await C.ensureFontkit();
-      doc.registerFontkit(window.fontkit);
+      if (!kitOk) { await C.ensureFontkit(); doc.registerFontkit(window.fontkit); kitOk = true; }
       const get = async (n) => new Uint8Array(await (await fetch('vendor/fonts/' + n + '?v=' + C.VERSION)).arrayBuffer());
       uni = { r: await doc.embedFont(await get('DejaVuSans.ttf'), { subset: true }), b: await doc.embedFont(await get('DejaVuSans-Bold.ttf'), { subset: true }) };
     }
-    const fontOf = (r) => F[(r.b ? 'b' : '') + (r.i ? 'i' : '') || 'r'] || F.r;
-    const fontCh = (ch, tok) => (winOk(ch) ? fontOf(tok) : (uni ? (tok.b ? uni.b : uni.r) : null));
+    let FF = F; // Schrift des gerade gezeichneten Elements
+    const fontOf = (r) => FF[(r.b ? 'b' : '') + (r.i ? 'i' : '') || 'r'] || FF.r;
+    const fontCh = (ch, tok) => {
+      const ok = FF.custom ? FF.set.has(ch.codePointAt(0)) : winOk(ch);
+      return ok ? fontOf(tok) : (uni ? (tok.b ? uni.b : uni.r) : null);
+    };
     const imgCache = new Map();
     const getImg = async (src) => {
       if (imgCache.has(src)) return imgCache.get(src);
@@ -1044,13 +1239,14 @@
         const lx = x + pad + ln.ind + (ln.al === 'center' ? (avail - ln.w) / 2 : ln.al === 'right' ? avail - ln.w : 0);
         if (ln.bullet && ln.bullet.list) {
           const mark = ln.bullet.list === 'ol' ? ln.bullet.num + '.' : '•';
-          pg.drawText(mark, { x: (x + pad + ln.ind - fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8)) * K, y: -(yy + fs * 0.92) * K, size: fs * K, font: F.r, color: hexRgb(color) });
+          pg.drawText(mark, { x: (x + pad + ln.ind - fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8)) * K, y: -(yy + fs * 0.92) * K, size: fs * K, font: FF.custom ? FF.r : F.r, color: hexRgb(color) });
         }
         drawRuns(pg, ln, lx, yy, fs, color, K);
         yy += lh + (ln.last ? fs * 0.3 : 0);
       }
     };
     async function drawEl(pg, e, K) {
+      FF = await famOf(e.ff);
       const cx = (e.x + e.w / 2) * K, cy = -(e.y + e.h / 2) * K;
       const a = -(e.r || 0) * Math.PI / 180;
       pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), cx, cy), concatTransformationMatrix(1, 0, 0, 1, -e.w / 2 * K, e.h / 2 * K));
@@ -1135,5 +1331,5 @@
     return box;
   }
 
-  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain };
+  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON };
 })();

@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.69.0';
+  const VERSION = '1.70.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -4700,7 +4700,7 @@
     return {
       box: () => obLayer(P, true),
       stage: () => pagesEl,
-      fmtBar: () => obBar(),
+      fmtBar: () => $('#obRibbon .rb-fmt'),
       W: () => P.w, H: () => P.h, k,
       unit: Math.max(0.45, Math.min(1.2, P.w / 960)), pad: 5,
       els: () => OB.els, setEls: (a) => { OB.els = a; },
@@ -4709,15 +4709,13 @@
       commit: (before) => obCommit(P, before),
       surface: () => window.PDFSTIFT_DECK.layerNode(OB.els, P.w, P.h, k(), OB_TH),
       rendered: () => { const l = obLayer(P, true); l.dataset.sig = ''; l.classList.toggle('ob-on', !!(OB.ed && (OB.ed.sel.length || OB.ed.edit))); },
-      placing: (on) => document.body.classList.toggle('ob-placing', !!on),
+      placing: (on, kind) => obPlacing(on ? kind : null),
       pickImage: () => obPickImage(),
       center: () => obCenter(P),
       alignWord: true, passThrough: true,
       editOnFirstClick: (e) => !!e && e.t === 'text',
       copied: (list) => { OB.clip = list; },
-      fmtShown: (on) => obBarPlace(on),
-      fmtExtra: () => `<span class="dk-sep"></span><button type="button" class="dk-fb wide" data-f="x:front" title="Nach vorne">Vorne</button><button type="button" class="dk-fb wide" data-f="x:back" title="Nach hinten">Hinten</button><button type="button" class="dk-fb wide" data-f="x:align" title="Ausrichten">Ausrichten</button><button type="button" class="dk-fb wide" data-f="x:dup" title="Duplizieren (Strg+D)">Duplizieren</button><button type="button" class="dk-fb wide ob-del" data-f="x:del" title="Löschen (Entf)">Löschen</button>`,
-      fmtAct: (a) => { if (OB.ed) OB.ed.act(a, obBar().querySelector(`[data-f="x:${a}"]`)); },
+      onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
     };
   }
   function obActivate(P) {
@@ -4739,8 +4737,7 @@
     ed.endEdit();
     ed.insert = null;
     OB.ed = null; OB.P = null;
-    const bar = obBar(); bar.hidden = true; bar.innerHTML = ''; obBarPlace(false);
-    document.body.classList.remove('ob-placing');
+    const idle = obIdle(); if (idle) idle.renderFmt();
     if (P && V.pages[P.i] === P) {
       const l = obLayer(P, false);
       if (l) { l.classList.remove('ob-on'); l.dataset.sig = ''; }
@@ -4777,23 +4774,45 @@
     if (acts.length) pushHistory(acts.length === 1 ? acts[0] : { t: 'multi', acts });
     P.obEls = OB.els;
   }
-  function obBar() {
-    if (!OB.bar) {
-      OB.bar = document.createElement('div');
-      OB.bar.className = 'dk-fmt ob-fmt';
-      OB.bar.hidden = true;
-      document.body.appendChild(OB.bar);
-    }
-    return OB.bar;
+  // Menüband über der PDF (nur in der PDF-Ansicht)
+  function obRibbonSync() {
+    const rb = $('#obRibbon');
+    if (!rb) return;
+    const show = !$('#toolbar').hidden && !!V.path && !V.board && !V.deck && !EMBED && !SHOW && !PROMPTER;
+    if (rb.hidden === !show) return;
+    rb.hidden = !show;
+    if (show && !rb.firstChild) ensureDeck().then((DK) => {
+      if (rb.firstChild) return;
+      rb.innerHTML = '<div class="rb-fmt"></div>';
+      if (OB.ed) OB.ed.renderFmt(); else obIdle().renderFmt();
+    }).catch(() => {});
   }
-  function obBarPlace(on) {
-    const bar = obBar();
-    document.body.classList.toggle('ob-fmt-on', !!on);
-    if (!on) return;
-    const r = viewer.getBoundingClientRect();
-    bar.style.left = Math.max(4, r.left + 8) + 'px';
-    bar.style.top = Math.max(4, r.top + 6) + 'px';
-    bar.style.maxWidth = Math.max(280, r.width - 16) + 'px';
+  // Menüband ohne ausgewähltes Objekt (alles zum Formatieren grau)
+  function obIdle() {
+    const DK = window.PDFSTIFT_DECK;
+    if (!DK) return null;
+    OB.idle = OB.idle || DK.makeEditor({
+      box: () => null, stage: () => pagesEl, fmtBar: () => $('#obRibbon .rb-fmt'), W: () => 1, H: () => 1, k: () => 1,
+      els: () => [], setEls() {}, theme: () => OB_TH, snap: () => '[]', commit() {}, surface: () => null,
+      placing: (on, kind) => obPlacing(on ? kind : null), pickImage: () => obPickImage(), alignWord: true,
+      onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
+    });
+    return OB.idle;
+  }
+  function obPaste() {
+    if (!OB.clip) return;
+    const P = (OB.ed && OB.P) || obPage();
+    const ed = P && obActivate(P);
+    if (ed) { ed.clip = OB.clip; ed.pasteEls(); }
+  }
+  function obIns(kind) {
+    if (!V.doc || V.board) return;
+    if (kind === 'img') { obPickImage(); return; }
+    if (kind === 'table') { const P = (OB.ed && OB.P) || obPage(); const ed = P && obActivate(P); if (ed) ed.addTable(); return; }
+    if (OB.insert === kind) { obPlacing(null); return; }
+    if (OB.ed) OB.ed.endEdit();
+    obPlacing(kind);
+    toast('Auf die Seite klicken oder mit gedrückter Maustaste aufziehen (Esc = abbrechen).', 3500);
   }
   function obCenter(P) {
     const r = P.el.getBoundingClientRect(), vr = viewer.getBoundingClientRect(), k = (P.cssW || 1) / P.w;
@@ -4818,22 +4837,10 @@
     if (ed) ed.addImage(f);
   }
   function obPlacing(kind) {
-    OB.insert = kind;
+    OB.insert = kind || null;
+    if (OB.ed) OB.ed.insert = null;
     document.body.classList.toggle('ob-placing', !!kind);
-  }
-  // Menü „Einfügen“ (Werkzeugleiste, Rechtsklick)
-  async function obInsertMenu(x, y) {
-    if (!V.doc || V.board || V.deck) { toast('Bitte zuerst eine PDF öffnen.'); return; }
-    let DK;
-    try { DK = await ensureDeck(); } catch (e) { toast(e.message); return; }
-    const place = (kind, msg) => () => { if (OB.ed) OB.ed.endEdit(); obPlacing(kind); toast(msg, 4000); };
-    const shapes = [['rect', 'Rechteck'], ['round', 'Abgerundetes Rechteck'], ['ellipse', 'Kreis / Ellipse'], ['tri', 'Dreieck'], ['arrowR', 'Blockpfeil'], ['line', 'Linie'], ['arrow', 'Pfeil']];
-    DK.popMenu(x, y, [
-      ['text', 'Textfeld (formatiert)', place('text', 'Auf die Seite klicken, wo der Text hin soll (Esc = abbrechen).')],
-      ['shape', 'Form …', () => DK.popMenu(x, y, shapes.map(([id, l]) => [id, l, place('shape:' + id, 'Auf die Seite klicken, wo die Form hin soll (Esc = abbrechen).')]))],
-      ['img', 'Bild …', () => obPickImage()],
-      ['table', 'Tabelle …', async () => { const P = obPage(); if (!P) return; const ed = obActivate(P); if (ed) ed.addTable(); }],
-    ]);
+    document.querySelectorAll('#obRibbon [data-ins], .dk-fmt [data-ins]').forEach((b) => b.classList.toggle('on', !!kind && b.dataset.ins === kind));
   }
   // Treffer auf einer Seite (oberstes Objekt zuerst, auch gedreht)
   function obHit(P, x, y) {
@@ -4863,8 +4870,7 @@
       obPlacing(null);
       const ed = obActivate(P);
       if (!ed) return true;
-      const [x, y] = obLocal(P, e);
-      ed.insertAt(kind, x, y);
+      ed.drawInsert(kind, e);
       return true;
     }
     if (!P) return false;
@@ -4911,7 +4917,6 @@
     OB.ed.clip = OB.clip;
     OB.ed.pasteEls();
   }, true);
-  window.addEventListener('resize', () => { if (document.body.classList.contains('ob-fmt-on')) obBarPlace(true); });
 
   function deckCore() {
     window.PDFSTIFT_CORE = window.PDFSTIFT_CORE || {
@@ -6473,7 +6478,7 @@
     ro.observe(document.querySelector('.topbar'));
   }
   // Werkzeug-Leiste erscheint und verschwindet zusammen mit der Stifte-Leiste; leere Zeilen ausblenden
-  new MutationObserver(() => { $('#toolbar2').hidden = $('#toolbar').hidden; lineSync(); }).observe($('#toolbar'), { attributes: true, attributeFilter: ['hidden'] });
+  new MutationObserver(() => { $('#toolbar2').hidden = $('#toolbar').hidden; lineSync(); obRibbonSync(); }).observe($('#toolbar'), { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(() => lineSync()).observe($('#toolsRow'), { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(() => lineSync()).observe($('#viewBar'), { attributes: true, attributeFilter: ['hidden'] });
   const drop = $('#tbDrop');
@@ -10623,6 +10628,7 @@
 
   function renderToolbar() {
     if (ls('toolPanel')) setTimeout(tpRender, 0);
+    obRibbonSync();
     document.querySelectorAll('.tool').forEach((b) => {
       const on = b.dataset.tool === S.tool;
       b.classList.toggle('active', on);
@@ -10729,7 +10735,6 @@
     try { Object.assign(S, { tool: t.tool, color: { ...S.color, ...t.color }, wi: { ...S.wi, ...t.wi }, txKind: t.txKind, shKind: t.shKind, ttSize: t.ttSize, favs: t.favs || S.favs, finger: !!t.finger }); renderToolbar(); } finally { toolsIn = false; }
   }
   document.querySelectorAll('.tool[data-tool]').forEach((b) => { b.onclick = () => { S.tool = b.dataset.tool; persistTools(); renderToolbar(); }; });
-  $('#obIns').onclick = (e) => { const r = e.currentTarget.getBoundingClientRect(); obInsertMenu(r.left, r.bottom + 6); };
   document.querySelectorAll('#txKinds .kind').forEach((b) => { b.onclick = () => { S.txKind = b.dataset.k; persistTools(); renderToolbar(); }; });
   document.querySelectorAll('#shKinds .kind').forEach((b) => { b.onclick = () => { S.shKind = b.dataset.k; persistTools(); renderToolbar(); }; });
   document.querySelectorAll('#ttSizes .kind').forEach((b) => { b.onclick = () => { S.ttSize = +b.dataset.fs; persistTools(); renderToolbar(); }; });
