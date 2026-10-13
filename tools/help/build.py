@@ -1,65 +1,36 @@
 #!/usr/bin/env python3
-"""Kurzanleitung als PDF im APA-Stil (7. Auflage) erzeugen – Englisch nach US-Norm (Letter) und Deutsch (A4).
-Standard in der App ist Englisch; Deutsch lässt sich unter Einstellungen → Kurzanleitung wählen.
+"""Kurzanleitung als PDF erzeugen – im Kartenlayout der früheren Hilfeseite.
 
-Je Sprache (de, en) und Ausgabe (server = Browser/Windows-App mit eigenem Server und Tablet,
-local = Windows-/Linux-App ohne Server) entsteht eine Datei in server/hilfe/:
-    kurzanleitung-server.de.pdf, kurzanleitung-local.de.pdf, kurzanleitung-server.en.pdf, kurzanleitung-local.en.pdf
+Je Sprache und Ausgabe eine Datei in server/hilfe/ (app/hilfe/ in der freien Ausgabe):
+    kurzanleitung-server.en.pdf / .de.pdf  – Browser, Windows-App mit eigenem Server und Tablet
+    kurzanleitung-local.en.pdf  / .de.pdf  – Windows-/Linux-App ohne Server
+Englisch (US, Letter) ist der Standard in der App; Deutsch (A4) lässt sich unter Einstellungen → Kurzanleitung wählen.
 
 Aufruf:  python3 tools/help/build.py
-Benötigt reportlab; Schrift: Carlito (metrisch gleich Calibri, SIL OFL) aus server/vendor/fonts.
-
-APA 7 (Studierenden-Arbeit): Titelseite, Seitenzahl oben rechts, 2,54 cm Ränder, Calibri 11 pt,
-doppelter Zeilenabstand, Absätze mit 1,27 cm Einzug, Überschriften Ebene 1 zentriert fett,
-Ebene 2 linksbündig fett, Tabellen mit Nummer (fett), kursivem Titel und nur waagrechten Linien.
+Benötigt Python-Playwright mit Chromium (druckt die erzeugte HTML-Seite als PDF). Schrift: Inter (SIL OFL) aus vendor/fonts.
 """
+import html as _html
 import os
+import re
 import sys
-from reportlab.lib.pagesizes import A4, LETTER
-from reportlab.lib.units import cm
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib import colors
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import (BaseDocTemplate, PageTemplate, Frame, Paragraph, Spacer, PageBreak,
-                                Table, TableStyle, KeepTogether, ListFlowable, ListItem, CondPageBreak)
+import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-FONTS = os.path.join(ROOT, 'server' if os.path.isdir(os.path.join(ROOT, 'server')) else 'app', 'vendor', 'fonts')
-OUT = os.path.join(ROOT, 'server' if os.path.isdir(os.path.join(ROOT, 'server')) else 'app', 'hilfe')
-
-for n, f in (('C', 'Carlito-Regular.ttf'), ('C-B', 'Carlito-Bold.ttf'), ('C-I', 'Carlito-Italic.ttf'), ('C-BI', 'Carlito-BoldItalic.ttf')):
-    pdfmetrics.registerFont(TTFont(n, os.path.join(FONTS, f)))
-pdfmetrics.registerFontFamily('C', normal='C', bold='C-B', italic='C-I', boldItalic='C-BI')
-
-FS = 11            # Calibri 11 pt
-LEAD = 26.4        # doppelter Zeilenabstand (wie „doppelt“ in Word bei Calibri 11)
-MARGIN = 2.54 * cm
-INDENT = 1.27 * cm
-
-body = ParagraphStyle('body', fontName='C', fontSize=FS, leading=LEAD, firstLineIndent=INDENT, alignment=TA_LEFT)
-plain = ParagraphStyle('plain', parent=body, firstLineIndent=0)
-center = ParagraphStyle('center', parent=plain, alignment=TA_CENTER)
-title_s = ParagraphStyle('title', parent=center, fontName='C-B')
-h1 = ParagraphStyle('h1', parent=center, fontName='C-B', spaceBefore=0, keepWithNext=1)
-h2 = ParagraphStyle('h2', parent=plain, fontName='C-B', keepWithNext=1)
-item = ParagraphStyle('item', parent=plain)
-tnum = ParagraphStyle('tnum', parent=plain, fontName='C-B', keepWithNext=1)
-ttitle = ParagraphStyle('ttitle', parent=plain, fontName='C-I', keepWithNext=1)
-tcell = ParagraphStyle('tcell', fontName='C', fontSize=FS, leading=FS * 1.25)
-thead = ParagraphStyle('thead', parent=tcell, fontName='C-B')
-tnote = ParagraphStyle('tnote', parent=plain)
+BASE = os.path.join(ROOT, 'server' if os.path.isdir(os.path.join(ROOT, 'server')) else 'app')
+FONTS = os.path.join(BASE, 'vendor', 'fonts')
+OUT = os.path.join(BASE, 'hilfe')
 
 
 def keys(s):
-    """Tasten hervorheben: Strg+O → <b>Strg</b>+<b>O</b> (nur fett, ohne Kästchen – wie in APA-Texten üblich)."""
-    return '+'.join(f'<b>{k}</b>' for k in s.split('+'))
+    """Tasten als Tastenkappen: Strg+O → <kbd>Strg</kbd>+<kbd>O</kbd>"""
+    if ' / ' in s:
+        return ' / '.join(keys(x) for x in s.split(' / '))
+    return '+'.join(f'<kbd>{k}</kbd>' for k in s.split('+'))
 
 
 # ------------------------------------------------------------------------------------------------
 # Inhalt. Jeder Eintrag: (Art, Inhalt[, Ausgabe]) – Ausgabe 'S' nur Server/Tablet, 'L' nur lokale App
-# Arten: h1, h2, p (Absatz mit Einzug), ul (Aufzählung), table (Nummer wird gezählt)
+# Arten: h1 (neue Karte), h2 (Zwischenüberschrift), p (Absatz), ul (Aufzählung), table (Tasten | Wirkung)
 # ------------------------------------------------------------------------------------------------
 DE = {
     'title': 'PDF-Stift: Kurzanleitung',
@@ -423,6 +394,7 @@ EN = {
 }
 
 
+
 def for_ed(entry, ed):
     """Eintrag für diese Ausgabe? (Text ohne Kennzeichen gilt für beide)"""
     if isinstance(entry, tuple):
@@ -430,102 +402,101 @@ def for_ed(entry, ed):
     return entry
 
 
-def build(lang, ed):
+CSS = """
+@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Regular.ttf'); font-weight: 400; }
+@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Bold.ttf'); font-weight: 700; }
+@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Italic.ttf'); font-weight: 400; font-style: italic; }
+:root { --fg: #1B1F29; --muted: #5B6475; --line: #DADFE8; --card: #fff; --accent: #1F4FD6; --key: #EEF1F7; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font: 9.2pt/1.42 'Inter', sans-serif; color: var(--fg); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+header { border-bottom: 2px solid var(--accent); padding-bottom: 6px; margin-bottom: 4px; }
+h1 { font-size: 19pt; margin: 0; letter-spacing: -.01em; }
+.ver { display: block; color: var(--muted); font-size: 9.5pt; margin-top: 2px; }
+.sub { color: var(--muted); margin: 6px 0 12px; }
+.grid { columns: 2; column-gap: 12px; }
+section { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px 10px; margin: 0 0 12px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+li, tr, p { break-inside: avoid; }
+h2 { font-size: 11.5pt; margin: 0 0 5px; color: var(--accent); break-after: avoid; }
+h3 { font-size: 9.8pt; margin: 8px 0 3px; }
+p { margin: 0 0 5px; }
+ul { margin: 0; padding-left: 15px; }
+li { margin: 2px 0; }
+b { font-weight: 700; }
+kbd { font: 8.6pt 'Inter', sans-serif; background: var(--key); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+.tag { display: inline-block; font-size: 7.4pt; font-weight: 700; letter-spacing: .03em; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; margin-left: 2px; vertical-align: 1px; }
+table { border-collapse: collapse; width: 100%; margin: 2px 0 4px; }
+td { padding: 2px 0; vertical-align: top; border-bottom: 1px solid #EEF1F6; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { width: 47%; padding-right: 10px; }
+kbd { line-height: 1.6; }
+.note { color: var(--muted); font-size: 8.8pt; }
+"""
+
+
+def tags(t):
+    """„(PC)“, „(Tablet)“ … am Ende als kleine Kennzeichen wie früher"""
+    t = re.sub(r'\s*\((PC|Tablet|tablet)\)', lambda m: f' <span class="tag">{"Tablet" if m.group(1).lower() == "tablet" else "PC"}</span>', t)
+    t = re.sub(r'\s*\((PC|Tablet|tablet)\)\.', lambda m: f'. <span class="tag">{m.group(1)}</span>', t)
+    return t.replace('</span>.', '</span>')
+
+
+def page_html(lang, ed):
     C = DE if lang == 'de' else EN
-    path = os.path.join(OUT, f'kurzanleitung-{"server" if ed == "S" else "local"}.{lang}.pdf')
-    PS = LETTER if lang == 'en' else A4  # Englisch nach US-Norm (Letter), Deutsch auf A4
-    W, H = PS
-
-    def page_no(canvas, doc):
-        # APA: Seitenzahl oben rechts auf jeder Seite, auf Höhe der oberen Randlinie
-        canvas.saveState()
-        canvas.setFont('C', FS)
-        canvas.drawRightString(W - MARGIN, H - MARGIN / 2 - FS / 2, str(doc.page))
-        canvas.restoreState()
-
-    doc = BaseDocTemplate(path, pagesize=PS, leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
-                          title=C['title'], author='PDF-Stift', subject=C['titlepage'][ed][1], lang='en-US' if lang == 'en' else 'de-DE', creator='PDF-Stift')
-    frame = Frame(MARGIN, MARGIN, W - 2 * MARGIN, H - 2 * MARGIN, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
-    doc.addPageTemplates([PageTemplate(id='p', frames=[frame], onPage=page_no)])
-
-    S = []
-    # Titelseite: drei bis vier Zeilen unter dem oberen Rand, Titel fett, danach Leerzeile und Angaben
-    S.append(Spacer(1, LEAD * 3))
-    S.append(Paragraph(C['title'], title_s))
-    S.append(Spacer(1, LEAD))
-    for line in C['titlepage'][ed]:
-        S.append(Paragraph(line, center))
-    S.append(PageBreak())
-    # erste Textseite: Titel wiederholt (fett, zentriert), dann die Einleitung ohne Überschrift
-    S.append(Paragraph(C['title'], title_s))
-    tno = 0
-    width = W - 2 * MARGIN
+    sub = C['titlepage'][ed][1]
+    out = [f'<!doctype html><html lang="{"en-US" if lang == "en" else "de"}"><head><meta charset="utf-8"><title>{C["title"]}</title>',
+           '<style>' + CSS.replace('{F}', FONTS) + '</style></head><body>',
+           f'<header><h1>{C["title"].replace(": ", " – ")}</h1><span class="ver">{sub} · {C["titlepage"][ed][2]}</span></header>']
+    intro, cards, cur = [], [], None
     for b in C['blocks']:
         kind = b[0]
-        if len(b) > 2 and isinstance(b[2], str) and b[2] in 'SL' and kind in ('p', 'h1', 'h2'):
-            if b[2] != ed:
-                continue
+        if len(b) > 2 and isinstance(b[2], str) and b[2] in 'SL' and kind in ('p', 'h1', 'h2') and b[2] != ed:
+            continue
         if kind == 'h1':
-            S.append(CondPageBreak(LEAD * 4))
-            S.append(Paragraph(b[1], h1))
-        elif kind == 'h2':
-            S.append(Paragraph(b[1], h2))
+            cur = [f'<h2>{b[1]}</h2>']
+            cards.append(cur)
+            continue
+        target = cur if cur is not None else intro
+        if kind == 'h2':
+            target.append(f'<h3>{b[1]}</h3>')
         elif kind == 'p':
-            S.append(Paragraph(b[1], body))
+            target.append(f'<p>{tags(b[1])}</p>')
         elif kind == 'ul':
             items = [x for x in (for_ed(e, ed) for e in b[1]) if x]
-            S.append(ListFlowable([ListItem(Paragraph(t, item), leftIndent=INDENT, value='•') for t in items],
-                                  bulletType='bullet', start='•', leftIndent=INDENT, bulletFontName='C', bulletFontSize=FS))
+            target.append('<ul>' + ''.join(f'<li>{tags(t)}</li>' for t in items) + '</ul>')
         elif kind == 'table':
-            tno += 1
             _, ttl, head, rows, note = b
-            data = [[Paragraph(h, thead) for h in head]] + [[Paragraph(keys(r[0]) if r[0] and len(r[0]) < 40 else r[0], tcell), Paragraph(r[1], tcell)] for r in rows]
-            t = Table(data, colWidths=[width * 0.38, width * 0.62], repeatRows=1)
-            t.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 0), ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-                ('TOPPADDING', (0, 0), (-1, -1), 3), ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-                # APA: nur waagrechte Linien – über und unter der Kopfzeile sowie am Ende
-                ('LINEABOVE', (0, 0), (-1, 0), 0.8, colors.black),
-                ('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.black),
-                ('LINEBELOW', (0, -1), (-1, -1), 0.8, colors.black),
-            ]))
-            block = [Paragraph(f"{C['table']} {tno}", tnum), Paragraph(ttl, ttitle), t]
+            target.append('<table>' + ''.join(f'<tr><td>{keys(r[0]) if len(r[0]) < 40 and " " not in r[0].replace(" / ", "") else r[0]}</td><td>{r[1]}</td></tr>' for r in rows) + '</table>')
             if note:
-                block.append(Paragraph(f"<i>{C['note']}</i> {note}", tnote))
-            S.append(Spacer(1, LEAD * 0.3))
-            S.append(KeepTogether(block))
-    doc.build(S)
-    return path
+                target.append(f'<p class="note">{note}</p>')
+    out.append('<div class="sub">' + ''.join(re.sub(r'^<p>|</p>$', '', x) + ' ' for x in intro) + '</div>')
+    out.append('<div class="grid">' + ''.join('<section>' + ''.join(c) + '</section>' for c in cards) + '</div>')
+    out.append('</body></html>')
+    return '\n'.join(out)
 
 
-def check_glyphs():
-    """Zeichen, die Carlito nicht hat, würden als Kästchen erscheinen – vorher melden."""
-    from fontTools.ttLib import TTFont as FT
-    cmap = FT(os.path.join(FONTS, 'Carlito-Regular.ttf'))['cmap'].getBestCmap()
-    bad = set()
-    for C in (DE, EN):
-        texts = [C['title']] + sum(C['titlepage'].values(), [])
-        for b in C['blocks']:
-            for x in b[1:]:
-                if isinstance(x, str):
-                    texts.append(x)
-                elif isinstance(x, list):
-                    for e in x:
-                        texts.extend([e[0]] if isinstance(e, tuple) and isinstance(e[0], str) and not isinstance(e[0], list) else (e if isinstance(e, list) else [e]))
-        for t in texts:
-            if isinstance(t, str):
-                bad |= {ch for ch in t if ord(ch) > 127 and ord(ch) not in cmap}
-    if bad:
-        sys.exit('Fehlende Zeichen in Carlito: ' + ' '.join(sorted(bad)))
+def build_all():
+    from playwright.sync_api import sync_playwright
+    os.makedirs(OUT, exist_ok=True)
+    with sync_playwright() as pw:
+        exe = os.environ.get('CHROMIUM')
+        br = pw.chromium.launch(**({'executable_path': exe} if exe else {}))
+        pg = br.new_page()
+        for lang in ('en', 'de'):
+            for ed in ('S', 'L'):
+                with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False, encoding='utf-8') as f:
+                    f.write(page_html(lang, ed))
+                pg.goto('file://' + f.name)
+                pg.wait_for_timeout(300)
+                path = os.path.join(OUT, f'kurzanleitung-{"server" if ed == "S" else "local"}.{lang}.pdf')
+                pg.pdf(path=path, format='Letter' if lang == 'en' else 'A4', print_background=True,
+                       margin={'top': '13mm', 'bottom': '13mm', 'left': '12mm', 'right': '12mm'},
+                       display_header_footer=True, header_template='<span></span>',
+                       footer_template='<div style="width:100%;text-align:center;font:8px sans-serif;color:#888"><span class="pageNumber"></span> / <span class="totalPages"></span></div>')
+                os.unlink(f.name)
+                print(path)
+        br.close()
 
 
 if __name__ == '__main__':
-    os.makedirs(OUT, exist_ok=True)
-    try:
-        check_glyphs()
-    except ImportError:
-        pass
-    for lang in ('de', 'en'):
-        for ed in ('S', 'L'):
-            print(build(lang, ed))
+    build_all()
