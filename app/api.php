@@ -263,27 +263,15 @@ function save_uploads(string $folder, ?array $files, ?string $wanted = null): ar
 session_write_close(); // parallele Anfragen nicht blockieren
 
 switch ($a) {
-    case 'help':
-        // Kurzanleitung (PDF) in die Bibliothek legen und den Pfad zurückgeben; eine neuere mitgelieferte Fassung ersetzt die alte.
-        // Sprache: Englisch (US) als Standard, Deutsch auf Wunsch (Einstellungen → Kurzanleitung)
-        $de = ($_GET['lang'] ?? 'en') === 'de';
-        $src = __DIR__ . '/hilfe/kurzanleitung-' . (is_local() ? 'local' : 'server') . '.' . ($de ? 'de' : 'en') . '.pdf';
-        if (!is_file($src)) {
-            fail('Die Kurzanleitung fehlt im Programmpaket.', 404);
-        }
-        $rel = $de ? 'Hilfe/PDF-Stift – Kurzanleitung.pdf' : 'Help/PDF-Stift – Quick guide.pdf';
-        $dst = storage('pdfs') . '/' . $rel;
-        if (!is_file($dst) || md5_file($dst) !== md5_file($src)) {
-            if (!is_dir(dirname($dst)) && !@mkdir(dirname($dst), 0775, true)) {
-                fail('Ordner konnte nicht angelegt werden.', 500);
-            }
-            if (!@copy($src, $dst)) {
-                fail('Die Kurzanleitung konnte nicht in die Bibliothek gelegt werden.', 500);
-            }
-        }
-        json_out(['path' => $rel]);
-
     case 'list':
+        // die kurzzeitig als PDF in die Bibliothek gelegte Kurzanleitung (1.81–1.82) wieder entfernen – sie ist jetzt eine Spalte in der App
+        foreach (['Help/PDF-Stift – Quick guide.pdf', 'Hilfe/PDF-Stift – Kurzanleitung.pdf'] as $hp) {
+            $f = storage('pdfs') . '/' . $hp;
+            if (is_file($f)) {
+                @unlink($f);
+                @rmdir(dirname($f));
+            }
+        }
         $lib = list_pdfs();
         json_out($lib + ['nc' => nc_public(nc_cfg()), 'od' => od_public(od_cfg()), 'caps' => convert_caps(), 'shrink' => shrink_public($lib['files'])]);
 

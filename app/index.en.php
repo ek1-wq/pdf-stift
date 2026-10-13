@@ -111,6 +111,9 @@ header('Referrer-Policy: same-origin');
     <button id="srvUpd" type="button" class="upd-pill srv-pill srv-only" hidden title="New version for the server – install with one click"><span class="upd-dot"></span><span id="srvUpdText">Server update</span></button>
     <button id="bkWarn" type="button" class="bk-warn srv-only" hidden title="Something is wrong with the backup – tap for details"><span>⚠︎</span><span id="bkWarnText">Backup</span></button>
     <button id="winUpd" type="button" class="upd-pill" hidden><span class="upd-dot"></span><span id="winUpdText">Update available</span></button>
+    <button id="helpBtn" type="button" class="theme-btn help-btn" aria-pressed="false" title="Show/hide the quick guide (F1)" aria-label="Show/hide the quick guide (F1)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><circle cx="12" cy="17.2" r=".6"/></svg>
+    </button>
     <button id="themeBtn" type="button" class="theme-btn" title="Light or dark theme" aria-label="Light or dark theme">
       <svg class="moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>
       <svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>

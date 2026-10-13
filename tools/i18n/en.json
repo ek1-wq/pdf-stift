@@ -3186,5 +3186,15 @@
   "Kurzanleitung als PDF öffnen (F1)": "Open the quick guide as PDF (F1)",
   "Versionsnummern": "Version numbers",
   "Rückmeldung": "Feedback",
-  "Bericht für Verbesserungen": "Improvement report"
+  "Bericht für Verbesserungen": "Improvement report",
+  "H3": null,
+  "calc(100% - ": null,
+  "<div class=\"cm-head\"><b>Kurzanleitung</b><span class=\"hp-langs\"><button type=\"button\" data-l=\"en\">EN</button><button type=\"button\" data-l=\"de\">DE</button></span><button type=\"button\" class=\"icon-btn hp-x\" aria-label=\"Schließen\"><svg viewBox=\"0 0 24 24\"><path d=\"M6 6l12 12M18 6L6 18\"/></svg></button></div>\n        <div class=\"hp-search\"><input type=\"search\" class=\"hp-q\" placeholder=\"In der Kurzanleitung suchen …\" aria-label=\"In der Kurzanleitung suchen\"></div>\n        <div class=\"hp-scroll\"><div class=\"hp hp-body\"></div><p class=\"hp-none muted small\" hidden>Nichts gefunden.</p></div>": "<div class=\"cm-head\"><b>Quick guide</b><span class=\"hp-langs\"><button type=\"button\" data-l=\"en\">EN</button><button type=\"button\" data-l=\"de\">DE</button></span><button type=\"button\" class=\"icon-btn hp-x\" aria-label=\"Close\"><svg viewBox=\"0 0 24 24\"><path d=\"M6 6l12 12M18 6L6 18\"/></svg></button></div>\n        <div class=\"hp-search\"><input type=\"search\" class=\"hp-q\" placeholder=\"Search the quick guide …\" aria-label=\"Search the quick guide\"></div>\n        <div class=\"hp-scroll\"><div class=\"hp hp-body\"></div><p class=\"hp-none muted small\" hidden>Nothing found.</p></div>",
+  "Quick guide": null,
+  "In der Kurzanleitung suchen …": "Search the quick guide …",
+  "Search the quick guide …": null,
+  "Nothing found.": null,
+  "Die Kurzanleitung lässt sich gerade nicht laden.": "The quick guide cannot be loaded right now.",
+  "The quick guide cannot be loaded right now.": null,
+  "Kurzanleitung ein-/ausblenden (F1)": "Show/hide the quick guide (F1)"
 }

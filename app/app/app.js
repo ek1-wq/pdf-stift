@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.82.1';
+  const VERSION = '1.83.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -12299,7 +12299,8 @@
       const vm = $('#stView').value, changedView = vm !== SET.viewMode;
       Object.assign(SET, { viewMode: vm, startTool: $('#stTool').value, startView: $('#stStart').value, printDpi: +$('#stDpi').value,
         autoOcr: $('#stOcr').checked, redactPurge: $('#stPurge').checked, keepVersions: +$('#stKeep').value, usage: $('#stUsage') ? $('#stUsage').checked : SET.usage });
-      SET.helpLang = $('#stHelpLang').value === 'de' ? 'de' : 'en';
+      SET.helpLang = $('#stHelpLang').value === 'de' ? 'de' : 'en'; HP.lang = null;
+      if ($('#hpPanel') && !$('#hpPanel').hidden) helpFill();
       if ($('#stNext')) SET.pdfNextTo = $('#stNext').checked;
       if (hot && $('#stHot')) { await window.pdfstiftWin.hotSet({ on: $('#stHot').checked, dir: hot.dir }); if ($('#stHot').checked && !hot.on) toast('Der Ordner wird jetzt überwacht: ' + hot.dir, 5000); }
       SET.dropFolder = ($('#stDrop').value || DROP0).trim().replace(/^\/+|\/+$/g, '') || DROP0;
@@ -12959,24 +12960,98 @@
   }
 
   // ---- Hilfe: Kurzanleitung und Versionsnummern
-  // Kurzanleitung: liegt als PDF in der Bibliothek (Ordner „Help“ bzw. „Hilfe“) und öffnet sich wie jedes andere Dokument; Standard Englisch (US)
-  // ältere Windows-Apps öffnen hilfe.html in einem eigenen Fenster – das meldet sich hier, und die PDF öffnet sich im Hauptfenster
-  if (!EMBED && !SHOW) try { const hb = new BroadcastChannel('pdfstift-help'); hb.onmessage = (ev) => { if (ev.data === 'open') { hb.postMessage('ok'); openHelp(); } }; } catch (e) { /* */ }
-  async function openHelp() {
+  // Kurzanleitung: einblendbare Spalte rechts (wie die Kommentarliste), durchsuchbar; Englisch als Standard, Deutsch wählbar
+  const HP = { lang: null, html: {} };
+  const helpLang = () => (HP.lang || (SET.helpLang === 'de' ? 'de' : 'en'));
+  async function helpLoad(lang) {
+    if (HP.html[lang]) return HP.html[lang];
+    const r = await fetch(`hilfe/kurzanleitung-${LOCAL ? 'local' : 'server'}.${lang}.html?v=${VERSION}`, { cache: 'no-cache' });
+    if (!r.ok) throw new Error('Fehler ' + r.status);
+    const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+    const m = doc.querySelector('main');
+    if (!m) throw new Error('');
+    m.querySelector('h1') && m.querySelector('h1').remove();
+    return (HP.html[lang] = m.innerHTML);
+  }
+  function helpFilter() {
+    const pn = $('#hpPanel'); if (!pn) return;
+    const q = pn.querySelector('.hp-q').value.trim().toLowerCase();
+    const body = pn.querySelector('.hp-body');
+    let hits = 0;
+    body.querySelectorAll('.hp-intro, section').forEach((sec) => {
+      const head = sec.querySelector('h2');
+      const headHit = !!q && !!head && head.textContent.toLowerCase().includes(q);
+      let any = false;
+      sec.querySelectorAll('li, tr, p, h3').forEach((it) => {
+        const ok = !q || headHit || it.textContent.toLowerCase().includes(q);
+        it.hidden = !ok;
+        if (ok && q && it.tagName !== 'H3') any = true;
+      });
+      // Zwischenüberschriften nur zeigen, wenn darunter etwas gefunden wurde
+      if (q && !headHit) sec.querySelectorAll('h3').forEach((h3) => { let n = h3.nextElementSibling, vis = false; while (n && n.tagName !== 'H3') { if (n.querySelector && [...n.querySelectorAll('li, tr')].some((x) => !x.hidden)) vis = true; if (n.tagName === 'P' && !n.hidden) vis = true; n = n.nextElementSibling; } h3.hidden = !vis; });
+      if (q) sec.querySelectorAll('ul, table').forEach((l) => { l.hidden = ![...l.querySelectorAll('li, tr')].some((x) => !x.hidden); });
+      else sec.querySelectorAll('ul, table').forEach((l) => { l.hidden = false; });
+      const show = !q || headHit || any;
+      sec.hidden = !show;
+      if (show && q) hits++;
+    });
+    pn.querySelector('.hp-none').hidden = !q || hits > 0;
+  }
+  function helpPlace() {
+    const pn = $('#hpPanel'); if (!pn || pn.hidden) return;
+    const v = $('#viewer'), top = v && v.offsetParent ? v.getBoundingClientRect().top : ($('header') ? $('header').getBoundingClientRect().bottom : 56);
+    pn.style.top = Math.max(0, top) + 'px'; pn.style.height = `calc(100% - ${Math.max(0, top)}px)`;
+  }
+  async function toggleHelp(on) {
+    let pn = $('#hpPanel');
+    if (!pn) {
+      pn = document.createElement('aside');
+      pn.id = 'hpPanel';
+      pn.className = 'cm-panel hp-panel';
+      pn.hidden = true;
+      pn.innerHTML = `<div class="cm-head"><b>Kurzanleitung</b><span class="hp-langs"><button type="button" data-l="en">EN</button><button type="button" data-l="de">DE</button></span><button type="button" class="icon-btn hp-x" aria-label="Schließen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+        <div class="hp-search"><input type="search" class="hp-q" placeholder="In der Kurzanleitung suchen …" aria-label="In der Kurzanleitung suchen"></div>
+        <div class="hp-scroll"><div class="hp hp-body"></div><p class="hp-none muted small" hidden>Nichts gefunden.</p></div>`;
+      document.body.appendChild(pn);
+      pn.querySelector('.hp-x').onclick = () => toggleHelp(false);
+      pn.querySelector('.hp-q').oninput = helpFilter;
+      pn.querySelector('.hp-q').onkeydown = (e) => { if (e.key === 'Escape') { if (e.target.value) { e.target.value = ''; helpFilter(); } else toggleHelp(false); } };
+      pn.querySelectorAll('[data-l]').forEach((b) => { b.onclick = async () => { HP.lang = b.dataset.l; SET.helpLang = HP.lang; saveSet(); await helpFill(); }; });
+    }
+    const show = on === undefined ? pn.hidden : !!on;
+    if (show && $('#cmPanel') && !$('#cmPanel').hidden) toggleComments(false); // nur eine Spalte rechts
+    pn.hidden = !show;
+    $('#helpBtn').setAttribute('aria-pressed', show ? 'true' : 'false');
+    const was = document.body.classList.contains('hp-on');
+    document.body.classList.toggle('hp-on', show);
+    if (was !== show) window.dispatchEvent(new Event('resize'));
+    if (!show) return;
     track('tool', 'Kurzanleitung');
+    helpPlace();
+    await helpFill();
+    setTimeout(() => pn.querySelector('.hp-q').focus(), 0);
+  }
+  async function helpFill() {
+    const pn = $('#hpPanel'); if (!pn) return;
+    const lang = helpLang();
+    pn.querySelectorAll('[data-l]').forEach((b) => b.classList.toggle('on', b.dataset.l === lang));
+    pn.querySelector('.cm-head b').textContent = lang === 'de' ? 'Kurzanleitung' : 'Quick guide';
+    pn.querySelector('.hp-q').placeholder = lang === 'de' ? 'In der Kurzanleitung suchen …' : 'Search the quick guide …';
+    pn.querySelector('.hp-none').textContent = lang === 'de' ? 'Nichts gefunden.' : 'Nothing found.';
+    try { pn.querySelector('.hp-body').innerHTML = await helpLoad(lang); pn.querySelector('.hp-body').lang = lang; } catch (e) { pn.querySelector('.hp-body').innerHTML = `<p class="muted">${esc(lang === 'de' ? 'Die Kurzanleitung lässt sich gerade nicht laden.' : 'The quick guide cannot be loaded right now.')}</p>`; }
+    helpFilter();
+  }
+  window.addEventListener('resize', () => helpPlace());
+  $('#helpBtn').onclick = () => toggleHelp();
+  function openHelp() {
     if (EMBED) { try { window.parent.PDFSTIFT_MAIN.help(); } catch (e) { /* */ } return; }
-    try {
-      const r = await apiJson('help', { params: { lang: SET.helpLang === 'de' ? 'de' : 'en' } });
-      if (!r || !r.path) throw new Error('');
-      if (!fileMeta(r.path)) await loadLibrary();
-      openDoc(r.path);
-    } catch (e) { toast('Die Kurzanleitung lässt sich gerade nicht öffnen' + (e && e.message ? ': ' + e.message : '.')); }
+    toggleHelp();
   }
   async function aboutDlg() {
     if (LOCAL) {
       let win = '';
       try { if (window.pdfstiftWin) win = await window.pdfstiftWin.version(); } catch (e) { /* */ }
-      if (await confirmDlg('Über PDF-Stift', `PDF-Stift ${win || VERSION} (Oberfläche ${VERSION})\nFreie Software unter der GNU General Public License, Version 3.\n\ngithub.com/ek1-wq/pdf-stift`, 'Kurzanleitung')) openHelp();
+      if (await confirmDlg('Über PDF-Stift', `PDF-Stift ${win || VERSION} (Oberfläche ${VERSION})\nFreie Software unter der GNU General Public License, Version 3.\n\ngithub.com/ek1-wq/pdf-stift`, 'Kurzanleitung')) toggleHelp(true);
       return;
     }
     let win = '', tab = '–';
@@ -12985,7 +13060,7 @@
     const lines = [`Server (${location.host}): ${VERSION}`];
     if (win) lines.unshift(`Windows-App: ${win}`);
     lines.push(`Aktuelle Tablet-App: ${tab}`);
-    if (await confirmDlg('Über PDF-Stift', lines.join('\n') + '\n\n' + location.host, 'Kurzanleitung')) openHelp();
+    if (await confirmDlg('Über PDF-Stift', lines.join('\n') + '\n\n' + location.host, 'Kurzanleitung')) toggleHelp(true);
   }
   document.addEventListener('keydown', (e) => { if (e.key === 'F1' && !window.pdfstiftWin) { e.preventDefault(); openHelp(); } });
 
@@ -13162,6 +13237,7 @@
       pn.querySelector('.cm-head button').onclick = () => toggleComments(false);
     }
     pn.hidden = on === undefined ? !pn.hidden : !on;
+    if (!pn.hidden && $('#hpPanel') && !$('#hpPanel').hidden) toggleHelp(false); // nur eine Spalte rechts
     if (!pn.hidden) track('tool', 'Kommentarliste');
     $('#cmBtn').setAttribute('aria-pressed', pn.hidden ? 'false' : 'true');
     const was = document.body.classList.contains('cm-on');

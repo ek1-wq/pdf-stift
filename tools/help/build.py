@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
-"""Kurzanleitung als PDF erzeugen – im Kartenlayout der früheren Hilfeseite.
+"""Kurzanleitung als HTML erzeugen – für die einblendbare Hilfespalte rechts in der App.
 
 Je Sprache und Ausgabe eine Datei in server/hilfe/ (app/hilfe/ in der freien Ausgabe):
-    kurzanleitung-server.en.pdf / .de.pdf  – Browser, Windows-App mit eigenem Server und Tablet
-    kurzanleitung-local.en.pdf  / .de.pdf  – Windows-/Linux-App ohne Server
-Englisch (US, Letter) ist der Standard in der App; Deutsch (A4) lässt sich unter Einstellungen → Kurzanleitung wählen.
+    kurzanleitung-server.en.html / .de.html  – Browser, Windows-App mit eigenem Server und Tablet
+    kurzanleitung-local.en.html  / .de.html  – Windows-/Linux-App ohne Server
+Die App lädt den Inhalt von <main> in die Hilfespalte (mit Suche); geöffnet für sich allein ist es eine normale Seite.
+Englisch ist der Standard; Deutsch lässt sich unter Einstellungen → Kurzanleitung oder oben in der Hilfespalte wählen.
 
-Aufruf:  python3 tools/help/build.py
-Benötigt Python-Playwright mit Chromium (druckt die erzeugte HTML-Seite als PDF). Schrift: Inter (SIL OFL) aus vendor/fonts.
+Aufruf:  python3 tools/help/build.py   (nur Python, keine weiteren Pakete)
 """
-import html as _html
 import os
 import re
-import sys
-import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 BASE = os.path.join(ROOT, 'server' if os.path.isdir(os.path.join(ROOT, 'server')) else 'app')
-FONTS = os.path.join(BASE, 'vendor', 'fonts')
 OUT = os.path.join(BASE, 'hilfe')
 
 
@@ -203,8 +199,8 @@ DE = {
 
         ('h1', 'Hilfe und Rückmeldung'),
         ('ul', [
-            'Diese Kurzanleitung: Hilfe → Kurzanleitung oder ' + keys('F1') + '. Sie liegt als PDF im Ordner „Hilfe“ Ihrer Bibliothek; Sie können darin wie in jeder PDF schreiben. '
-            'Die Sprache der Kurzanleitung (Englisch oder Deutsch) wählen Sie unter Einstellungen → Kurzanleitung.',
+            'Diese Kurzanleitung: Hilfe → Kurzanleitung, ' + keys('F1') + ' oder der Knopf „?“ oben rechts. Sie erscheint als Spalte rechts neben dem Dokument, '
+            'lässt sich durchsuchen und mit demselben Knopf wieder ausblenden. Englisch oder Deutsch: oben in der Spalte oder unter Einstellungen → Kurzanleitung.',
             'Versionsnummern: Hilfe → Über PDF-Stift.',
             ('Bericht für Verbesserungen (Hilfe-Menü oder Menü „Mehr“): kopieren und an die Betreuung des Servers schicken.', 'S'),
             ('Tablet: Menü (drei Punkte) → Fehler melden (mit Bildschirmfoto).', 'S'),
@@ -383,8 +379,8 @@ EN = {
 
         ('h1', 'Help and Feedback'),
         ('ul', [
-            'This quick guide: Help → Quick guide or ' + keys('F1') + '. It is a PDF in the “Help” folder of your library; you can write in it like in any PDF. '
-            'Choose its language (English or German) under Settings → Quick guide.',
+            'This quick guide: Help → Quick guide, ' + keys('F1') + ' or the “?” button at the top right. It appears as a column to the right of the document, '
+            'can be searched, and is hidden again with the same button. English or German: at the top of the column or under Settings → Quick guide.',
             'Version numbers: Help → About PDF-Stift.',
             ('Improvement report (Help menu or “More” menu): copy it and send it to whoever runs your server.', 'S'),
             ('Tablet: menu (three dots) → Report a problem (with screenshot).', 'S'),
@@ -402,51 +398,37 @@ def for_ed(entry, ed):
     return entry
 
 
+# Darstellung, wenn die Seite für sich allein geöffnet wird (in der App gilt app.css: .hp-…)
 CSS = """
-@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Regular.ttf'); font-weight: 400; }
-@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Bold.ttf'); font-weight: 700; }
-@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Italic.ttf'); font-weight: 400; font-style: italic; }
-:root { --fg: #1B1F29; --muted: #5B6475; --line: #DADFE8; --card: #fff; --accent: #1F4FD6; --key: #EEF1F7; }
-* { box-sizing: border-box; }
-html, body { margin: 0; }
-body { font: 9.2pt/1.42 'Inter', sans-serif; color: var(--fg); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-header { border-bottom: 2px solid var(--accent); padding-bottom: 6px; margin-bottom: 4px; }
-h1 { font-size: 19pt; margin: 0; letter-spacing: -.01em; }
-.ver { display: block; color: var(--muted); font-size: 9.5pt; margin-top: 2px; }
-.sub { color: var(--muted); margin: 6px 0 12px; }
-.grid { columns: 2; column-gap: 12px; }
-section { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px 10px; margin: 0 0 12px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
-li, tr, p { break-inside: avoid; }
-h2 { font-size: 11.5pt; margin: 0 0 5px; color: var(--accent); break-after: avoid; }
-h3 { font-size: 9.8pt; margin: 8px 0 3px; }
-p { margin: 0 0 5px; }
-ul { margin: 0; padding-left: 15px; }
-li { margin: 2px 0; }
-b { font-weight: 700; }
-kbd { font: 8.6pt 'Inter', sans-serif; background: var(--key); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; white-space: nowrap; }
-.tag { display: inline-block; font-size: 7.4pt; font-weight: 700; letter-spacing: .03em; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; margin-left: 2px; vertical-align: 1px; }
-table { border-collapse: collapse; width: 100%; margin: 2px 0 4px; }
-td { padding: 2px 0; vertical-align: top; border-bottom: 1px solid #EEF1F6; }
-tr:last-child td { border-bottom: 0; }
-td:first-child { width: 47%; padding-right: 10px; }
-kbd { line-height: 1.6; }
-.note { color: var(--muted); font-size: 8.8pt; }
+:root { --fg: #1B1F29; --muted: #5B6475; --line: #DADFE8; --card: #fff; --accent: #1F4FD6; --key: #EEF1F7; --bg: #F6F7FA; }
+@media (prefers-color-scheme: dark) { :root { --fg: #E8EBF2; --muted: #A1A9B8; --line: #2C3240; --card: #1C2029; --accent: #7EA2FF; --key: #262B37; --bg: #14171F; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+main.hp { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; columns: 340px 3; column-gap: 14px; }
+.hp h1 { column-span: all; font-size: 24px; margin: 0 0 4px; }
+.hp-intro { column-span: all; color: var(--muted); margin: 0 0 14px; }
+.hp section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 0 0 14px; break-inside: avoid; }
+.hp h2 { font-size: 16px; margin: 0 0 6px; color: var(--accent); }
+.hp h3 { font-size: 14px; margin: 8px 0 3px; }
+.hp p { margin: 0 0 6px; }
+.hp ul { margin: 0; padding-left: 18px; }
+.hp li { margin: 3px 0; }
+.hp kbd { font: 12.5px ui-monospace, Consolas, monospace; background: var(--key); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; white-space: nowrap; }
+.hp .tag { display: inline-block; font-size: 11px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; margin-left: 3px; }
+.hp table { border-collapse: collapse; width: 100%; }
+.hp td { padding: 3px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+.hp td:first-child { width: 46%; padding-right: 10px; }
+.hp .note { color: var(--muted); font-size: 13px; }
 """
 
 
 def tags(t):
-    """„(PC)“, „(Tablet)“ … am Ende als kleine Kennzeichen wie früher"""
-    t = re.sub(r'\s*\((PC|Tablet|tablet)\)', lambda m: f' <span class="tag">{"Tablet" if m.group(1).lower() == "tablet" else "PC"}</span>', t)
-    t = re.sub(r'\s*\((PC|Tablet|tablet)\)\.', lambda m: f'. <span class="tag">{m.group(1)}</span>', t)
-    return t.replace('</span>.', '</span>')
+    """„(PC)“, „(Tablet)“ … als kleine Kennzeichen"""
+    return re.sub(r'\s*\((PC|Tablet|tablet)\)', lambda m: f' <span class="tag">{"Tablet" if m.group(1).lower() == "tablet" else "PC"}</span>', t)
 
 
 def page_html(lang, ed):
     C = DE if lang == 'de' else EN
-    sub = C['titlepage'][ed][1]
-    out = [f'<!doctype html><html lang="{"en-US" if lang == "en" else "de"}"><head><meta charset="utf-8"><title>{C["title"]}</title>',
-           '<style>' + CSS.replace('{F}', FONTS) + '</style></head><body>',
-           f'<header><h1>{C["title"].replace(": ", " – ")}</h1><span class="ver">{sub} · {C["titlepage"][ed][2]}</span></header>']
+    title = C['title'].replace(': ', ' – ')
     intro, cards, cur = [], [], None
     for b in C['blocks']:
         kind = b[0]
@@ -469,33 +451,22 @@ def page_html(lang, ed):
             target.append('<table>' + ''.join(f'<tr><td>{keys(r[0]) if len(r[0]) < 40 and " " not in r[0].replace(" / ", "") else r[0]}</td><td>{r[1]}</td></tr>' for r in rows) + '</table>')
             if note:
                 target.append(f'<p class="note">{note}</p>')
-    out.append('<div class="sub">' + ''.join(re.sub(r'^<p>|</p>$', '', x) + ' ' for x in intro) + '</div>')
-    out.append('<div class="grid">' + ''.join('<section>' + ''.join(c) + '</section>' for c in cards) + '</div>')
-    out.append('</body></html>')
-    return '\n'.join(out)
+    body = (f'<main class="hp" lang="{"en" if lang == "en" else "de"}"><h1>{title}</h1>'
+            + '<div class="hp-intro">' + ''.join(intro) + '</div>'
+            + ''.join('<section>' + ''.join(c) + '</section>' for c in cards) + '</main>')
+    return (f'<!doctype html>\n<html lang="{"en" if lang == "en" else "de"}"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF-Stift – {title.split(" – ")[-1]}</title>'
+            f'<style>{CSS}</style></head><body>\n{body}\n</body></html>\n')
 
 
 def build_all():
-    from playwright.sync_api import sync_playwright
     os.makedirs(OUT, exist_ok=True)
-    with sync_playwright() as pw:
-        exe = os.environ.get('CHROMIUM')
-        br = pw.chromium.launch(**({'executable_path': exe} if exe else {}))
-        pg = br.new_page()
-        for lang in ('en', 'de'):
-            for ed in ('S', 'L'):
-                with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False, encoding='utf-8') as f:
-                    f.write(page_html(lang, ed))
-                pg.goto('file://' + f.name)
-                pg.wait_for_timeout(300)
-                path = os.path.join(OUT, f'kurzanleitung-{"server" if ed == "S" else "local"}.{lang}.pdf')
-                pg.pdf(path=path, format='Letter' if lang == 'en' else 'A4', print_background=True,
-                       margin={'top': '13mm', 'bottom': '13mm', 'left': '12mm', 'right': '12mm'},
-                       display_header_footer=True, header_template='<span></span>',
-                       footer_template='<div style="width:100%;text-align:center;font:8px sans-serif;color:#888"><span class="pageNumber"></span> / <span class="totalPages"></span></div>')
-                os.unlink(f.name)
-                print(path)
-        br.close()
+    for lang in ('en', 'de'):
+        for ed in ('S', 'L'):
+            path = os.path.join(OUT, f'kurzanleitung-{"server" if ed == "S" else "local"}.{lang}.html')
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(page_html(lang, ed))
+            print(path)
 
 
 if __name__ == '__main__':

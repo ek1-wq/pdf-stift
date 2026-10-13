@@ -1531,3 +1531,29 @@ body.ob-placing .page { cursor: crosshair !important; }
 /* Menüband: Beschriftungen immer mit großem Anfangsbuchstaben (auch wenn die Übersetzung klein beginnt) */
 .rb-big > span { display: inline-block; }
 .rb-big > span::first-letter, .rb-tab::first-letter, .rb-cap::first-letter { text-transform: uppercase; }
+/* ---- Kurzanleitung als Spalte rechts (wie die Kommentarliste) */
+.hp-panel { width: 380px; }
+body.hp-on { --cmr: 380px; }
+@media (max-width: 700px) { .hp-panel { width: 100%; } body.hp-on { --cmr: 0px; } }
+.hp-langs { display: inline-flex; gap: 2px; margin-left: auto; margin-right: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.hp-langs button { border: 0; background: transparent; color: var(--muted); font: 600 11px/1 inherit; padding: 4px 7px; border-radius: 6px; cursor: pointer; min-height: 0; }
+.hp-langs button.on { background: var(--accent); color: #fff; }
+.hp-search { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.hp-search input { width: 100%; box-sizing: border-box; min-height: 34px; border: 1px solid var(--line); border-radius: 9px; background: var(--bar); color: var(--fg); padding: 4px 10px; font: inherit; font-size: 14px; }
+.hp-scroll { overflow-y: auto; flex: 1; padding: 10px; }
+.hp-body { font-size: 13.5px; line-height: 1.5; }
+.hp-body [hidden] { display: none !important; }
+.hp-intro { color: var(--muted); margin: 0 0 10px; }
+.hp-body section { border: 1px solid var(--line); background: var(--bar); border-radius: 10px; padding: 8px 11px; margin: 0 0 10px; }
+.hp-body h2 { font-size: 14.5px; margin: 0 0 5px; color: var(--accent); }
+.hp-body h3 { font-size: 13.5px; margin: 7px 0 3px; }
+.hp-body p { margin: 0 0 6px; }
+.hp-body ul { margin: 0; padding-left: 17px; }
+.hp-body li { margin: 3px 0; }
+.hp-body kbd { font: 11.5px ui-monospace, Consolas, monospace; background: var(--surface); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 4px; white-space: nowrap; }
+.hp-body .tag { display: inline-block; font-size: 10px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; margin-left: 2px; }
+.hp-body table { border-collapse: collapse; width: 100%; }
+.hp-body td { padding: 3px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+.hp-body td:first-child { width: 46%; padding-right: 8px; }
+.hp-body .note { color: var(--muted); font-size: 12.5px; }
+.help-btn[aria-pressed="true"] { background: var(--accent-soft, #E6EAF5); color: var(--accent); }
