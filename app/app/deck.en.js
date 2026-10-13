@@ -975,8 +975,10 @@
       // Windows-App: die Menüs der Menüleiste stehen mit in der Reiterzeile (die Menüleiste selbst wird dann ausgeblendet)
       const WM = window.pdfstiftWin && window.pdfstiftWin.menuPop;
       const wm = (id, l, c = '') => `<button type="button" class="rb-tab rb-wm${c}" data-wm="${id}" aria-haspopup="menu" title="${esc(l)} ▾">${esc(l)}</button>`;
-      const wmPre = WM ? wm('m-datei', "file", ' rb-file') + wm('m-bearbeiten', "Editing") + '<span class="rb-wsep"></span>' : '';
-      const wmPost = WM ? '<span class="rb-wsep"></span>' + wm('m-werkzeuge', "Tools") + wm('m-notizbuch', "Notebook") + wm('m-hilfe', "Help") : '';
+      // Reihenfolge wie in Office: Datei – Start … Ansicht – Hilfe. Bearbeiten, Werkzeuge und Notizbuch stecken in den Reitern
+      // und Seitenleisten (und bleiben über die Alt-Taste in der klassischen Menüleiste erreichbar).
+      const wmPre = WM ? wm('m-datei', "file", ' rb-file') : '';
+      const wmPost = WM ? wm('m-hilfe', "Help") : '';
       bar.innerHTML = `<div class="rb-tabs" role="tablist">${wmPre}${tabs.map(([k, l]) => `<button type="button" role="tab" class="rb-tab${k === RB.tab && (!RB.collapsed || RB.peek) ? ' on' : ''}" data-tab="${k}" title="Double-click: collapse/expand ribbon">${esc(l)}</button>`).join('')}${wmPost}<span class="rb-tgrow"></span><button type="button" class="rb-tab rb-colbtn" data-a="rbcol" title="${esc(colTitle)}" aria-label="${esc(colTitle)}">${RB.collapsed ? '▾' : '▴'}</button></div><div class="rb-body">${h}</div>`;
       bar.classList.toggle('rb-collapsed', RB.collapsed && !RB.peek);
       bar.classList.toggle('rb-peek', RB.collapsed && RB.peek);

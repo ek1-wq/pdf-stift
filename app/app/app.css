@@ -1496,7 +1496,7 @@ body.ob-placing .page { cursor: crosshair !important; }
 .rb-band:has(> .rb-collapsed) .rb-grip-wrap { padding-bottom: 0; }
 .rb-band:has(> .rb-collapsed) .rb-grip-wrap .tb-grip { height: 22px; }
 /* Windows-App: Menüs der Menüleiste in der Reiterzeile */
-.rb-tab.rb-wm { color: var(--fg) !important; }
+/* Menü-Reiter (Hilfe) sehen aus wie die übrigen Reiter */
 .rb-tab.rb-wm:hover { background: var(--accent-soft, #E6EAF5) !important; }
 .rb-tab.rb-file { background: var(--accent) !important; color: var(--bar) !important; border-radius: 6px !important; margin-right: 2px; }
 .rb-tab.rb-file:hover { filter: brightness(1.1); }
