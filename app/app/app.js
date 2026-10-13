@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.75.1';
+  const VERSION = '1.76.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -4787,7 +4787,7 @@
     const show = !$('#toolbar').hidden && !!V.path && !V.board && !V.deck && !EMBED && !SHOW && !PROMPTER;
     if (rb.hidden === !show) return;
     rb.hidden = !show;
-    lineSync(); tbMeasure();
+    obCompactSync();
     if (show && !rb.dataset.ready) ensureDeck().then(() => {
       if (rb.dataset.ready) return;
       rb.dataset.ready = '1';
@@ -4795,7 +4795,7 @@
     }).catch(() => {});
   }
   // Reiter des Menübands in der PDF-Ansicht (zusätzlich zu Start und Einfügen)
-  const OBV = { grid: false, snap: true };
+  const OBV = { grid: false, snap: true, compact: false };
   try { Object.assign(OBV, ls('obView') || {}); } catch (e) { /* */ }
   const ICP = {
     sel: '<path d="M5 3.5l13 7.2-5.6 1.4L9.8 18z"/>', hand: '<path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 10.5V5a1.5 1.5 0 0 1 3 0v5.5"/><path d="M14 10.5V6.5a1.5 1.5 0 0 1 3 0v6.5c0 4-2.5 7-6.2 7-2.6 0-4-1.2-5.4-3.2L3.7 13a1.4 1.4 0 0 1 2.2-1.7L8 13.5"/>',
@@ -4809,8 +4809,17 @@
     begin: '<path d="M5 4v16"/><path d="M9 5l11 7-11 7z"/>', cur: '<rect x="3.5" y="5" width="11" height="9" rx="1"/><path d="M14 12l7 4.5-7 4.5z"/>', presenter: '<rect x="2.5" y="4" width="12" height="9" rx="1"/><rect x="16" y="4" width="5.5" height="4" rx=".8"/><path d="M16 11h5.5M16 13.5h4M5 17h7M8.5 13v4"/>',
     fitw: '<path d="M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3"/>', fitp: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', single: '<rect x="7" y="3.5" width="10" height="17" rx="1.5"/>', two: '<rect x="2.5" y="4" width="9" height="16" rx="1.5"/><rect x="12.5" y="4" width="9" height="16" rx="1.5"/>',
     zin: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20M8 10.5h5M10.5 8v5"/>', zout: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20M8 10.5h5"/>',
+    compact: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M3 13h18M3 17h12" stroke-opacity=".4" stroke-dasharray="2 2"/>', rbcol: '<rect x="3" y="4" width="18" height="6" rx="1"/><path d="M8 16l4-3 4 3"/>',
     grid: '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17" stroke-opacity=".55"/>', magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4z"/><path d="M6 8h4M14 8h4"/>',
   };
+  // Kompakt: Werkzeugzeile weg, solange das Menüband zu sehen ist (alles steht im Reiter „Zeichnen“)
+  function obCompactSync() {
+    const rb = $('#obRibbon');
+    const hide = !!OBV.compact && rb && !rb.hidden;
+    $('#toolbar2').hidden = $('#toolbar').hidden || hide;
+    document.body.classList.toggle('rb-compact', !!hide);
+    lineSync(); tbMeasure();
+  }
   function obGridSync() {
     const P0 = V.pages[0];
     pagesEl.classList.toggle('ob-grid', !!OBV.grid);
@@ -4820,9 +4829,12 @@
     tabs: () => [['draw', 'Zeichnen'], ['pages', 'Seiten'], ['show', 'Bildschirmpräsentation'], ['view', 'Ansicht']],
     tabContent: (tab, { grp, rows, big, sb }) => {
       const tool = (k, l) => big(`data-f="pt:${k}"`, l, ICP[k]).replace('class="rb-big"', `class="rb-big${S.tool === k ? ' on' : ''}"`);
+      // Farben, Stärken und Arten der bisherigen Werkzeugleiste: Kopien, die die Originale anklicken
+      const proxy = (sel, cap) => { const el = $(sel); if (!el || el.hidden || !el.children.length) return ''; return grp(cap, `<div class="rb-proxy" data-proxy="${sel}">${el.innerHTML.replace(/ id="[^"]*"/g, '')}</div>`); };
       if (tab === 'draw') return grp('Auswahl', tool('sel', 'Text auswählen') + tool('hand', 'Hand') + tool('la', 'Lasso')) +
         grp('Stifte', tool('pen', 'Stift') + tool('hl', 'Marker') + tool('tx', 'Text markieren') + tool('sh', 'Linien und Formen')) +
-        grp('Weitere', tool('tt', 'Schnelltext') + tool('nt', 'Kommentar') + tool('lp', 'Laserpointer') + tool('er', 'Radierer'));
+        grp('Weitere', tool('tt', 'Schnelltext') + tool('nt', 'Kommentar') + tool('lp', 'Laserpointer') + tool('er', 'Radierer')) +
+        proxy('#txKinds', 'Art') + proxy('#shKinds', 'Form') + proxy('#ttSizes', 'Größe') + proxy('#colors', 'Farbe') + proxy('#widths', 'Stärke');
       if (tab === 'pages') return grp('Seite', big('data-f="pp:rotate"', 'Seite drehen', ICP.rot) + big('data-f="pp:ins"', 'Leere Seite', ICP.ins) + big('data-f="pp:del"', 'Seite löschen', ICP.del)) +
         grp('Alle Seiten', big('data-f="pp:org"', 'Seiten organisieren', ICP.org) + big('data-f="pp:ov"', 'Seitenübersicht', ICP.ov) + big('data-f="pp:vrot"', 'Ansicht drehen', ICP.rot));
       if (tab === 'show') return grp('Starten', big('data-f="ps:begin"', 'Von Beginn an', ICP.begin) + big('data-f="ps:cur"', 'Ab aktueller Seite', ICP.cur) + big('data-f="ps:presenter"', 'Referentenansicht', ICP.presenter)) +
@@ -4831,9 +4843,19 @@
         const mode = viewMode();
         return grp('Seitenansicht', big('data-f="pv:fitw"', 'Seitenbreite', ICP.fitw) + big('data-f="pv:fitp"', 'Ganze Seite', ICP.fitp) + big('data-f="pv:single"', 'Einzelseiten', ICP.single).replace('class="rb-big"', `class="rb-big${mode === 'single' ? ' on' : ''}"`) + big('data-f="pv:two"', 'Zwei Seiten', ICP.two).replace('class="rb-big"', `class="rb-big${mode !== 'single' ? ' on' : ''}"`)) +
           grp('Zoom', big('data-f="pv:zin"', 'Vergrößern', ICP.zin) + big('data-f="pv:zout"', 'Verkleinern', ICP.zout) + `<span class="rb-zoom num">${Math.round((V.zoom || 1) * 100)} %</span>`) +
-          grp('Objekte', rows(sb('pv:grid', 'Gitternetz anzeigen und daran einrasten', ICP.grid, { label: 'Gitternetz', on: OBV.grid }), sb('pv:snap', 'An anderen Objekten und der Seitenmitte einrasten', ICP.magnet, { label: 'Einrasten', on: OBV.snap })));
+          grp('Objekte', rows(sb('pv:grid', 'Gitternetz anzeigen und daran einrasten', ICP.grid, { label: 'Gitternetz', on: OBV.grid }), sb('pv:snap', 'An anderen Objekten und der Seitenmitte einrasten', ICP.magnet, { label: 'Einrasten', on: OBV.snap }))) +
+          grp('Leisten', rows(sb('pv:compact', 'Kompakt: die Werkzeugzeile ausblenden – Werkzeuge, Farben und Stärken stehen im Reiter „Zeichnen“', ICP.compact, { label: 'Kompakt (nur Menüband)', on: OBV.compact }), sb('pv:rbcol', 'Menüband einklappen (Strg+F1)', ICP.rbcol, { label: 'Menüband einklappen' })));
       }
       return '';
+    },
+    onBtn: (t) => {
+      const px = t.closest('[data-proxy]');
+      if (!px) return false;
+      const i = [...px.querySelectorAll('button')].indexOf(t), orig = $(px.dataset.proxy);
+      const ob = orig && orig.querySelectorAll('button')[i];
+      if (ob) ob.click();
+      setTimeout(() => { const e2 = OB.ed || obIdle(); if (e2) e2.renderFmt(); }, 0);
+      return true;
     },
     fmtExt: (f) => {
       const [g, a] = f.split(':');
@@ -4848,7 +4870,8 @@
       if (g === 'ps') { if (a === 'begin') { goToPage(0); setTimeout(() => setPresent(true), 50); } if (a === 'cur') setPresent(true); if (a === 'presenter') prsStart(); return true; }
       if (a === 'fitw') setZoom(1); if (a === 'fitp') fitWholePage(); if (a === 'single') setViewMode('single'); if (a === 'two') setViewMode('two');
       if (a === 'zin') setZoom((V.zoom || 1) * 1.2); if (a === 'zout') setZoom((V.zoom || 1) / 1.2);
-      if (a === 'grid' || a === 'snap') { OBV[a] = !OBV[a]; ls('obView', OBV); obGridSync(); }
+      if (a === 'grid' || a === 'snap' || a === 'compact') { OBV[a] = !OBV[a]; ls('obView', OBV); obGridSync(); if (a === 'compact') obCompactSync(); }
+      if (a === 'rbcol' && window.PDFSTIFT_DECK) { window.PDFSTIFT_DECK.rbCollapse(true); return true; }
       setTimeout(obGridSync, 300);
       re();
       return true;
@@ -6588,7 +6611,7 @@
     ro.observe(document.querySelector('.topbar'));
   }
   // Werkzeug-Leiste erscheint und verschwindet zusammen mit der Stifte-Leiste; leere Zeilen ausblenden
-  new MutationObserver(() => { $('#toolbar2').hidden = $('#toolbar').hidden; lineSync(); obRibbonSync(); }).observe($('#toolbar'), { attributes: true, attributeFilter: ['hidden'] });
+  new MutationObserver(() => { $('#toolbar2').hidden = $('#toolbar').hidden; lineSync(); obRibbonSync(); obCompactSync(); }).observe($('#toolbar'), { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(() => lineSync()).observe($('#toolsRow'), { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(() => lineSync()).observe($('#viewBar'), { attributes: true, attributeFilter: ['hidden'] });
   const drop = $('#tbDrop');
@@ -10740,6 +10763,7 @@
   function renderToolbar() {
     if (ls('toolPanel')) setTimeout(tpRender, 0);
     obRibbonSync();
+    if (window.PDFSTIFT_DECK && window.PDFSTIFT_DECK.RB.tab === 'draw') setTimeout(() => { const e2 = OB.ed || (typeof obIdle === 'function' && obIdle()); if (e2) e2.renderFmt(); }, 0);
     document.querySelectorAll('.tool').forEach((b) => {
       const on = b.dataset.tool === S.tool;
       b.classList.toggle('active', on);
@@ -11681,7 +11705,40 @@
   }
 
   // ================================================================== Windows-App: Befehle aus der Menüleiste (Datei, Bearbeiten, Ansicht, Werkzeuge)
+  // Befehle der Menüleiste für das Menüband (PDF-Objekte und Präsentationen): ins:…, f:…, show:…, v:…, btn:Reiter:Knopf, rb:…
+  async function rbCmd(c) {
+    let DK;
+    try { DK = await ensureDeck(); } catch (e) { return; }
+    const deck = !!V.deck;
+    if (!deck && (!V.doc || V.board)) { toast('Bitte zuerst eine PDF oder Präsentation öffnen.'); return; }
+    const ed = deck ? DK.deckEditor() : (OB.ed || obIdle());
+    if (!ed) return;
+    const [k, a, ...rest] = c.split(':');
+    const b = rest.join(':');
+    if (k === 'ins') { const kind = a + (b ? ':' + b : ''); if (deck) ed.ins(kind); else obIns(kind); return; }
+    if (k === 'f') { ed.fmt(a, b || undefined); return; }
+    if (k === 'show') { ed.fmt((deck ? 'pr:' : 'ps:') + a); return; }
+    if (k === 'v') { ed.fmt((deck ? 'vw:' : 'pv:') + a); return; }
+    if (k === 'rb') { if (a === 'collapse') DK.rbCollapse(); if (a === 'compact' && !deck) ed.fmt('pv:compact'); return; }
+    if (k === 'btn') {
+      // Knopf im Menüband auslösen (z. B. Sonderzeichen, alle Formen, Anordnen)
+      const bar = deck ? document.querySelector('#deckView .dk-fmt') : $('#obRibbon .rb-fmt');
+      if (!bar) return;
+      if (DK.RB.collapsed) { DK.RB.peek = true; }
+      const tb = bar.querySelector(`[data-tab="${a}"]`);
+      if (tb && !tb.classList.contains('on')) { DK.RB.tab = a; ed.renderFmt(); }
+      const btn = bar.querySelector(b);
+      if (btn && !btn.disabled) btn.click(); else toast('Das geht hier gerade nicht – bitte zuerst ein passendes Objekt auswählen.');
+    }
+  }
+  // Windows-App: F5 startet die Präsentation (wie in PowerPoint), Umschalt+F5 ab der aktuellen Seite
+  if (WIN) document.addEventListener('keydown', (e) => {
+    if (e.key !== 'F5' || e.ctrlKey || e.altKey || !V.path || V.deck || V.board || PR.on) return;
+    e.preventDefault();
+    rbCmd(e.shiftKey ? 'show:cur' : 'show:begin');
+  });
   function winCmd(c) {
+    if (c.startsWith('rb:')) { rbCmd(c.slice(3)); return; }
     if (c === 'split') { splitToggle(); return; }
     if (SPLIT.frame && (SPLIT.act === 'r' || document.activeElement === SPLIT.frame) && splitPane() && !['split', 'presenter', 'library', 'settings', 'nextTab', 'prevTab', 'close'].includes(c)) { splitPane().cmd(c); return; }
     const ae = document.activeElement;

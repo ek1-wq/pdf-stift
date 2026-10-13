@@ -1477,3 +1477,21 @@ body.ob-placing .page { cursor: crosshair !important; }
 /* Gitternetz über PDF-Seiten (Objekte rasten daran ein) */
 .pages.ob-grid .page::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3; background-image: linear-gradient(rgba(31, 79, 214, .13) 1px, transparent 1px), linear-gradient(90deg, rgba(31, 79, 214, .13) 1px, transparent 1px); background-size: var(--obg, 20px) var(--obg, 20px); }
 .rb-zoom { align-self: center; min-width: 52px; text-align: center; font-size: 13px; color: var(--muted); }
+/* Menüband: einklappen, kurz aufklappen, Kopien der Werkzeugleiste */
+.rb-tgrow { flex: 1 1 auto; }
+.rb-tab.rb-colbtn { padding: 0 9px; font-size: 11px !important; }
+.rb-collapsed .rb-body { display: none; }
+.rb-collapsed .rb-tabs { margin-bottom: 0; border-bottom: 0; }
+.rb-peek .rb-body { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.rb-proxy { display: flex; flex-wrap: wrap; align-items: center; gap: 1px; max-width: 260px; }
+.rb-proxy .swatch { width: 26px; height: 27px; }
+.rb-proxy .swatch span { width: 18px; height: 18px; }
+.rb-proxy .swatch.active span { box-shadow: 0 0 0 2px var(--bar), 0 0 0 3.5px var(--accent); }
+.rb-proxy > button:not(.swatch) { min-width: 27px; height: 27px; padding: 0 3px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
+.rb-proxy svg { max-width: 22px; max-height: 22px; }
+.rb-proxy .active { color: var(--accent); background: var(--accent-soft, #E6EAF5); }
+#dockL .rb-proxy, #dockR .rb-proxy { max-width: 220px; }
+.rb-fmt.rb-collapsed { flex: 1 1 auto; }
+.rb-band:has(> .rb-collapsed) { padding-bottom: 3px; }
+.rb-band:has(> .rb-collapsed) .rb-grip-wrap { padding-bottom: 0; }
+.rb-band:has(> .rb-collapsed) .rb-grip-wrap .tb-grip { height: 22px; }

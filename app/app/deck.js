@@ -368,7 +368,20 @@
     arrowR: '<path d="M3 9.5h10V5.5l8 6.5-8 6.5v-4H3z"/>', line: '<path d="M4 19L20 5"/>', arrow: '<path d="M4 19L20 5"/><path d="M12.5 5H20v7.5"/>',
     arrow2: '<path d="M4 20L20 4"/><path d="M13 4h7v7"/><path d="M4 13v7h7"/>', elbow: '<path d="M3 5h8v14h9"/><path d="M17 16l3 3-3 3"/>', arc: '<path d="M4 20C4 9 9 4 20 4"/>' };
   const shapeIc = (k) => SHAPE_IC[k] || (/^bra/.test(k) ? `<g transform="translate(8.5 4)"><path d="${shapePath(k, 7, 16)}"/></g>` : `<g transform="translate(3.5 5.5)"><path d="${shapePath(k, 17, 13)}"/></g>`);
-  const RB = { tab: 'start' };
+  const RB = { tab: 'start', collapsed: false, peek: false };
+  try { RB.collapsed = localStorage.getItem('pdfstift.rbCollapsed') === '1'; } catch (er) { /* */ }
+  const RB_EDS = new Set(); // alle Editoren mit Menüband (zum Neuzeichnen beim Ein-/Ausklappen)
+  function rbCollapse(on) {
+    RB.collapsed = on == null ? !RB.collapsed : !!on; RB.peek = false;
+    try { localStorage.setItem('pdfstift.rbCollapsed', RB.collapsed ? '1' : '0'); } catch (er) { /* */ }
+    RB_EDS.forEach((ed) => ed.renderFmt());
+    window.dispatchEvent(new Event('resize'));
+  }
+  // eingeklappt und kurz aufgeklappt: bei Klick außerhalb wieder zu
+  document.addEventListener('pointerdown', (ev) => {
+    if (!RB.peek || (ev.target.closest && ev.target.closest('.rb-band, .dk-menu, .dk-pal, .dk-gal-pop, dialog'))) return;
+    RB.peek = false; RB_EDS.forEach((ed) => ed.renderFmt());
+  }, true);
   const RI = {
     paste: '<rect x="5.5" y="5" width="13" height="16" rx="1.5"/><path d="M9 5V3.5h6V5"/><path d="M9 10.5h6M9 14h6M9 17.5h4"/>',
     cut: '<circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M8.3 15.8L18 4M15.7 15.8L6 4"/>',
@@ -832,16 +845,25 @@
         h += grp('Symbole', big('data-menu="sym"', 'Sonderzeichen', RI.omega, true, true));
         if (host.insertExtra) h += host.insertExtra(kit);
       } else if (host.tabContent) h += host.tabContent(RB.tab, kit);
-      bar.innerHTML = `<div class="rb-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" class="rb-tab${k === RB.tab ? ' on' : ''}" data-tab="${k}">${esc(l)}</button>`).join('')}</div><div class="rb-body">${h}</div>`;
+      const colTitle = RB.collapsed ? 'Menüband anheften (Strg+F1)' : 'Menüband einklappen (Strg+F1)';
+      bar.innerHTML = `<div class="rb-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" class="rb-tab${k === RB.tab && (!RB.collapsed || RB.peek) ? ' on' : ''}" data-tab="${k}" title="Doppelklick: Menüband ein-/ausklappen">${esc(l)}</button>`).join('')}<span class="rb-tgrow"></span><button type="button" class="rb-tab rb-colbtn" data-a="rbcol" title="${esc(colTitle)}" aria-label="${esc(colTitle)}">${RB.collapsed ? '▾' : '▴'}</button></div><div class="rb-body">${h}</div>`;
+      bar.classList.toggle('rb-collapsed', RB.collapsed && !RB.peek);
+      bar.classList.toggle('rb-peek', RB.collapsed && RB.peek);
+      RB_EDS.add(ED);
       bar.hidden = false;
       if (e && e.t === 'table' && e.head) { const hb = bar.querySelector('[data-f="head"]'); if (hb) hb.classList.add('on'); }
       const insK = ED.insert || (host.insertKind && host.insertKind());
       if (insK) bar.querySelectorAll(`[data-ins="${insK}"]`).forEach((x) => x.classList.add('on'));
       bar.onmousedown = (ev) => { if (!ev.target.closest('select')) ev.preventDefault(); }; // Auswahl im Text bleibt erhalten
       bar.onpointerdown = (ev) => ev.stopPropagation();
+      bar.ondblclick = (ev) => { if (ev.target.closest('[data-tab]')) ev.preventDefault(); }; // Doppelklick wird in onclick erkannt (die Reiter werden beim ersten Klick neu gezeichnet)
       bar.onclick = (ev) => {
         const t = ev.target.closest('button');
         if (!t || t.disabled) return;
+        if (host.onBtn && host.onBtn(t)) return;
+        if (t.dataset.a === 'rbcol') { rbCollapse(); return; }
+        if (t.dataset.tab) { const now = Date.now(); const dbl = RB.lastTab === t.dataset.tab && now - (RB.lastAt || 0) < 450; RB.lastTab = t.dataset.tab; RB.lastAt = dbl ? 0 : now; if (dbl) { rbCollapse(); return; } }
+        if (t.dataset.tab && RB.collapsed) { RB.tab = t.dataset.tab; RB.peek = !(RB.peek && t.classList.contains('on')); renderFmt(); return; }
         if (t.dataset.tab) { RB.tab = t.dataset.tab; try { C.ls('rbTab', RB.tab); } catch (er) { /* */ } renderFmt(); return; }
         if (t.dataset.ins) { if (host.onIns) host.onIns(t.dataset.ins); else ins(t.dataset.ins); return; }
         if (t.dataset.pal) { palette(t, t.dataset.pal, !!t.dataset.none); return; }
@@ -1463,6 +1485,8 @@
         ED.insert = null; host.placing(false); ED.sel = []; render(); return true;
       }
       if (!ED.sel.length) return false;
+      if (mod && k.toLowerCase() === 'g') { ev.preventDefault(); fmt(ev.shiftKey ? 'ungroup' : 'group'); return true; }
+      if (mod && (k === ']' || k === '[')) { ev.preventDefault(); fmt(k === ']' ? 'fs+' : 'fs-'); return true; }
       if (mod && k.toLowerCase() === 'd') { ev.preventDefault(); act('dup'); return true; }
       if (mod && k.toLowerCase() === 'c') { copy(); return true; }
       if (mod && k.toLowerCase() === 'x') { copy(); act('del'); return true; }
@@ -1479,7 +1503,7 @@
       return false;
     }
     function select(ids) { endEdit(); ED.sel = ids.filter((id) => byId(id)); render(); }
-    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop });
+    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, fmt, menu });
     return ED;
   }
 
@@ -2564,5 +2588,6 @@
   }
 
   FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
-  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, replaceInEls, audience };
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'F1' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); ev.stopImmediatePropagation(); rbCollapse(); } }, true);
+  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();
