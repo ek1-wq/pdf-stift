@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.76.1';
+  const VERSION = '1.76.2';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -4844,7 +4844,7 @@
         return grp('Seitenansicht', big('data-f="pv:fitw"', 'Seitenbreite', ICP.fitw) + big('data-f="pv:fitp"', 'Ganze Seite', ICP.fitp) + big('data-f="pv:single"', 'Einzelseiten', ICP.single).replace('class="rb-big"', `class="rb-big${mode === 'single' ? ' on' : ''}"`) + big('data-f="pv:two"', 'Zwei Seiten', ICP.two).replace('class="rb-big"', `class="rb-big${mode !== 'single' ? ' on' : ''}"`)) +
           grp('Zoom', big('data-f="pv:zin"', 'Vergrößern', ICP.zin) + big('data-f="pv:zout"', 'Verkleinern', ICP.zout) + `<span class="rb-zoom num">${Math.round((V.zoom || 1) * 100)} %</span>`) +
           grp('Objekte', rows(sb('pv:grid', 'Gitternetz anzeigen und daran einrasten', ICP.grid, { label: 'Gitternetz', on: OBV.grid }), sb('pv:snap', 'An anderen Objekten und der Seitenmitte einrasten', ICP.magnet, { label: 'Einrasten', on: OBV.snap }))) +
-          grp('Leisten', rows(sb('pv:compact', 'Kompakt: die Werkzeugzeile ausblenden – Werkzeuge, Farben und Stärken stehen im Reiter „Zeichnen“', ICP.compact, { label: 'Kompakt (nur Menüband)', on: OBV.compact }), sb('pv:rbcol', 'Menüband einklappen (Strg+F1)', ICP.rbcol, { label: 'Menüband einklappen' })));
+          grp('Leisten', rows(sb('pv:compact', 'Kompakt: die Werkzeugzeile ausblenden – Werkzeuge, Farben und Stärken stehen im Reiter „Zeichnen“', ICP.compact, { label: 'Kompakt (nur Menüband)', on: OBV.compact }), sb('pv:rbcol', 'Menüband einklappen (Strg+F1)', ICP.rbcol, { label: 'Menüband einklappen' })) + rows(sb('pv:laydef', 'Alle Leisten wieder an ihren Standardplatz setzen', ICP.compact, { label: 'Standardanordnung' })));
       }
       return '';
     },
@@ -4871,6 +4871,7 @@
       if (a === 'fitw') setZoom(1); if (a === 'fitp') fitWholePage(); if (a === 'single') setViewMode('single'); if (a === 'two') setViewMode('two');
       if (a === 'zin') setZoom((V.zoom || 1) * 1.2); if (a === 'zout') setZoom((V.zoom || 1) / 1.2);
       if (a === 'grid' || a === 'snap' || a === 'compact') { OBV[a] = !OBV[a]; ls('obView', OBV); obGridSync(); if (a === 'compact') obCompactSync(); }
+      if (a === 'laydef') { layReset(); re(); return true; }
       if (a === 'rbcol' && window.PDFSTIFT_DECK) { window.PDFSTIFT_DECK.rbCollapse(true); return true; }
       setTimeout(obGridSync, 300);
       re();
@@ -6531,6 +6532,9 @@
   // vb = Symbolleiste (nur wenn sie nicht in der Kopfzeile sitzt), tb = Stifte-Leiste, tb2 = Werkzeug-Leiste
   function layGet() {
     let L = ls('dockLay');
+    // Windows-App: einmalig die Standardanordnung (Menüband oben, darunter Stifte, darunter Werkzeuge + Symbolleiste)
+    if (window.pdfstiftWin && window.pdfstiftWin.menuPop && !ls('lay2')) { ls('lay2', 1); L = layDefault(); ls('dockLay', L); }
+    if ((!L || typeof L !== 'object') && ls('vbPos') == null && ls('tbPos') == null && ls('tb2Pos') == null) L = layDefault();
     if (!L || typeof L !== 'object') {
       // Übernahme der bisherigen Einstellungen
       L = { top: [], bottom: [], left: [], right: [] };
@@ -6550,10 +6554,11 @@
     if (!seen.has('tb')) L.top.push(['tb']);
     if (!seen.has('tb2')) L.top.push(['tb2']);
     if (!seen.has('rb')) L.top.push(['rb']); // Menüband (Objekte wie in PowerPoint)
-    // Windows-App: das Menüband ersetzt die Menüleiste und gehört deshalb einmalig ganz nach oben
-    if (window.pdfstiftWin && window.pdfstiftWin.menuPop && !ls('rbTop1')) { ls('rbTop1', 1); layRemove(L, 'rb'); L.top.unshift(['rb']); ls('dockLay', L); }
     return L;
   }
+  // Standardanordnung: Menüband – Stifte – Werkzeuge mit der Symbolleiste daneben
+  function layDefault() { ls('vbPos', 'd'); return { top: [['rb'], ['tb'], ['tb2', 'vb']], bottom: [], left: [], right: [] }; }
+  function layReset() { ls('dockLay', layDefault()); dockApply(); if (typeof vbSync === 'function') vbSync(); }
   function laySet(L) { ls('dockLay', L); dockApply(); }
   function layRemove(L, id) { for (const k of TB_POS) L[k] = L[k].map((ln) => ln.filter((x) => x !== id)).filter((ln) => ln.length); }
   const edgeOfBar = (id) => { const L = layGet(); return TB_POS.find((k) => L[k].some((ln) => ln.includes(id))) || 'top'; };

@@ -3010,5 +3010,7 @@
   "\" aria-haspopup=\"menu\" title=\"": null,
   " rb-file": null,
   "<span class=\"rb-wsep\"></span>": null,
-  "Hilfe": "Help"
+  "Hilfe": "Help",
+  "Alle Leisten wieder an ihren Standardplatz setzen": "Put all bars back in their default place",
+  "Standardanordnung": "Default layout"
 }
