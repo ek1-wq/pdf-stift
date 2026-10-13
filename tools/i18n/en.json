@@ -3178,5 +3178,13 @@
   "Die Kurzanleitung konnte nicht in die Bibliothek gelegt werden.": "The quick guide could not be added to the library.",
   "Kurzanleitung (Hilfe → Kurzanleitung)": "Quick guide (Help → Quick guide)",
   "</div>\n      <div class=\"set-row\"><span>Kurzanleitung (Hilfe → Kurzanleitung)</span>": "</div>\n      <div class=\"set-row\"><span>Quick guide (Help → Quick guide)</span>",
-  "English (US)": null
+  "English (US)": null,
+  "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8\"/><circle cx=\"12\" cy=\"17.2\" r=\".6\"/>": null,
+  "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 11v6\"/><circle cx=\"12\" cy=\"7.8\" r=\".6\"/>": null,
+  "<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1\"/>": null,
+  "<path d=\"M7 3h7l4 4v14H7z\"/><path d=\"M14 3v4h4M10 12h5M10 16h5\"/>": null,
+  "Kurzanleitung als PDF öffnen (F1)": "Open the quick guide as PDF (F1)",
+  "Versionsnummern": "Version numbers",
+  "Rückmeldung": "Feedback",
+  "Bericht für Verbesserungen": "Improvement report"
 }

@@ -916,6 +916,8 @@
       const shBtn = (k, l) => `<button type="button" class="rb-sh" data-ins="shape:${k}" title="${esc(l)} – click or drag" aria-label="${esc(l)}">${svg(shapeIc(k))}</button>`;
       const kit = { grp, rows, big, sb, mb, cb, svg, sep, e, has, list };
       const tabs = [['start', 'Start'], ['insert', "Insert"], ...(host.tabs ? host.tabs() : [])];
+      // Browser und Tablet: eigener Reiter „Hilfe“ (in der Windows-App steht dafür das Menü Hilfe in der Reiterzeile)
+      if (!(window.pdfstiftWin && window.pdfstiftWin.menuPop) && document.querySelector('[data-act="help"]')) tabs.push(['help', "Help"]);
       if (!tabs.some((t) => t[0] === RB.tab)) RB.tab = 'start';
       let h = '';
       if (RB.tab === 'start' && !has && !ED.edit && !ED.painter && host.startIdle) h += host.startIdle(kit, !!(ED.clip || (host.clipboard && host.clipboard())));
@@ -970,6 +972,16 @@
         h += grp("Symbols", big('data-menu="sym"', "Special characters", RI.omega, true, true));
         if (host.insertExtra) h += host.insertExtra(kit);
       } else if (host.tabContent) h += host.tabContent(RB.tab, kit);
+      if (RB.tab === 'help') {
+        const hb = (act, label, ic, title) => `<button type="button" class="rb-big" data-hact="${act}" title="${esc(title || label)}">${svg(ic)}<span>${esc(label)}</span></button>`;
+        const IC_HELP = '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><circle cx="12" cy="17.2" r=".6"/>';
+        const IC_INFO = '<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.8" r=".6"/>';
+        const IC_SET = '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>';
+        const IC_REP = '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>';
+        h += grp("Help", hb('help', "Quick guide", IC_HELP, "Open the quick guide as PDF (F1)") + hb('about', "About PDF-Stift", IC_INFO, "Version numbers"));
+        h += grp("Settings", hb('settings', "Settings", IC_SET));
+        if (document.body.dataset.ed !== 'local' && document.querySelector('[data-act="report"]')) h += grp("Feedback", hb('report', "Improvement report", IC_REP));
+      }
       if (RB.tab === 'view' && window.pdfstiftWin && window.pdfstiftWin.menuPop) h += grp("More", big('data-wm="m-ansicht"', "All view commands", '<circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/>', true, true));
       const colTitle = RB.collapsed ? "Pin ribbon (Ctrl+F1)" : "Collapse ribbon (Ctrl+F1)";
       // Windows-App: die Menüs der Menüleiste stehen mit in der Reiterzeile (die Menüleiste selbst wird dann ausgeblendet)
@@ -993,6 +1005,7 @@
       bar.onclick = (ev) => {
         const t = ev.target.closest('button');
         if (!t || t.disabled) return;
+        if (t.dataset.hact) { const mb2 = document.querySelector(`[data-act="${t.dataset.hact}"]`); if (mb2) mb2.click(); return; }
         if (host.onBtn && host.onBtn(t)) return;
         if (t.dataset.wm) { const r = t.getBoundingClientRect(); if (window.pdfstiftWin && window.pdfstiftWin.menuPop) window.pdfstiftWin.menuPop(t.dataset.wm, r.left, r.bottom); return; }
         if (t.dataset.a === 'rbcol') { rbCollapse(); return; }
