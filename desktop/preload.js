@@ -2,6 +2,8 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('pdfstiftWin', {
   version: () => ipcRenderer.invoke('version'),
+  menuBar: (on) => ipcRenderer.invoke('menu-bar', !!on),
+  menuPop: (id, x, y) => ipcRenderer.invoke('menu-pop', id, x, y),
   state: () => ipcRenderer.invoke('upd-state'),
   onUpdate: (cb) => ipcRenderer.on('upd', (_e, d) => cb(d)),
   install: () => ipcRenderer.invoke('upd-install'),

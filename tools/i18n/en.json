@@ -3003,5 +3003,12 @@
   "Ab aktueller Folie/Seite": "From current slide/page",
   "Shift+F5": null,
   "Folie ausblenden/einblenden": "Hide/show slide",
-  "Übergang für alle Folien wie diese": "Apply this transition to all slides"
+  "Übergang für alle Folien wie diese": "Apply this transition to all slides",
+  "Alle Ansicht-Befehle": "All view commands",
+  "<circle cx=\"6\" cy=\"12\" r=\"1.4\"/><circle cx=\"12\" cy=\"12\" r=\"1.4\"/><circle cx=\"18\" cy=\"12\" r=\"1.4\"/>": null,
+  "\" data-wm=\"": null,
+  "\" aria-haspopup=\"menu\" title=\"": null,
+  " rb-file": null,
+  "<span class=\"rb-wsep\"></span>": null,
+  "Hilfe": "Help"
 }

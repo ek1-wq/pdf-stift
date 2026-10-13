@@ -845,8 +845,14 @@
         h += grp('Symbole', big('data-menu="sym"', 'Sonderzeichen', RI.omega, true, true));
         if (host.insertExtra) h += host.insertExtra(kit);
       } else if (host.tabContent) h += host.tabContent(RB.tab, kit);
+      if (RB.tab === 'view' && window.pdfstiftWin && window.pdfstiftWin.menuPop) h += grp('Mehr', big('data-wm="m-ansicht"', 'Alle Ansicht-Befehle', '<circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/>', true, true));
       const colTitle = RB.collapsed ? 'Menüband anheften (Strg+F1)' : 'Menüband einklappen (Strg+F1)';
-      bar.innerHTML = `<div class="rb-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" class="rb-tab${k === RB.tab && (!RB.collapsed || RB.peek) ? ' on' : ''}" data-tab="${k}" title="Doppelklick: Menüband ein-/ausklappen">${esc(l)}</button>`).join('')}<span class="rb-tgrow"></span><button type="button" class="rb-tab rb-colbtn" data-a="rbcol" title="${esc(colTitle)}" aria-label="${esc(colTitle)}">${RB.collapsed ? '▾' : '▴'}</button></div><div class="rb-body">${h}</div>`;
+      // Windows-App: die Menüs der Menüleiste stehen mit in der Reiterzeile (die Menüleiste selbst wird dann ausgeblendet)
+      const WM = window.pdfstiftWin && window.pdfstiftWin.menuPop;
+      const wm = (id, l, c = '') => `<button type="button" class="rb-tab rb-wm${c}" data-wm="${id}" aria-haspopup="menu" title="${esc(l)} ▾">${esc(l)}</button>`;
+      const wmPre = WM ? wm('m-datei', 'Datei', ' rb-file') + wm('m-bearbeiten', 'Bearbeiten') + '<span class="rb-wsep"></span>' : '';
+      const wmPost = WM ? '<span class="rb-wsep"></span>' + wm('m-werkzeuge', 'Werkzeuge') + wm('m-notizbuch', 'Notizbuch') + wm('m-hilfe', 'Hilfe') : '';
+      bar.innerHTML = `<div class="rb-tabs" role="tablist">${wmPre}${tabs.map(([k, l]) => `<button type="button" role="tab" class="rb-tab${k === RB.tab && (!RB.collapsed || RB.peek) ? ' on' : ''}" data-tab="${k}" title="Doppelklick: Menüband ein-/ausklappen">${esc(l)}</button>`).join('')}${wmPost}<span class="rb-tgrow"></span><button type="button" class="rb-tab rb-colbtn" data-a="rbcol" title="${esc(colTitle)}" aria-label="${esc(colTitle)}">${RB.collapsed ? '▾' : '▴'}</button></div><div class="rb-body">${h}</div>`;
       bar.classList.toggle('rb-collapsed', RB.collapsed && !RB.peek);
       bar.classList.toggle('rb-peek', RB.collapsed && RB.peek);
       RB_EDS.add(ED);
@@ -861,6 +867,7 @@
         const t = ev.target.closest('button');
         if (!t || t.disabled) return;
         if (host.onBtn && host.onBtn(t)) return;
+        if (t.dataset.wm) { const r = t.getBoundingClientRect(); if (window.pdfstiftWin && window.pdfstiftWin.menuPop) window.pdfstiftWin.menuPop(t.dataset.wm, r.left, r.bottom); return; }
         if (t.dataset.a === 'rbcol') { rbCollapse(); return; }
         if (t.dataset.tab) { const now = Date.now(); const dbl = RB.lastTab === t.dataset.tab && now - (RB.lastAt || 0) < 450; RB.lastTab = t.dataset.tab; RB.lastAt = dbl ? 0 : now; if (dbl) { rbCollapse(); return; } }
         if (t.dataset.tab && RB.collapsed) { RB.tab = t.dataset.tab; RB.peek = !(RB.peek && t.classList.contains('on')); renderFmt(); return; }

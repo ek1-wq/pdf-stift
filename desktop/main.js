@@ -152,7 +152,7 @@ function menu() {
   // Einzelbuchstaben nur anzeigen – die Seite selbst reagiert darauf (sonst ginge Tippen in Textfeldern nicht)
   const tool = (id, label, accelerator) => ({ label, accelerator, registerAccelerator: false, click: cmd('tool:' + id) });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: '&Datei', submenu: [
+    { label: '&Datei', id: 'm-datei', submenu: [
       { label: 'PDF öffnen …', accelerator: 'Ctrl+O', click: pickPdf },
       { label: LOCAL ? 'Zur Bibliothek hinzufügen …' : 'In die Bibliothek hochladen …', click: cmd('upload') },
       { label: 'Bibliothek', accelerator: 'Ctrl+Shift+B', click: cmd('library') },
@@ -170,7 +170,7 @@ function menu() {
       { label: 'Schließen', accelerator: 'Ctrl+W', click: cmd('close') },
       { label: 'Beenden', accelerator: 'Alt+F4', role: 'quit' },
     ] },
-    { label: '&Bearbeiten', submenu: [
+    { label: '&Bearbeiten', id: 'm-bearbeiten', submenu: [
       { label: 'Rückgängig', accelerator: 'Ctrl+Z', click: cmd('undo') },
       { label: 'Wiederholen', accelerator: 'Ctrl+Y', click: cmd('redo') },
       { type: 'separator' },
@@ -183,7 +183,7 @@ function menu() {
       { label: 'Weitersuchen', accelerator: 'F3', click: cmd('findNext') },
       { label: 'Vorheriger Treffer', accelerator: 'Shift+F3', click: cmd('findPrev') },
     ] },
-    { label: '&Ansicht', submenu: [
+    { label: '&Ansicht', id: 'm-ansicht', submenu: [
       { label: 'Seitenbreite', accelerator: 'Ctrl+2', click: cmd('fitw') },
       { label: 'Ganze Seite', accelerator: 'Ctrl+0', click: cmd('fitp') },
       { label: 'Originalgröße (100 %)', accelerator: 'Ctrl+1', click: cmd('actual') },
@@ -222,7 +222,7 @@ function menu() {
       { type: 'separator' },
       { label: 'Neu laden', accelerator: 'Ctrl+Shift+F5', click: () => win && win.webContents.reload() },
     ] },
-    { label: '&Einfügen', submenu: [
+    { label: '&Einfügen', id: 'm-einfuegen', submenu: [
       { label: 'Textfeld', click: cmd('rb:ins:text') },
       { label: 'Bild …', click: cmd('rb:ins:img') },
       { label: 'Tabelle …', click: cmd('rb:ins:table') },
@@ -244,7 +244,7 @@ function menu() {
       { label: 'Folien aus PDF …', click: cmd('rb:btn:insert:[data-menu="pdfslides"]') },
       { label: 'Kopf- und Fußzeile, Foliennummer …', click: cmd('rb:f:x:hf') },
     ] },
-    { label: 'F&ormat', submenu: [
+    { label: 'F&ormat', id: 'm-format', submenu: [
       { label: 'Fett', accelerator: 'Ctrl+B', registerAccelerator: false, click: cmd('rb:f:bold') },
       { label: 'Kursiv', accelerator: 'Ctrl+I', registerAccelerator: false, click: cmd('rb:f:italic') },
       { label: 'Unterstrichen', accelerator: 'Ctrl+U', registerAccelerator: false, click: cmd('rb:f:underline') },
@@ -275,7 +275,7 @@ function menu() {
       { type: 'separator' },
       { label: 'Suchen und Ersetzen …', click: cmd('rb:f:replace') },
     ] },
-    { label: 'Bildschirm&präsentation', submenu: [
+    { label: 'Bildschirm&präsentation', id: 'm-show', submenu: [
       { label: 'Von Beginn an', accelerator: 'F5', registerAccelerator: false, click: cmd('rb:show:begin') },
       { label: 'Ab aktueller Folie/Seite', accelerator: 'Shift+F5', registerAccelerator: false, click: cmd('rb:show:cur') },
       { label: 'Referentenansicht', click: cmd('rb:show:presenter') },
@@ -283,7 +283,7 @@ function menu() {
       { label: 'Folie ausblenden/einblenden', click: cmd('rb:show:hide') },
       { label: 'Übergang für alle Folien wie diese', click: cmd('rb:show:trall') },
     ] },
-    { label: '&Werkzeuge', submenu: [
+    { label: '&Werkzeuge', id: 'm-werkzeuge', submenu: [
       tool('sel', 'Text auswählen', 'V'),
       tool('hand', 'Hand', 'H'),
       { type: 'separator' },
@@ -310,7 +310,7 @@ function menu() {
       { label: 'Alle Werkzeuge …', click: cmd('allTools') },
       ...(LOCAL ? [] : [{ label: 'Live-Mitschau für Studierende …', click: cmd('live') }]),
     ] },
-    { label: '&Notizbuch', submenu: [
+    { label: '&Notizbuch', id: 'm-notizbuch', submenu: [
       { label: 'PDF-Seiten einfügen …', click: cmd('nbpdf') },
       { label: 'Vorlage einfügen (Cornell, Besprechung, Vorlesung) …', click: cmd('nbtpl') },
       { label: 'Verknüpfung einfügen …', click: cmd('nblink') },
@@ -321,7 +321,7 @@ function menu() {
       { label: 'Notizseite als PDF speichern …', click: cmd('save') },
       { label: 'Notizseite drucken …', click: cmd('print') },
     ] },
-    { label: '&Hilfe', submenu: [
+    { label: '&Hilfe', id: 'm-hilfe', submenu: [
       { label: 'Kurzanleitung', accelerator: 'F1', click: () => openHelp() },
       { type: 'separator' },
       { label: 'Nach Updates suchen', click: () => updates(true) },
@@ -847,6 +847,14 @@ function updates(byUser) {
   } catch (e) { /* ohne Updater weiter */ }
 }
 ipcMain.handle('version', () => app.getVersion());
+// Menüband als Hauptmenü: die Menüleiste ausblenden (Alt zeigt sie weiterhin) und einzelne Menüs unter einem Reiter aufklappen
+ipcMain.handle('menu-bar', (_e, on) => { if (!win || win.isDestroyed()) return; win.setAutoHideMenuBar(!on); win.setMenuBarVisibility(!!on); });
+ipcMain.handle('menu-pop', (_e, id, x, y) => {
+  const m = Menu.getApplicationMenu(); const it = m && m.getMenuItemById(String(id || ''));
+  if (!it || !it.submenu || !win) return;
+  const z = win.webContents.getZoomFactor() || 1;
+  it.submenu.popup({ window: win, x: Math.round((+x || 0) * z), y: Math.round((+y || 0) * z) });
+});
 ipcMain.handle('upd-state', () => (pending && (pending.state === 'available' || pending.state === 'progress') ? pending : null));
 ipcMain.handle('upd-install', () => { send({ state: 'progress', percent: 0 }); return updater().downloadUpdate().catch((e) => send({ state: 'error', message: String(e.message || e) })); });
 ipcMain.handle('upd-skip', (_e, v) => { try { fs.writeFileSync(skipFile(), JSON.stringify({ skip: String(v || '') })); } catch (e) { /* */ } pending = null; });

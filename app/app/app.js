@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.76.0';
+  const VERSION = '1.76.1';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -6550,6 +6550,8 @@
     if (!seen.has('tb')) L.top.push(['tb']);
     if (!seen.has('tb2')) L.top.push(['tb2']);
     if (!seen.has('rb')) L.top.push(['rb']); // Menüband (Objekte wie in PowerPoint)
+    // Windows-App: das Menüband ersetzt die Menüleiste und gehört deshalb einmalig ganz nach oben
+    if (window.pdfstiftWin && window.pdfstiftWin.menuPop && !ls('rbTop1')) { ls('rbTop1', 1); layRemove(L, 'rb'); L.top.unshift(['rb']); ls('dockLay', L); }
     return L;
   }
   function laySet(L) { ls('dockLay', L); dockApply(); }
@@ -11656,6 +11658,11 @@
 
   // ================================================================== Windows-App: Update-Hinweis oben rechts
   const WIN = window.pdfstiftWin || null;
+  // Menüleiste nur zeigen, solange das Menüband (mit Datei, Bearbeiten … in der Reiterzeile) nicht zu sehen ist
+  if (WIN && WIN.menuBar && WIN.menuPop) {
+    let mbLast = null;
+    setInterval(() => { const t = document.querySelector('.rb-wm'); const vis = !!(t && t.offsetParent); if (vis !== mbLast) { mbLast = vis; WIN.menuBar(!vis); } }, 400);
+  }
   const UPD = { d: null };
   function updDialog() {
     const d0 = UPD.d;
