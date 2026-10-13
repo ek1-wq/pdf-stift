@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Kurzanleitung als PDF im APA-Stil (7. Auflage) erzeugen.
+"""Kurzanleitung als PDF im APA-Stil (7. Auflage) erzeugen – Englisch nach US-Norm (Letter) und Deutsch (A4).
+Standard in der App ist Englisch; Deutsch lässt sich unter Einstellungen → Kurzanleitung wählen.
 
 Je Sprache (de, en) und Ausgabe (server = Browser/Windows-App mit eigenem Server und Tablet,
 local = Windows-/Linux-App ohne Server) entsteht eine Datei in server/hilfe/:
@@ -14,7 +15,7 @@ Ebene 2 linksbündig fett, Tabellen mit Nummer (fett), kursivem Titel und nur wa
 """
 import os
 import sys
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, LETTER
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.styles import ParagraphStyle
@@ -231,7 +232,8 @@ DE = {
 
         ('h1', 'Hilfe und Rückmeldung'),
         ('ul', [
-            'Diese Kurzanleitung: Hilfe → Kurzanleitung oder ' + keys('F1') + '. Sie liegt als PDF im Ordner „Hilfe“ Ihrer Bibliothek; Sie können darin wie in jeder PDF schreiben.',
+            'Diese Kurzanleitung: Hilfe → Kurzanleitung oder ' + keys('F1') + '. Sie liegt als PDF im Ordner „Hilfe“ Ihrer Bibliothek; Sie können darin wie in jeder PDF schreiben. '
+            'Die Sprache der Kurzanleitung (Englisch oder Deutsch) wählen Sie unter Einstellungen → Kurzanleitung.',
             'Versionsnummern: Hilfe → Über PDF-Stift.',
             ('Bericht für Verbesserungen (Hilfe-Menü oder Menü „Mehr“): kopieren und an die Betreuung des Servers schicken.', 'S'),
             ('Tablet: Menü (drei Punkte) → Fehler melden (mit Bildschirmfoto).', 'S'),
@@ -251,7 +253,8 @@ EN = {
     'blocks': [
         ('p', 'PDF-Stift is a program for reading, annotating and organizing PDF files such as lecture slides, papers and scans. '
               'You can also keep notebooks and design presentations or import them from PowerPoint. '
-              'This quick guide shows what is available and where to find it.'),
+              'This quick guide shows what is available and where to find it. Menu and button names are given as they appear in the '
+              'English interface; the language can be switched under Settings → Language.'),
         ('p', '“PC” and “tablet” mark where a feature is available: “PC” means the Windows app and the browser, “tablet” the Android app. '
               'Menu names refer to the Windows app; in the browser almost everything is in the “More” menu (three dots at the top right).', 'S'),
         ('p', 'This edition runs entirely on your PC. It needs no account and no server, and your PDFs stay as ordinary files in a folder on your computer.', 'L'),
@@ -335,7 +338,7 @@ EN = {
             'Insert templates: Cornell, meeting, lecture.',
             'Add text snippets such as “Important!” or “Definition” and slide markers from the tools sidebar.',
             'Link notebook pages and PDFs in both directions; “What links here?” shows the other direction.',
-            'Restore earlier versions; save or print a notebook page as PDF (split onto A4 pages).',
+            'Restore earlier versions; save or print a notebook page as PDF (split onto several pages).',
         ]),
 
         ('h1', 'Two Documents Side by Side'),
@@ -409,7 +412,8 @@ EN = {
 
         ('h1', 'Help and Feedback'),
         ('ul', [
-            'This quick guide: Help → Quick guide or ' + keys('F1') + '. It is a PDF in the “Help” folder of your library; you can write in it like in any PDF.',
+            'This quick guide: Help → Quick guide or ' + keys('F1') + '. It is a PDF in the “Help” folder of your library; you can write in it like in any PDF. '
+            'Choose its language (English or German) under Settings → Quick guide.',
             'Version numbers: Help → About PDF-Stift.',
             ('Improvement report (Help menu or “More” menu): copy it and send it to whoever runs your server.', 'S'),
             ('Tablet: menu (three dots) → Report a problem (with screenshot).', 'S'),
@@ -429,7 +433,8 @@ def for_ed(entry, ed):
 def build(lang, ed):
     C = DE if lang == 'de' else EN
     path = os.path.join(OUT, f'kurzanleitung-{"server" if ed == "S" else "local"}.{lang}.pdf')
-    W, H = A4
+    PS = LETTER if lang == 'en' else A4  # Englisch nach US-Norm (Letter), Deutsch auf A4
+    W, H = PS
 
     def page_no(canvas, doc):
         # APA: Seitenzahl oben rechts auf jeder Seite, auf Höhe der oberen Randlinie
@@ -438,8 +443,8 @@ def build(lang, ed):
         canvas.drawRightString(W - MARGIN, H - MARGIN / 2 - FS / 2, str(doc.page))
         canvas.restoreState()
 
-    doc = BaseDocTemplate(path, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
-                          title=C['title'], author='PDF-Stift', subject=C['titlepage'][ed][1], lang=lang, creator='PDF-Stift')
+    doc = BaseDocTemplate(path, pagesize=PS, leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
+                          title=C['title'], author='PDF-Stift', subject=C['titlepage'][ed][1], lang='en-US' if lang == 'en' else 'de-DE', creator='PDF-Stift')
     frame = Frame(MARGIN, MARGIN, W - 2 * MARGIN, H - 2 * MARGIN, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
     doc.addPageTemplates([PageTemplate(id='p', frames=[frame], onPage=page_no)])
 

@@ -264,13 +264,14 @@ session_write_close(); // parallele Anfragen nicht blockieren
 
 switch ($a) {
     case 'help':
-        // Kurzanleitung (PDF) in die Bibliothek legen – Ordner „Hilfe“ – und den Pfad zurückgeben; eine neuere mitgelieferte Fassung ersetzt die alte
-        $en = ui_lang() === 'en';
-        $src = __DIR__ . '/hilfe/kurzanleitung-' . (is_local() ? 'local' : 'server') . '.' . ($en ? 'en' : 'de') . '.pdf';
+        // Kurzanleitung (PDF) in die Bibliothek legen und den Pfad zurückgeben; eine neuere mitgelieferte Fassung ersetzt die alte.
+        // Sprache: Englisch (US) als Standard, Deutsch auf Wunsch (Einstellungen → Kurzanleitung)
+        $de = ($_GET['lang'] ?? 'en') === 'de';
+        $src = __DIR__ . '/hilfe/kurzanleitung-' . (is_local() ? 'local' : 'server') . '.' . ($de ? 'de' : 'en') . '.pdf';
         if (!is_file($src)) {
             fail('Die Kurzanleitung fehlt im Programmpaket.', 404);
         }
-        $rel = $en ? 'Help/PDF-Stift – Quick guide.pdf' : 'Hilfe/PDF-Stift – Kurzanleitung.pdf';
+        $rel = $de ? 'Hilfe/PDF-Stift – Kurzanleitung.pdf' : 'Help/PDF-Stift – Quick guide.pdf';
         $dst = storage('pdfs') . '/' . $rel;
         if (!is_file($dst) || md5_file($dst) !== md5_file($src)) {
             if (!is_dir(dirname($dst)) && !@mkdir(dirname($dst), 0775, true)) {

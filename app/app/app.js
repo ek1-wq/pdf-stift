@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.81.0';
+  const VERSION = '1.81.1';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -12128,7 +12128,7 @@
   });
   // ================================================================== Einstellungen (Datei → Einstellungen)
   // auf allen Geräten gleich (Server): redactPurge, autoOcr, keepVersions · nur auf diesem Gerät: Ansicht, Startwerkzeug, Start, Druck
-  const SET = Object.assign({ viewMode: 'single', startTool: 'last', startView: 'last', printDpi: 160, redactPurge: true, autoOcr: true, keepVersions: 5, autoUpdate: true, pdfNextTo: false, dropFolder: DROP0, usage: true }, ls('settings') || {});
+  const SET = Object.assign({ viewMode: 'single', startTool: 'last', startView: 'last', printDpi: 160, redactPurge: true, autoOcr: true, keepVersions: 5, autoUpdate: true, pdfNextTo: false, dropFolder: DROP0, usage: true, helpLang: 'en' }, ls('settings') || {});
   function saveSet() { ls('settings', SET); UG.on = !LOCAL && SET.usage !== false; }
   UG.on = !LOCAL && SET.usage !== false; // freie Ausgabe: kein Nutzungsprotokoll
   if (window.pdfstiftWin && window.pdfstiftWin.setFolder) window.pdfstiftWin.setFolder(SET.dropFolder || DROP0);
@@ -12260,6 +12260,7 @@
     const chk = (id, label, v, hint) => `<label class="check"><input id="${id}" type="checkbox"${v ? ' checked' : ''}> <span>${label}${hint ? `<br><span class="muted small">${hint}</span>` : ''}</span></label>`;
     d.innerHTML = `<form method="dialog"><h2>Einstellungen</h2>
       <div class="set-row"><span>Sprache / Language</span>${sel('stLang', [['de', 'Deutsch'], ['en', 'English']], LANG)}</div>
+      <div class="set-row"><span>Kurzanleitung (Hilfe → Kurzanleitung)</span>${sel('stHelpLang', [['en', 'English (US)'], ['de', 'Deutsch']], SET.helpLang === 'de' ? 'de' : 'en')}</div>
       <div class="set-row"><span>Design</span>${sel('stTheme', [['', 'wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']], curTheme())}</div>
       <h3 class="dlg-sub">Ansicht (auf diesem Gerät)</h3>
       <div class="set-row"><span>Seitenanzeige</span>${sel('stView', [['single', 'Einzelseiten untereinander'], ['two', 'Zwei Seiten nebeneinander'], ['cover', 'Zwei Seiten, Titelseite einzeln']], SET.viewMode)}</div>
@@ -12298,6 +12299,7 @@
       const vm = $('#stView').value, changedView = vm !== SET.viewMode;
       Object.assign(SET, { viewMode: vm, startTool: $('#stTool').value, startView: $('#stStart').value, printDpi: +$('#stDpi').value,
         autoOcr: $('#stOcr').checked, redactPurge: $('#stPurge').checked, keepVersions: +$('#stKeep').value, usage: $('#stUsage') ? $('#stUsage').checked : SET.usage });
+      SET.helpLang = $('#stHelpLang').value === 'de' ? 'de' : 'en';
       if ($('#stNext')) SET.pdfNextTo = $('#stNext').checked;
       if (hot && $('#stHot')) { await window.pdfstiftWin.hotSet({ on: $('#stHot').checked, dir: hot.dir }); if ($('#stHot').checked && !hot.on) toast('Der Ordner wird jetzt überwacht: ' + hot.dir, 5000); }
       SET.dropFolder = ($('#stDrop').value || DROP0).trim().replace(/^\/+|\/+$/g, '') || DROP0;
@@ -12957,12 +12959,12 @@
   }
 
   // ---- Hilfe: Kurzanleitung und Versionsnummern
-  // Kurzanleitung: liegt als PDF in der Bibliothek (Ordner „Hilfe“) und öffnet sich wie jedes andere Dokument
+  // Kurzanleitung: liegt als PDF in der Bibliothek (Ordner „Help“ bzw. „Hilfe“) und öffnet sich wie jedes andere Dokument; Standard Englisch (US)
   async function openHelp() {
     track('tool', 'Kurzanleitung');
     if (EMBED) { try { window.parent.PDFSTIFT_MAIN.help(); } catch (e) { /* */ } return; }
     try {
-      const r = await apiJson('help');
+      const r = await apiJson('help', { params: { lang: SET.helpLang === 'de' ? 'de' : 'en' } });
       if (!r || !r.path) throw new Error('');
       if (!fileMeta(r.path)) await loadLibrary();
       openDoc(r.path);

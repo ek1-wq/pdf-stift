@@ -3175,5 +3175,8 @@
   "Ordner mit PowerPoint-Dateien übernehmen …": "Import folder of PowerPoint files …",
   "Die Kurzanleitung lässt sich gerade nicht öffnen": "The quick guide cannot be opened right now",
   "Die Kurzanleitung fehlt im Programmpaket.": "The quick guide is missing from the program package.",
-  "Die Kurzanleitung konnte nicht in die Bibliothek gelegt werden.": "The quick guide could not be added to the library."
+  "Die Kurzanleitung konnte nicht in die Bibliothek gelegt werden.": "The quick guide could not be added to the library.",
+  "Kurzanleitung (Hilfe → Kurzanleitung)": "Quick guide (Help → Quick guide)",
+  "</div>\n      <div class=\"set-row\"><span>Kurzanleitung (Hilfe → Kurzanleitung)</span>": "</div>\n      <div class=\"set-row\"><span>Quick guide (Help → Quick guide)</span>",
+  "English (US)": null
 }
