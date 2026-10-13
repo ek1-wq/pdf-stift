@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.67.0';
+  const VERSION = '1.67.1';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -2634,6 +2634,22 @@
       return;
     }
     if (S.tool === 'sel' || S.tool === 'hand') return; // Text auswählen bzw. Hand: nicht zeichnen
+    // Textbaustein mit jedem Werkzeug (außer Radierer und Lasso): antippen = ändern, ziehen = verschieben
+    if (S.tool !== 'er' && S.tool !== 'la' && !editor && !cur && !pinch.active && V.doc && !(e.pointerType === 'touch' && touches.size > 1)) {
+      const pe0 = e.target.closest('.page');
+      const P0 = pe0 && V.pages[+pe0.dataset.i];
+      if (P0) {
+        const r0 = P0.el.getBoundingClientRect(), sc0 = P0.cssW / P0.w;
+        const hx = (isMirror() ? r0.right - e.clientX : e.clientX - r0.left) / sc0, hy = (e.clientY - r0.top) / sc0;
+        const hit = textAt(P0, hx, hy);
+        if (hit && hit.sn) {
+          e.preventDefault();
+          ttDown = { id: e.pointerId, x: e.clientX, y: e.clientY, el: pe0, hit, P: P0 };
+          try { pagesEl.setPointerCapture(e.pointerId); } catch (er) { /* */ }
+          return;
+        }
+      }
+    }
     const draws = e.pointerType === 'pen' || (e.pointerType === 'mouse' && e.button === 0) ||
       (e.pointerType === 'touch' && S.finger && touches.size === 1);
     if (!draws || pinch.active || cur) return;
