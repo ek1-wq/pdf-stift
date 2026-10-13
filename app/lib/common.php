@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.66.9';
+const PDFSTIFT_VERSION = '1.67.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -287,7 +287,7 @@ function valid_stroke_inner(array $s): ?array
             'id' => $id, 'p' => $p, 't' => 'txt', 'c' => $c, 'pts' => array_slice($clean, 0, 2), 'text' => $text,
             'fs' => max(4.0, min(120.0, (float) ($s['fs'] ?? 14))),
             'bw' => max(0.0, min(20000.0, (float) ($s['bw'] ?? 10))), 'bh' => max(0.0, min(100000.0, (float) ($s['bh'] ?? 10))),
-        ] + (!empty($s['b']) ? ['b' => 1] : []) + (!empty($s['i']) ? ['i' => 1] : []) + (!empty($s['nt']) ? ['nt' => 1] : []) + stroke_rot($s)
+        ] + (!empty($s['b']) ? ['b' => 1] : []) + (!empty($s['i']) ? ['i' => 1] : []) + (!empty($s['nt']) ? ['nt' => 1] : []) + (!empty($s['sn']) ? ['sn' => 1] : []) + stroke_rot($s)
           + (preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($s['bg'] ?? '')) ? ['bg' => (string) $s['bg']] : [])
           + (preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($s['bo'] ?? '')) ? ['bo' => (string) $s['bo']] : [])
           + (in_array($s['ff'] ?? '', ['serif', 'mono'], true) ? ['ff' => $s['ff']] : [])

@@ -1229,3 +1229,7 @@ body[data-ed="free"] #liveBadge, body[data-ed="free"] #srvUpd, body[data-ed="fre
 body[data-ed="free"] [data-src="nc"], body[data-ed="free"] [data-src="od"], body[data-ed="free"] #winBtn, body[data-ed="free"] #apkBtn,
 body[data-ed="free"] [data-act="ncput"], body[data-ed="free"] [data-a="on"], body[data-ed="free"] #btnNc,
 body[data-demo] #btnShortcut, body[data-demo] #btnBackup, body[data-demo] #btnLogout { display: none !important; }
+
+/* schneller Reiterwechsel: Bild der letzten Ansicht, bis die Seiten gezeichnet sind */
+.snap-ov { z-index: 4; pointer-events: none; transition: opacity .15s; }
+.snap-ov.out { opacity: 0; }

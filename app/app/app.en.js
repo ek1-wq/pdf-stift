@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.66.9';
+  const VERSION = '1.67.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -1762,6 +1762,7 @@
     clearSel();
     autoBurn(V.path);
     saveViewState();
+    if (V.path) snapSave(V.path);
     S.active = null;
     saveTabs();
     unloadViewer();
@@ -1793,7 +1794,76 @@
       saveTabs();
     }
   }
+  // ---- Schneller Reiterwechsel: beim Verlassen ein Bild der sichtbaren Ansicht auf der Festplatte ablegen (Cache-Speicher des
+  // Browsers, nicht im Arbeitsspeicher). Beim Zurückkehren erscheint es sofort; die PDF wird dahinter scharf aufgebaut.
+  const SNAP = { ov: null, url: '', path: '', t: 0 };
+  const snapKey = (path) => location.pathname.replace(/[^/]*$/, '') + '__snap/' + encodeURIComponent(path);
+  function snapSave(path) {
+    try {
+      if (!('caches' in window) || !V.pages.length || V.viewRot || isMirror()) return;
+      const vr = viewer.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const W = Math.round(vr.width * dpr), H = Math.round(vr.height * dpr);
+      if (W < 80 || H < 80) return;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      x.fillStyle = getComputedStyle(viewer).backgroundColor || '#e9ecf2'; x.fillRect(0, 0, W, H);
+      let n = 0;
+      for (const P of V.visible) {
+        const pr = P.el.getBoundingClientRect();
+        if (pr.bottom < vr.top || pr.top > vr.bottom || pr.right < vr.left || pr.left > vr.right) continue;
+        const pc = P.el.querySelector('canvas.pdf');
+        if (!pc) continue; // noch nicht gezeichnet: diese Stelle bleibt im Bild leer
+        const dx = (pr.left - vr.left) * dpr, dy = (pr.top - vr.top) * dpr, dw = pr.width * dpr, dh = pr.height * dpr;
+        x.drawImage(pc, dx, dy, dw, dh);
+        if (P.ink && !P.ink.hidden) x.drawImage(P.ink, dx, dy, dw, dh);
+        n++;
+      }
+      if (!n) return;
+      const w0 = Math.round(vr.width), h0 = Math.round(vr.height);
+      c.toBlob((blob) => {
+        if (!blob) return;
+        caches.open('pdfstift-snap').then((ca) => ca.put(snapKey(path), new Response(blob, { headers: { 'Content-Type': blob.type, 'X-W': String(w0), 'X-H': String(h0) } }))).catch(() => {});
+      }, 'image/webp', 0.82);
+    } catch (e) { /* ohne Bild weiter */ }
+  }
+  async function snapShow(path) {
+    snapHide();
+    try {
+      if (!('caches' in window) || V.viewRot || isMirror()) return;
+      const r = await (await caches.open('pdfstift-snap')).match(snapKey(path));
+      if (!r || V.path !== path || !V.loading && V.pages.some((P) => P.el.querySelector('canvas.pdf'))) return;
+      const vr = viewer.getBoundingClientRect();
+      if (Math.abs(+r.headers.get('X-W') - Math.round(vr.width)) > 2 || Math.abs(+r.headers.get('X-H') - Math.round(vr.height)) > 2) return; // Fenster anders groß
+      const url = URL.createObjectURL(await r.blob());
+      if (V.path !== path) { URL.revokeObjectURL(url); return; }
+      const img = document.createElement('img');
+      img.className = 'snap-ov'; img.alt = ''; img.src = url;
+      img.style.cssText = `position:fixed;left:${vr.left}px;top:${vr.top}px;width:${vr.width}px;height:${vr.height}px`;
+      document.body.appendChild(img);
+      Object.assign(SNAP, { ov: img, url, path });
+      SNAP.t = setTimeout(snapHide, 8000);
+      snapCheck();
+    } catch (e) { /* ohne Bild weiter */ }
+  }
+  function snapHide() {
+    clearTimeout(SNAP.t);
+    if (SNAP.ov) { const o = SNAP.ov, u = SNAP.url; o.classList.add('out'); setTimeout(() => { o.remove(); URL.revokeObjectURL(u); }, 160); }
+    SNAP.ov = null;
+  }
+  // sobald die sichtbaren Seiten echt gezeichnet sind, verschwindet das Bild
+  function snapCheck() {
+    if (!SNAP.ov) return;
+    if (V.path !== SNAP.path) { snapHide(); return; }
+    if (V.loading || !V.pages.length) return;
+    const vr = viewer.getBoundingClientRect();
+    const inView = V.pages.filter((P) => { const pr = P.el.getBoundingClientRect(); return pr.bottom > vr.top && pr.top < vr.bottom && pr.right > vr.left && pr.left < vr.right; });
+    if (inView.length && inView.every((P) => P.el.querySelector('canvas.pdf'))) snapHide();
+  }
+  for (const ev of ['wheel', 'pointerdown', 'keydown']) viewer.addEventListener(ev, () => { if (SNAP.ov) snapHide(); }, { passive: true });
+
   function unloadViewer() {
+    snapHide();
     if (V.io) V.io.disconnect();
     for (const P of V.pages) if (P.task) P.task.cancel();
     V.pages = [];
@@ -1812,8 +1882,13 @@
     if (V.board) leaveBoard();
     if (editor) commitEditor(false);
     clearSel();
-    if (V.path && V.path !== path) autoBurn(V.path);
-    if (V.path && V.path !== path) saveViewState();
+    if (V.path && V.path !== path) {
+      // Notizen einbrennen erst, wenn die neue PDF steht – sonst rechnen beide gleichzeitig und der Wechsel dauert
+      const left = V.path;
+      setTimeout(() => { if (V.path !== left) autoBurn(left); }, 4000);
+      saveViewState();
+      snapSave(left);
+    }
     const token = ++V.token;
     const tOpen = performance.now();
     unloadViewer();
@@ -1824,6 +1899,7 @@
     pagesEl.innerHTML = "<p class=\"empty\">Loading PDF …</p>";
     let entry, doc;
     V.loading = true;
+    snapShow(path);
     try {
       entry = await loadPdf(path);
       doc = await localDoc(path);
@@ -1831,6 +1907,7 @@
     } catch (e) {
       V.loading = false;
       if (token !== V.token) return;
+      snapHide();
       pagesEl.innerHTML = '';
       const p = document.createElement('p');
       p.className = 'empty';
@@ -2023,6 +2100,7 @@
       const old = P.el.querySelector('canvas.pdf');
       if (old) old.replaceWith(c); else P.el.prepend(c);
       renderDetail(P);
+      if (SNAP.ov) snapCheck();
     }).catch(() => {});
     // Tinte (unsichtbar, solange die Seite keine Notizen hat – spart Rechenzeit beim Scrollen)
     if (!P.ink) {
@@ -3171,6 +3249,7 @@
       if (ed.al) st.al = ed.al;
       if (ed.w) { st.w = r2(ed.w); if (raw !== text) st.src = raw; }
       if (o.r) st.r = o.r;
+      if (o.sn) st.sn = 1;
       opAdd(V.path, [st]);
       acts.push({ t: 'add', strokes: [st] });
     }
@@ -8217,6 +8296,7 @@
     const m = measureTxt(sn.text, fs, { b: sn.b });
     const st = { id: uid(), p: 0, t: 'txt', c: sn.c || '#1A1A1A', fs, pts: [0, 0], text: sn.text, bw: r2(m.bw), bh: r2(m.bh), o: [wx, wy - (m.bh / 2) / B.cam.s], z: B.cam.s };
     if (sn.b) st.b = 1;
+    st.sn = 1; // Textbaustein: bleibt als Notiz (verschieben, ändern, löschen), wird nicht eingebrannt
     opAdd(V.path, [st]);
     pushHistory({ t: 'add', strokes: [st] });
     boardRender();
@@ -8240,6 +8320,7 @@
     const m = measureTxt(sn.text, fs, fmt);
     const st = { id: uid(), p: P.i, t: 'txt', c: sn.c || '#1A1A1A', fs, pts: [r2(x), r2(y - m.bh / 2)], text: sn.text, bw: r2(m.bw), bh: r2(m.bh) };
     if (sn.b) st.b = 1;
+    st.sn = 1; // Textbaustein: bleibt als Notiz (verschieben, ändern, löschen), wird nicht eingebrannt
     if (sty.ff) st.ff = sty.ff;
     opAdd(V.path, [st]);
     pushHistory({ t: 'add', strokes: [st] });
@@ -9949,6 +10030,33 @@ The current version is backed up first. Your PDFs, notes and settings stay untou
     try { const r = await apiJson('shrinkset', { method: 'POST', body: { ncBack: e.target.checked } }); if (S.library) S.library.shrink = r; updateShrinkUi(); } catch (err) { toast(err.message); }
   };
   $('#shNow').onclick = () => { shrinkRun(true); updateShrinkUi(); };
+  // früher verkleinerte PDFs wieder durch ihr Original ersetzen (Fotos wieder in voller Auflösung)
+  $('#shUndo').onclick = async () => {
+    if (!(await confirmDlg("Undo shrinking", "All shrunk PDFs whose original is still kept and that have not changed since will be replaced by the original again (photos in full resolution).", "Undo"))) return;
+    const b = $('#shUndo'); b.disabled = true;
+    let done = 0; const changed = [], missing = [];
+    try {
+      for (let k = 0; k < 200; k++) {
+        $('#shInfo').textContent = `Restoring originals … ${done}`;
+        const r = await apiJson('shrinkundo', { method: 'POST' });
+        done += r.done; changed.push(...r.changed); missing.push(...r.missing);
+        if (!r.left) break;
+      }
+      const name = (p) => p.split('/').pop();
+      let msg = `${done} ${done === 1 ? 'PDF' : 'PDFs'} restored to the original.`;
+      if (changed.length) msg += `
+
+Changed since shrinking (e.g. notes written in) – please decide via the PDF’s “Earlier versions”:
+• ` + changed.map(name).join('\n• ');
+      if (missing.length) msg += `
+
+Original no longer on the server (older than 7 days)` + (S.library && S.library.nc && S.library.nc.configured ? " – available in Nextcloud under the file’s “Versions”" : '') + `:\n• ` + missing.map(name).join('\n• ');
+      await confirmDlg("Undo shrinking", msg, 'OK');
+      loadLibrary();
+    } catch (e) { toast(e.message); }
+    b.disabled = false;
+    updateShrinkUi();
+  };
   $('#bkDown').onclick = async () => {
     try {
       const r = await api('backup');
@@ -10435,7 +10543,7 @@ The current version is backed up first. Your PDFs, notes and settings stay untou
   const BURN = new Map(); // path -> Promise
   function burnable(path) {
     // Verknüpfungen bleiben als antippbare Notiz erhalten und werden nicht eingebrannt
-    return path && !path.startsWith('@nb/') && Notes.docs.get(path) && [...Notes.docs.get(path).strokes.values()].some((s) => !s.ln && !s.nt);
+    return path && !path.startsWith('@nb/') && Notes.docs.get(path) && [...Notes.docs.get(path).strokes.values()].some((s) => !s.ln && !s.nt && !s.sn);
   }
   function autoBurn(path = V.path) {
     if (!burnable(path) || BURN.has(path) || navigator.onLine === false) return null;
@@ -10456,7 +10564,7 @@ The current version is backed up first. Your PDFs, notes and settings stay untou
     // Seitenmaße wie in der Anzeige (inkl. Drehung)
     const vps = [];
     for (let i = 1; i <= entry.pdf.numPages; i++) vps.push({ vp: (await entry.pdf.getPage(i)).getViewport({ scale: 1 }) });
-    const strokes = [...d.strokes.values()].filter((s) => !s.ln && !s.nt);
+    const strokes = [...d.strokes.values()].filter((s) => !s.ln && !s.nt && !s.sn);
     if (!strokes.length) return false;
     setSync('burning');
     try {

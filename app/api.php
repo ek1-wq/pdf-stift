@@ -599,6 +599,13 @@ switch ($a) {
         shrink_save($s);
         json_out(shrink_public(list_pdfs()['files']));
 
+    case 'shrinkundo':
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        @set_time_limit(120);
+        json_out(shrink_undo_batch(25));
+
     case 'shrinknext':
         // genau eine PDF bearbeiten (die größte noch nicht geprüfte) – der Browser ruft das nacheinander auf
         if ($method !== 'POST') {

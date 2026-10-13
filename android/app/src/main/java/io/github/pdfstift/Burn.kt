@@ -38,7 +38,7 @@ object Burn {
     lateinit var appCtx: Context
 
     // Verknüpfungen und Kommentar-Notizzettel bleiben beweglich (Kommentare kommen beim Weitergeben als echte PDF-Kommentare hinein)
-    fun burnable(d: NoteDoc) = d.strokes.values.filter { !it.has("ln") && it.optInt("nt") != 1 }
+    fun burnable(d: NoteDoc) = d.strokes.values.filter { !it.has("ln") && it.optInt("nt") != 1 && it.optInt("sn") != 1 } // Textbausteine bleiben änderbar
     fun notesOf(d: NoteDoc) = d.strokes.values.filter { it.optString("t") == "txt" && it.optInt("nt") == 1 }
 
     /** true = eingebrannt; false = nichts zu tun oder später noch einmal */

@@ -623,7 +623,7 @@ header('Referrer-Policy: same-origin');
     <p id="bkMsg" class="muted"></p>
     <h3 class="dlg-sub">Nightly cron job</h3>
     <p class="muted small">Every night the server syncs with Nextcloud, shrinks large PDFs and builds the search index for full-text search.</p>
-    <p class="muted small"><b>Shrinking:</b> all PDFs of 10 MB or more. Pages, text and notes stay exactly the same; images keep at least 300 dpi (sharp even at high zoom). A file is only replaced if it gets significantly smaller and looks identical; the original is kept for 7 days in <code>storage/backup/verkleinert</code>.</p>
+    <p class="muted small"><b>Shrinking:</b> all PDFs from 10 MB. Pages, text, notes and images stay exactly the same – images are never downsampled, so even small photos stay sharp when zoomed in a lot. A file is only replaced if it becomes clearly smaller and looks the same; the original is kept for 7 days in <code>storage/backup/verkleinert</code>.</p>
     <label class="check"><input id="shAuto" type="checkbox"> Shrink large PDFs</label>
     <label class="check" id="shNcRow" hidden><input id="shNc" type="checkbox"> Also replace the originals in Nextcloud with the smaller version (Nextcloud keeps the old version under “Versions”)</label>
     <p id="shInfo" class="muted"></p>
@@ -633,6 +633,7 @@ header('Referrer-Policy: same-origin');
     <div class="copyrow"><input id="shUrl" readonly><button type="button" class="btn" data-copy="shUrl">Copy</button></div>
     <div class="dlg-actions">
       <button id="shNow" type="button" class="btn">Shrink now</button>
+      <button id="shUndo" type="button" class="btn">Undo shrinking …</button>
       <button value="ok" class="btn">Close</button>
     </div>
   </form>

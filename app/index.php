@@ -623,7 +623,7 @@ header('Referrer-Policy: same-origin');
     <p id="bkMsg" class="muted"></p>
     <h3 class="dlg-sub">Nächtlicher Cronjob</h3>
     <p class="muted small">Jede Nacht gleicht der Server mit Nextcloud ab, macht große PDFs kleiner und baut den Suchindex für die Volltextsuche auf.</p>
-    <p class="muted small"><b>Verkleinern:</b> alle PDFs ab 10 MB. Seiten, Text und Notizen bleiben genau gleich, Bilder behalten mindestens 300 dpi (auch bei starkem Zoom scharf). Ersetzt wird eine Datei nur, wenn sie deutlich kleiner wird und genauso aussieht; das Original bleibt 7 Tage in <code>storage/backup/verkleinert</code>.</p>
+    <p class="muted small"><b>Verkleinern:</b> alle PDFs ab 10 MB. Seiten, Text, Notizen und Bilder bleiben genau gleich – Bilder werden nie heruntergerechnet, auch kleine Fotos bleiben beim starken Vergrößern scharf. Ersetzt wird eine Datei nur, wenn sie deutlich kleiner wird und genauso aussieht; das Original bleibt 7 Tage in <code>storage/backup/verkleinert</code>.</p>
     <label class="check"><input id="shAuto" type="checkbox"> Große PDFs verkleinern</label>
     <label class="check" id="shNcRow" hidden><input id="shNc" type="checkbox"> Auch die Originale in Nextcloud durch die kleinere Fassung ersetzen (Nextcloud hebt die alte Fassung unter „Versionen“ auf)</label>
     <p id="shInfo" class="muted"></p>
@@ -633,6 +633,7 @@ header('Referrer-Policy: same-origin');
     <div class="copyrow"><input id="shUrl" readonly><button type="button" class="btn" data-copy="shUrl">Kopieren</button></div>
     <div class="dlg-actions">
       <button id="shNow" type="button" class="btn">Jetzt sofort verkleinern</button>
+      <button id="shUndo" type="button" class="btn">Verkleinerung rückgängig …</button>
       <button value="ok" class="btn">Schließen</button>
     </div>
   </form>

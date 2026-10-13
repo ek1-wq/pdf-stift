@@ -4,7 +4,7 @@ declare(strict_types=1);
 /*
  * PDFs im Hintergrund verkleinern – ohne sichtbaren Qualitätsverlust.
  *
- * 1. Ghostscript (falls auf dem Server): Bilder über 450 dpi werden auf 300 dpi gebracht, unkomprimierte Bilder
+ * 1. Ghostscript (falls auf dem Server): Bilder behalten ihre volle Auflösung (nichts wird heruntergerechnet), unkomprimierte Bilder
  *    sehr hochwertig (JPEG-Stufe „Maximum“) gespeichert, doppelte Bilder und Schriften nur einmal abgelegt.
  *    Bereits als JPEG gespeicherte Bilder bleiben unverändert.
  * 2. qpdf (falls vorhanden): verlustfrei aufräumen und für schnelles Laden der ersten Seite ordnen.
@@ -335,9 +335,8 @@ function shrink_pdf(string $rel): array
                 $gs, '-q', '-dSAFER', '-dBATCH', '-dNOPAUSE', '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.7',
                 '-dAutoRotatePages=/None', '-dPreserveAnnots=true', '-dDetectDuplicateImages=true', '-dSubsetFonts=true', '-dCompressFonts=true',
                 '-dPassThroughJPEGImages=true', '-dPassThroughJPXImages=true',
-                '-dDownsampleColorImages=true', '-dColorImageResolution=300', '-dColorImageDownsampleThreshold=1.5', '-dColorImageDownsampleType=/Bicubic',
-                '-dDownsampleGrayImages=true', '-dGrayImageResolution=300', '-dGrayImageDownsampleThreshold=1.5', '-dGrayImageDownsampleType=/Bicubic',
-                '-dDownsampleMonoImages=false',
+                // Bilder NIE herunterrechnen: kleine Fotos auf der Seite (z. B. 3 × 3 cm) werden zum Lesen stark vergrößert
+                '-dDownsampleColorImages=false', '-dDownsampleGrayImages=false', '-dDownsampleMonoImages=false',
                 '-sOutputFile=' . $out, '-c', $hq, '-f', $file,
             ], 420, $dir);
             $ok = $code === 0 && is_file($out) && filesize($out) > 0 && (string) file_get_contents($out, false, null, 0, 5) === '%PDF-';
@@ -426,4 +425,63 @@ function shrink_pdf(string $rel): array
     } finally {
         rrmdir($dir);
     }
+}
+
+
+/**
+ * Verkleinern rückgängig: verkleinerte PDFs durch das aufbewahrte Original ersetzen – nur wenn die Datei seit dem
+ * Verkleinern unverändert ist (sonst gingen später eingeschriebene Notizen verloren). Arbeitet in Portionen.
+ */
+function shrink_undo_batch(int $budget): array
+{
+    $start = time();
+    $s = shrink_state();
+    $out = ['done' => 0, 'left' => 0, 'changed' => [], 'missing' => [], 'nc' => []];
+    $bdir = storage('backup/verkleinert');
+    foreach ($s['files'] as $rel => $rec) {
+        if (($rec['status'] ?? '') !== 'smaller') {
+            continue;
+        }
+        if (time() - $start >= $budget) {
+            $out['left']++;
+            continue;
+        }
+        $file = pdf_abs((string) $rel);
+        $backup = $bdir . '/' . sha1((string) $rel) . '-' . preg_replace('/[^\w.-]/', '_', basename((string) $rel));
+        clearstatcache();
+        $s = shrink_state();
+        if (!is_file($backup)) {
+            $out['missing'][] = $rel;
+            $s['files'][$rel]['status'] = 'nobackup';
+            shrink_save($s);
+            continue;
+        }
+        if (!is_file($file) || filesize($file) !== (int) $rec['size'] || filemtime($file) !== (int) ($rec['t'] ?? 0) && filemtime($file) > (int) ($rec['t'] ?? 0) + 5) {
+            $out['changed'][] = $rel;
+            $s['files'][$rel]['status'] = 'changed';
+            shrink_save($s);
+            continue;
+        }
+        $tmp = $file . '.zurueck';
+        if (!@copy($backup, $tmp) || !@rename($tmp, $file)) {
+            @unlink($tmp);
+            $out['changed'][] = $rel;
+            continue;
+        }
+        clearstatcache();
+        $s = shrink_state();
+        $s['files'][$rel] = ['size' => filesize($file), 'mtime' => filemtime($file), 'from' => filesize($file), 'status' => 'restored', 'note' => 'Original zurückgeholt', 't' => time()];
+        if (!empty($s['saved'])) {
+            $s['saved'] = max(0, (int) $s['saved'] - max(0, filesize($file) - (int) $rec['size']));
+        }
+        shrink_save($s);
+        if (!empty($s['ncBack'])) {
+            $e = shrink_nc_back((string) $rel, $file);
+            if ($e !== '') {
+                $out['nc'][] = $rel . ': ' . $e;
+            }
+        }
+        $out['done']++;
+    }
+    return $out;
 }
