@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.67.3';
+  const VERSION = '1.67.4';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -2632,8 +2632,7 @@
       }
       return;
     }
-    if (S.tool === 'sel' || S.tool === 'hand') return; // Text auswählen bzw. Hand: nicht zeichnen
-    // Textbaustein mit jedem Werkzeug (außer Radierer und Lasso): antippen = ändern, ziehen = verschieben
+    // Textbaustein mit jedem Werkzeug (auch Pfeil und Hand; außer Radierer und Lasso): antippen = ändern, ziehen = verschieben
     if (S.tool !== 'er' && S.tool !== 'la' && !editor && !cur && !pinch.active && V.doc && !(e.pointerType === 'touch' && touches.size > 1)) {
       const pe0 = e.target.closest('.page');
       const P0 = pe0 && V.pages[+pe0.dataset.i];
@@ -2649,6 +2648,7 @@
         }
       }
     }
+    if (S.tool === 'sel' || S.tool === 'hand') return; // Text auswählen bzw. Hand: nicht zeichnen
     const draws = e.pointerType === 'pen' || (e.pointerType === 'mouse' && e.button === 0) ||
       (e.pointerType === 'touch' && S.finger && touches.size === 1);
     if (!draws || pinch.active || cur) return;
@@ -10718,8 +10718,17 @@
   viewer.addEventListener('pointerdown', (e) => {
     if (V.board || e.pointerType === 'touch') return;
     const hand = (S.tool === 'hand' && e.button === 0) || e.button === 1 || (spaceHand && e.button === 0);
-    if (hand && e.target.closest('.page, #pages') && !(e.button === 0 && noteUnder(e))) { e.stopPropagation(); startPan(e); }
+    if (hand && e.target.closest('.page, #pages') && !(e.button === 0 && (noteUnder(e) || snipUnder(e)))) { e.stopPropagation(); startPan(e); }
   }, true);
+  // Textbaustein unter dem Zeiger (dann nicht verschieben, sondern den Baustein anfassen)
+  function snipUnder(e) {
+    const pageEl = e.target.closest && e.target.closest('.page');
+    const P = pageEl && V.pages[+pageEl.dataset.i];
+    if (!P || !V.doc) return null;
+    const r = P.el.getBoundingClientRect(), sc = P.cssW / P.w;
+    const t = textAt(P, (isMirror() ? r.right - e.clientX : e.clientX - r.left) / sc, (e.clientY - r.top) / sc);
+    return t && t.sn ? t : null;
+  }
   function noteUnder(e) {
     const pageEl = e.target.closest && e.target.closest('.page');
     const P = pageEl && V.pages[+pageEl.dataset.i];
