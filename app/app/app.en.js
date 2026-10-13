@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.67.1';
+  const VERSION = '1.67.2';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -12900,5 +12900,18 @@ github.com/ek1-wq/pdf-stift`, "Quick guide")) openHelp();
     else if (me && !me.loggedIn) showAuth(false);
     else startApp(); // angemeldet – oder offline: dann mit den Daten auf dem Gerät arbeiten
   }
+  // Neue Server-Version eingespielt, hier läuft aber noch die gespeicherte alte Oberfläche: einmal neu laden
+  async function verCheck() {
+    if (LOCAL || EMBED || !('serviceWorker' in navigator)) return;
+    let me = null;
+    try { me = await apiJson('me'); } catch (e) { return; }
+    if (!me || !me.version || me.version === VERSION) return;
+    try { if (sessionStorage.getItem('pdfstiftVerReload') === me.version) return; sessionStorage.setItem('pdfstiftVerReload', me.version); } catch (e) { return; }
+    try { const r = await navigator.serviceWorker.getRegistration(); if (r) await r.update(); } catch (e) { /* */ }
+    // nicht mitten in der Arbeit: warten, bis gerade nichts geschrieben oder abgeglichen wird
+    const go = () => { if (cur || editor || pendingCount()) { setTimeout(go, 1500); return; } if (V.path) saveViewState(); location.reload(); };
+    setTimeout(go, 1200);
+  }
+  setTimeout(verCheck, 2500);
   boot();
 })();
