@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.74.0';
+  const VERSION = '1.75.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -3516,6 +3516,8 @@
   const SW = { live: null, i: -1 };
   function showWinStart() {
     document.title = "Presentation – PDF-Stift";
+    // Beamer-Fenster einer Präsentation (Referentenansicht der Folien)
+    if (/[?&]dk=1\b/.test(location.search)) { ensureDeck().then((DK) => DK.audience()).catch(() => {}); return; }
     PR.on = true; // Einzelseiten, ganze Folie
     if (!BC) return;
     const fit = (i) => { if (!V.pages.length) return; SW.i = clamp(i, 0, V.pages.length - 1); fitPageHeight(SW.i); };

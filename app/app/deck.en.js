@@ -321,6 +321,7 @@
     sl.style.background = bgCss(s, th);
     for (const e of s.els) if (live || !isPh(e)) sl.appendChild(elNode(e, th));
     for (const e of hfEls(D.deck ? D.deck.slides.indexOf(s) : -1)) { const n = elNode(e, th); n.classList.add('dk-hf'); sl.appendChild(n); }
+    if (!live || (s.ink && s.ink.length)) sl.insertAdjacentHTML('beforeend', inkSvg(s));
     return sl;
   }
   // Kopf- und Fußzeile (Datum, Text, Foliennummer) als feste Textfelder
@@ -393,6 +394,8 @@
     slidesPdf: '<path d="M7 3h7l4 4v6"/><path d="M14 3v4h4"/><rect x="3.5" y="13" width="13" height="8" rx="1"/><path d="M19 15v6M16 18h6"/>',
     grid: '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17" stroke-opacity=".55"/>', guides: '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M12 3.5v17M3.5 12h17" stroke-dasharray="2 1.5"/>',
     magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4z"/><path d="M6 8h4M14 8h4"/>', zoom: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20M8 10.5h5M10.5 8v5"/>', fitwin: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="8" y="8" width="8" height="8" rx="1"/>',
+    play1: '<path d="M5 4v16"/><path d="M9 5l11 7-11 7z"/>', playCur: '<rect x="3.5" y="5" width="11" height="9" rx="1"/><path d="M14 12l7 4.5-7 4.5z"/>', presenter: '<rect x="2.5" y="4" width="12" height="9" rx="1"/><rect x="16" y="4" width="5.5" height="4" rx=".8"/><path d="M16 11h5.5M16 13.5h4M5 17h7M8.5 13v4"/>',
+    hide: '<rect x="4" y="5" width="16" height="11" rx="1"/><path d="M3 20L21 2"/>', trans: '<rect x="3" y="6" width="9" height="12" rx="1"/><rect x="12" y="6" width="9" height="12" rx="1" fill="currentColor" fill-opacity=".25"/><path d="M8 3l4 3-4 3"/>',
     painter: '<rect x="4" y="3.5" width="14" height="6" rx="1.5"/><path d="M18 6.5h2v5h-8.5v3"/><rect x="10" y="14.5" width="3" height="6.5" rx="1"/>',
     strike: '<path d="M16.5 7.5c-.8-1.6-2.4-2.5-4.5-2.5-2.6 0-4.5 1.4-4.5 3.4 0 1.5 1 2.4 3 3"/><path d="M4 12h16"/><path d="M8 16.5c.6 1.6 2.2 2.5 4.3 2.5 2.7 0 4.7-1.4 4.7-3.5 0-.8-.3-1.5-.9-2"/>',
     sup: '<path d="M4 8l8 11M12 8l-8 11"/><path d="M15.5 5.5c.4-1 1.2-1.5 2.2-1.5 1.2 0 2 .7 2 1.7 0 1.6-2.4 2.3-4.2 4.3h4.4"/>',
@@ -1545,13 +1548,19 @@
     ribbonPre: ({ grp, rows, big, mb }) => grp("slides", big('data-menu="newslide"', "New slide", RI.newslide, true, true) +
       rows(mb('layout', "Layout of this slide", RI.layout, true, 'Layout'), mb('bg', "Background", RI.bg, true, "Background"), mb('design', "Design of all slides", RI.design, true, 'Design'))),
     act: (a) => { if (a === 'hf') { hfDialog(); return true; } return false; },
-    tabs: () => [['design', "Design"], ['view', "View"]],
+    tabs: () => [['design', "Design"], ['show', "Slide show"], ['view', "View"]],
     tabContent: (tab, { grp, rows, big, sb, mb }) => {
       const th = theme();
       if (tab === 'design') {
         return grp("Themes", `<div class="dk-themes">${THEMES.map(([n, t]) => themeTile(n, t)).join('')}</div>`) +
           grp("Customize", rows(mb('accent', "Accent colour (table header, new shapes)", RI.design, true, "Colours"), fontSelect(th.font || 'sans', true).replace('data-f="ff"', 'data-f="thfont"').replace('title="Schriftart"', "title=\"Font of all slides\""), mb('bgfmt', "Background", RI.bg, true, "Background"))) +
           grp("slides", big('data-menu="size"', th.size === '43' ? "Slide size 4:3" : "Slide size 16:9", RI.layout, true, true) + big('data-menu="layout"', 'Layout', RI.layout, true, true));
+      }
+      if (tab === 'show') {
+        const s0 = slide() || {}, trN = (TR_LIST.find((t) => t[0] === (s0.tr || '')) || TR_LIST[0])[1];
+        return grp("Start", big('data-f="pr:begin"', "From beginning", RI.play1) + big('data-f="pr:cur"', "From current slide", RI.playCur) + big('data-f="pr:presenter"', "Presenter view", RI.presenter)) +
+          grp("Set up", rows(sb('pr:hide', "Skip this slide in the slide show", RI.hide, { label: s0.hidden ? "Unhide slide" : "Hide slide", on: !!s0.hidden }), mb('trans', "Transition to this slide", RI.trans, true, "Transition: " + trN), sb('pr:trall', "Use this transition for all slides", RI.trans, { label: "For all slides" }))) +
+          grp("Ink", rows(sb('pr:inkclear', "Delete ink on this slide", ICON.del, { label: "Clear this slide", en: !!(s0.ink && s0.ink.length) }), sb('pr:inkall', "Delete ink on all slides", ICON.del, { label: "Clear all slides", en: D.deck.slides.some((x) => x.ink && x.ink.length) })));
       }
       if (tab === 'view') {
         return grp("Views", big('data-f="vw:normal"', 'Normal', RI.layout) + big('data-f="vw:sorter"', "Slide sorter", ICON.slide) + big('data-f="vw:notes"', "Notes", RI.hf)) +
@@ -1564,6 +1573,17 @@
       if (f === 'theme') { const t = (THEMES.find((x) => x[0] === v) || [])[1]; if (t) change(() => { const sz = theme().size; D.deck.theme = { ...clone(t), ...(sz ? { size: sz } : {}) }; D.deck.slides.forEach((s0) => { delete s0.bg; delete s0.bgGrad; delete s0.bgImg; }); }); return true; }
       if (f === 'thfont') { if (fontOk(v)) change(() => { theme().font = v; }); return true; }
       if (f.startsWith('vw:')) { viewAct(f.slice(3)); return true; }
+      if (f.startsWith('pr:')) {
+        const a = f.slice(3);
+        if (a === 'begin') present(0);
+        if (a === 'cur') present(D.cur);
+        if (a === 'presenter') present(D.cur, true);
+        if (a === 'hide') change(() => { const s0 = slide(); if (s0.hidden) delete s0.hidden; else s0.hidden = 1; });
+        if (a === 'trall') change(() => { const tr = slide().tr; D.deck.slides.forEach((x) => { if (tr) x.tr = tr; else delete x.tr; }); C.toast("Transition applied to all slides.", 2000); });
+        if (a === 'inkclear') change(() => { delete slide().ink; });
+        if (a === 'inkall') C.confirmDlg("Delete ink", "Delete the ink on all slides?", "Delete").then((ok) => { if (ok) change(() => { D.deck.slides.forEach((x) => delete x.ink); }); });
+        return true;
+      }
       return false;
     },
     snapOn: () => VIEW.snap,
@@ -1583,6 +1603,7 @@
       if (m === 'bg' || m === 'bgfmt') bgMenu(x, y);
       if (m === 'design') designMenu(x, y);
       if (m === 'accent') popMenu(x, y, ACCENTS.map((c) => [c.slice(1), `<span class="dk-sw" style="--c:${c};display:inline-block;vertical-align:middle;margin-right:8px"></span>${c}${theme().accent === c ? ' ✓' : ''}`, () => change(() => { theme().accent = c; })]));
+      if (m === 'trans') popMenu(x, y, TR_LIST.map(([k, l]) => [k || 'none', esc(l) + ((slide().tr || '') === k ? ' ✓' : ''), () => change(() => { if (k) slide().tr = k; else delete slide().tr; })]));
       if (m === 'size') popMenu(x, y, [['169', "Widescreen 16:9" + (theme().size !== '43' ? ' ✓' : ''), () => setSize('169')], ['43', 'Standard 4:3' + (theme().size === '43' ? ' ✓' : ''), () => setSize('43')]]);
       if (m === 'zoom') popMenu(x, y, [0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => ['z' + z * 100, Math.round(z * 100) + ' %' + (VIEW.zoom === z ? ' ✓' : ''), () => { VIEW.zoom = z; viewSave(); fit(true); D.ed.renderFmt(); }]));
     },
@@ -1690,7 +1711,7 @@
     const sc = 150 / W;
     D.deck.slides.forEach((s, i) => {
       const it = document.createElement('div');
-      it.className = 'dk-thumb' + (i === D.cur ? ' cur' : '');
+      it.className = 'dk-thumb' + (i === D.cur ? ' cur' : '') + (s.hidden ? ' hid' : '');
       it.draggable = true;
       it.innerHTML = `<span class="dk-no num">${i + 1}</span><div class="dk-mini" style="width:${W * sc}px;height:${H * sc}px"></div>`;
       it.querySelector('.dk-mini').appendChild(slideNode(s, sc, false, theme()));
@@ -1896,7 +1917,7 @@
     if (a === 'undo') { undo(); return; }
     if (a === 'redo') { redo(); return; }
     if (a === 'design') { designMenu(r.left, r.bottom + 4); return; }
-    if (a === 'play') { present(); return; }
+    if (a === 'play') { present(D.cur); return; }
     if (a === 'pdf') { popMenu(r.left - 120, r.bottom + 4, [['dl', "Download PDF", () => exportPdf('download')], ['lib', "Put PDF into “My PDFs” (to write on)", () => exportPdf('library')]]); return; }
     D.ed.act(a, b);
   }
@@ -1919,7 +1940,7 @@
     if (inField) return;
     const k = ev.key;
     if (VIEW.sorter) { if (k === 'Escape') { ev.preventDefault(); closeSorter(); } return; }
-    if (k === 'F5') { ev.preventDefault(); present(); return; }
+    if (k === 'F5') { ev.preventDefault(); present(ev.shiftKey ? D.cur : 0); return; }
     if (mod && k.toLowerCase() === 'z') { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
     if (mod && k.toLowerCase() === 'y') { ev.preventDefault(); redo(); return; }
     if (mod && k.toLowerCase() === 'a') { ev.preventDefault(); D.ed.select(slide().els.map((e) => e.id)); return; }
@@ -1928,36 +1949,241 @@
     if ((k === 'PageUp' || (k === 'ArrowUp' && !D.ed.sel.length)) && D.cur > 0) { ev.preventDefault(); go(D.cur - 1); }
   }
 
-  // ------------------------------------------------------------------ Vortragen (einfach; Notizen und Referentenansicht folgen)
-  function present() {
+  // ================================================================== Bildschirmpräsentation
+  // Freihand auf Folien (bleibt gespeichert): s.ink = [{ c, w, hl, p: [x, y, …] }] in Folienkoordinaten
+  function inkPath(p) {
+    if (p.length < 4) return p.length === 2 ? `M${p[0]} ${p[1]}l0.01 0` : '';
+    let d = `M${p[0]} ${p[1]}`;
+    for (let i = 2; i + 3 < p.length; i += 2) { const mx = (p[i] + p[i + 2]) / 2, my = (p[i + 1] + p[i + 3]) / 2; d += `Q${p[i]} ${p[i + 1]} ${+mx.toFixed(1)} ${+my.toFixed(1)}`; }
+    return d + `L${p[p.length - 2]} ${p[p.length - 1]}`;
+  }
+  function inkSvg(s) {
+    const list = (s && s.ink) || [];
+    const g = list.map((k) => `<path d="${inkPath(k.p)}" fill="none" stroke="${k.c}" stroke-width="${k.w}" stroke-linecap="round" stroke-linejoin="round"${k.hl ? ' stroke-opacity=".38" style="mix-blend-mode:multiply"' : ''}/>`).join('');
+    return `<svg class="dk-ink" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;max-width:none;pointer-events:none;overflow:visible">${g}</svg>`;
+  }
+  const order = () => D.deck.slides.map((x, i) => i).filter((i) => !D.deck.slides[i].hidden);
+  const BCDK = 'BroadcastChannel' in window ? new BroadcastChannel('pdfstift-dk') : null;
+  const TR_LIST = [['', "None"], ['fade', "Fade"], ['push', "Push"], ['wipe', "Wipe"], ['zoom', "Zoom"], ['cover', "Uncover"]];
+  // Folie in einen Rahmen setzen (zentriert, so groß wie möglich)
+  function mountSlide(host, i, deck) {
+    const s = (deck || D.deck).slides[i];
+    const r = host.getBoundingClientRect();
+    const k = Math.min(r.width / W, r.height / H);
+    const wrap = document.createElement('div');
+    wrap.className = 'dk-pres-slide';
+    wrap.style.cssText = `position:absolute;left:${(r.width - W * k) / 2}px;top:${(r.height - H * k) / 2}px;width:${W * k}px;height:${H * k}px;overflow:hidden`;
+    if (s) wrap.appendChild(slideNode(s, k, false, theme()));
+    return { wrap, k };
+  }
+  function transition(oldEl, newEl, tr, back) {
+    const opt = { duration: 420, easing: 'cubic-bezier(.2,.7,.2,1)' };
+    const done = () => { if (oldEl && oldEl.parentNode) oldEl.remove(); };
+    if (!oldEl || !tr || !newEl.animate) { done(); return; }
+    const dir = back ? -1 : 1;
+    if (tr === 'fade') newEl.animate([{ opacity: 0 }, { opacity: 1 }], opt).onfinish = done;
+    else if (tr === 'push') { newEl.animate([{ transform: `translateX(${100 * dir}%)` }, { transform: 'none' }], opt).onfinish = done; oldEl.animate([{ transform: 'none' }, { transform: `translateX(${-100 * dir}%)` }], opt); }
+    else if (tr === 'wipe') newEl.animate([{ clipPath: back ? 'inset(0 0 0 100%)' : 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], opt).onfinish = done;
+    else if (tr === 'zoom') newEl.animate([{ transform: 'scale(.82)', opacity: 0 }, { transform: 'none', opacity: 1 }], opt).onfinish = done;
+    else if (tr === 'cover') { newEl.style.zIndex = 0; oldEl.style.zIndex = 1; oldEl.animate([{ transform: 'none' }, { transform: `translateY(${-100 * dir}%)` }], opt).onfinish = done; }
+    else done();
+  }
+  /* Vortragen. presenter = Referentenansicht (zweites Fenster für den Beamer, hier Notizen, nächste Folie, Uhr) */
+  function present(from, presenter) {
     D.ed.endEdit(); flush();
+    const ord = order();
+    if (!ord.length) { C.toast("All slides are hidden."); return; }
+    let pos = Math.max(0, ord.indexOf(from));
+    if (pos < 0 || ord.indexOf(from) < 0) pos = Math.max(0, ord.findIndex((i) => i >= from));
+    const P = { tool: '', color: '#D6262B', black: '', t0: Date.now(), paused: 0, pauseAt: 0, notesFs: 18, end: false };
+    let win = null;
+    if (presenter) {
+      const base = location.pathname.replace(/[^/]*$/, '') + (C.LANG === 'en' ? 'index.en.php' : 'index.php');
+      win = window.open(base + '?show=1&dk=1', 'pdfstift-dkshow', 'popup=yes,width=1280,height=720');
+      if (!win) C.toast("The projector window was blocked – please allow pop-ups. The slide show continues here.", 7000);
+    }
     const ov = document.createElement('div');
-    ov.className = 'dk-show';
+    ov.className = presenter ? 'dk-pres' : 'dk-show';
+    ov.innerHTML = (presenter ? `<div class="pr-top"><span class="pr-timer num">00:00</span><button type="button" class="pr-b" data-a="pause" title="Pause/resume stopwatch">⏸</button><button type="button" class="pr-b" data-a="reset" title="Reset stopwatch">↺</button><span class="pr-clock num"></span><span class="pr-no num"></span><span class="pr-grow"></span><button type="button" class="pr-b wide" data-a="end">End slide show</button></div>` : '') +
+      `<div class="pr-main"><div class="pr-cur"></div>${presenter ? "<div class=\"pr-side\"><div class=\"pr-lbl\">Next slide</div><div class=\"pr-next\"></div><div class=\"pr-lbl\">Notes <button type=\"button\" class=\"pr-b sm\" data-a=\"nf-\">A−</button><button type=\"button\" class=\"pr-b sm\" data-a=\"nf+\">A+</button></div><div class=\"pr-notes\"></div></div>" : ''}</div>
+      <div class="pr-tools"><button type="button" class="pr-b" data-a="prev" title="Back (←)">◀</button><button type="button" class="pr-b" data-a="next" title="Next (→, space)">▶</button><span class="pr-sep"></span>
+      <button type="button" class="pr-b" data-t="pen" title="Pen (S)">✎</button><button type="button" class="pr-b" data-t="hl" title="Highlighter (M)">▬</button><button type="button" class="pr-b" data-t="er" title="Eraser (R)">⌫</button><button type="button" class="pr-b" data-t="laser" title="Laser pointer (L)">●</button>
+      <span class="pr-sep"></span>${['#D6262B', '#1F4FD6', '#1A1A1A', '#1B8A3A'].map((c) => `<button type="button" class="pr-c" data-c="${c}" style="--c:${c}" title="Colour"></button>`).join('')}
+      <span class="pr-sep"></span><button type="button" class="pr-b" data-a="clear" title="Clear ink on this slide">✕</button><button type="button" class="pr-b" data-a="black" title="Black screen (B)">■</button>${presenter ? '' : "<button type=\"button\" class=\"pr-b\" data-a=\"end\" title=\"End (Esc)\">⏏</button>"}</div>`;
     document.body.appendChild(ov);
-    let i = D.cur;
     D.show = true;
-    const draw = () => {
-      ov.innerHTML = '';
-      const k = Math.min(innerWidth / W, innerHeight / H);
-      const wrap = document.createElement('div');
-      wrap.style.cssText = `position:absolute;left:${(innerWidth - W * k) / 2}px;top:${(innerHeight - H * k) / 2}px;width:${W * k}px;height:${H * k}px`;
-      wrap.appendChild(slideNode(D.deck.slides[i], k, false, theme()));
-      ov.appendChild(wrap);
+    const cur = ov.querySelector('.pr-cur');
+    let mounted = null, laserEl = null, laserT = 0;
+    const idx = () => ord[pos];
+    const send = (m) => { if (BCDK) BCDK.postMessage(m); };
+    const state = () => ({ t: 'state', deck: clone(D.deck), i: idx(), black: P.black });
+    const markTools = () => {
+      ov.querySelectorAll('[data-t]').forEach((b) => b.classList.toggle('on', b.dataset.t === P.tool));
+      ov.querySelectorAll('[data-c]').forEach((b) => b.classList.toggle('on', b.dataset.c === P.color));
+      cur.style.cursor = P.tool === 'laser' ? 'none' : P.tool ? 'crosshair' : '';
     };
-    const end = () => { D.show = false; document.removeEventListener('keydown', kd, true); window.removeEventListener('resize', draw); ov.remove(); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); go(i); };
+    const draw = (tr, back) => {
+      const old = mounted && mounted.wrap;
+      mounted = mountSlide(cur, idx());
+      cur.appendChild(mounted.wrap);
+      mounted.wrap.insertAdjacentHTML('beforeend', `<div class="pr-black ${P.black}"></div>`);
+      transition(old, mounted.wrap, tr, back);
+      if (presenter) {
+        const nx = ov.querySelector('.pr-next'); nx.innerHTML = '';
+        if (pos + 1 < ord.length) nx.appendChild(mountSlide(nx, ord[pos + 1]).wrap); else nx.innerHTML = "<div class=\"pr-endnote\">End of slide show</div>";
+        const notes = (D.deck.slides[idx()].notes || '').trim();
+        const nt = ov.querySelector('.pr-notes'); nt.textContent = notes || "No notes for this slide."; nt.classList.toggle('muted', !notes); nt.style.fontSize = P.notesFs + 'px';
+        ov.querySelector('.pr-no').textContent = `Slide ${idx() + 1} of ${D.deck.slides.length}`;
+      }
+      send({ t: 'slide', i: idx(), tr: tr || '', back: !!back });
+    };
+    const go2 = (np, back) => {
+      if (np < 0) return;
+      if (np >= ord.length) { if (!P.end) { P.end = true; cur.querySelectorAll('.pr-endscreen').forEach((x) => x.remove()); cur.insertAdjacentHTML('beforeend', "<div class=\"pr-endscreen\">End of slide show – click or press Esc to exit</div>"); send({ t: 'black', v: 'b' }); return; } end(); return; }
+      P.end = false; cur.querySelectorAll('.pr-endscreen').forEach((x) => x.remove());
+      if (P.black) { P.black = ''; send({ t: 'black', v: '' }); }
+      const back2 = np < pos;
+      pos = np;
+      draw(back2 ? '' : D.deck.slides[idx()].tr || '', back2);
+    };
+    const toLocal = (ev) => { const r = mounted.wrap.getBoundingClientRect(); return [r1((ev.clientX - r.left) / mounted.k), r1((ev.clientY - r.top) / mounted.k)]; };
+    const redrawInk = () => { const old = mounted.wrap.querySelector('.dk-ink'); const tmp = document.createElement('div'); tmp.innerHTML = inkSvg(D.deck.slides[idx()]); if (old) old.replaceWith(tmp.firstChild); send({ t: 'ink', i: idx(), ink: D.deck.slides[idx()].ink || [] }); };
+    // Zeichnen, radieren, zeigen
+    cur.addEventListener('pointerdown', (ev) => {
+      if (ev.button > 0 || !mounted || ev.target.closest('.pr-tools')) return;
+      if (!P.tool) { if (P.end) end(); else go2(pos + 1); return; }
+      if (P.tool === 'laser') return;
+      ev.preventDefault();
+      cur.setPointerCapture(ev.pointerId);
+      const s0 = D.deck.slides[idx()];
+      if (P.tool === 'er') {
+        const erase = (e2) => { const [x, y] = toLocal(e2); const n0 = (s0.ink || []).length; s0.ink = (s0.ink || []).filter((k) => { for (let i = 0; i + 1 < k.p.length; i += 2) if (Math.hypot(k.p[i] - x, k.p[i + 1] - y) < 12 + k.w) return false; return true; }); if (s0.ink.length !== n0) { redrawInk(); save(); } };
+        erase(ev);
+        const mv = (m) => erase(m), up = () => { cur.removeEventListener('pointermove', mv); cur.removeEventListener('pointerup', up); };
+        cur.addEventListener('pointermove', mv); cur.addEventListener('pointerup', up);
+        return;
+      }
+      const st = { c: P.tool === 'hl' ? '#FFD43B' : P.color, w: P.tool === 'hl' ? 16 : 3, p: toLocal(ev) };
+      if (P.tool === 'hl') st.hl = 1;
+      const svg = mounted.wrap.querySelector('.dk-ink');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('fill', 'none'); path.setAttribute('stroke', st.c); path.setAttribute('stroke-width', st.w); path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round');
+      if (st.hl) path.setAttribute('stroke-opacity', '.38');
+      if (svg) svg.appendChild(path);
+      const mv = (m) => { const q = toLocal(m); const L2 = st.p.length; if (Math.hypot(q[0] - st.p[L2 - 2], q[1] - st.p[L2 - 1]) < 1.5) return; st.p.push(...q); path.setAttribute('d', inkPath(st.p)); send({ t: 'live', i: idx(), st }); };
+      const up = () => { cur.removeEventListener('pointermove', mv); cur.removeEventListener('pointerup', up); (s0.ink = s0.ink || []).push(st); redrawInk(); save(); };
+      cur.addEventListener('pointermove', mv); cur.addEventListener('pointerup', up);
+    });
+    cur.addEventListener('pointermove', (ev) => {
+      if (P.tool !== 'laser' || !mounted) return;
+      const [x, y] = toLocal(ev);
+      if (!laserEl) { laserEl = document.createElement('div'); laserEl.className = 'pr-laser'; }
+      if (laserEl.parentNode !== mounted.wrap) mounted.wrap.appendChild(laserEl);
+      laserEl.style.left = x * mounted.k + 'px'; laserEl.style.top = y * mounted.k + 'px'; laserEl.hidden = false;
+      send({ t: 'laser', x, y });
+      clearTimeout(laserT); laserT = setTimeout(() => { if (laserEl) laserEl.hidden = true; send({ t: 'laser', x: -1 }); }, 1500);
+    });
+    cur.addEventListener('contextmenu', (ev) => { ev.preventDefault(); go2(pos - 1, true); });
+    ov.addEventListener('click', (ev) => {
+      const b = ev.target.closest('button'); if (!b) return;
+      ev.stopPropagation();
+      if (b.dataset.t) { P.tool = P.tool === b.dataset.t ? '' : b.dataset.t; markTools(); return; }
+      if (b.dataset.c) { P.color = b.dataset.c; if (!P.tool || P.tool === 'er' || P.tool === 'laser') P.tool = 'pen'; markTools(); return; }
+      const a = b.dataset.a;
+      if (a === 'prev') go2(pos - 1, true);
+      if (a === 'next') go2(pos + 1);
+      if (a === 'end') end();
+      if (a === 'clear') { delete D.deck.slides[idx()].ink; redrawInk(); save(); }
+      if (a === 'black') setBlack(P.black === 'b' ? '' : 'b');
+      if (a === 'pause') { if (P.pauseAt) { P.paused += Date.now() - P.pauseAt; P.pauseAt = 0; b.textContent = '⏸'; } else { P.pauseAt = Date.now(); b.textContent = '▶'; } }
+      if (a === 'reset') { P.t0 = Date.now(); P.paused = 0; if (P.pauseAt) P.pauseAt = Date.now(); }
+      if (a === 'nf+' || a === 'nf-') { P.notesFs = Math.max(12, Math.min(40, P.notesFs + (a === 'nf+' ? 2 : -2))); ov.querySelector('.pr-notes').style.fontSize = P.notesFs + 'px'; }
+    });
+    const setBlack = (v) => { P.black = v; const bl = mounted && mounted.wrap.querySelector('.pr-black'); if (bl) bl.className = 'pr-black ' + v; send({ t: 'black', v }); };
     const kd = (ev) => {
-      ev.preventDefault(); ev.stopPropagation();
-      if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(ev.key)) { if (i < D.deck.slides.length - 1) { i++; draw(); } else end(); }
-      else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(ev.key)) { if (i > 0) { i--; draw(); } }
-      else if (ev.key === 'Escape') end();
-      else if (ev.key === 'Home') { i = 0; draw(); } else if (ev.key === 'End') { i = D.deck.slides.length - 1; draw(); }
+      if (ev.target.closest && ev.target.closest('input, textarea')) return;
+      const k = ev.key;
+      ev.stopPropagation();
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter', 'n'].includes(k)) { ev.preventDefault(); go2(pos + 1); }
+      else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace', 'p'].includes(k)) { ev.preventDefault(); go2(pos - 1, true); }
+      else if (k === 'Home') go2(0, true); else if (k === 'End') go2(ord.length - 1);
+      else if (k === 'Escape') { ev.preventDefault(); if (P.tool) { P.tool = ''; markTools(); } else end(); }
+      else if (k === 'b' || k === 'B' || k === '.') setBlack(P.black === 'b' ? '' : 'b');
+      else if (k === 'w' || k === 'W' || k === ',') setBlack(P.black === 'w' ? '' : 'w');
+      else if (k === 's' || k === 'S') { P.tool = P.tool === 'pen' ? '' : 'pen'; markTools(); }
+      else if (k === 'm' || k === 'M') { P.tool = P.tool === 'hl' ? '' : 'hl'; markTools(); }
+      else if (k === 'r' || k === 'R') { P.tool = P.tool === 'er' ? '' : 'er'; markTools(); }
+      else if (k === 'l' || k === 'L') { P.tool = P.tool === 'laser' ? '' : 'laser'; markTools(); }
     };
-    ov.onclick = (ev) => { const ln = ev.target.closest && ev.target.closest('a[href]'); if (ln) { ev.preventDefault(); window.open(ln.href, '_blank', 'noopener'); return; } if (ev.clientX < innerWidth * 0.25) { if (i > 0) { i--; draw(); } } else if (i < D.deck.slides.length - 1) { i++; draw(); } else end(); };
+    const onMsg = (ev) => { const m = ev.data || {}; if (m.t === 'hello') send(state()); };
+    if (BCDK) BCDK.addEventListener('message', onMsg);
+    const tick = setInterval(() => {
+      if (!presenter) return;
+      const el = (P.pauseAt || Date.now()) - P.t0 - P.paused, sec = Math.floor(el / 1000);
+      ov.querySelector('.pr-timer').textContent = `${sec >= 3600 ? Math.floor(sec / 3600) + ':' : ''}${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+      ov.querySelector('.pr-clock').textContent = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    }, 500);
+    const onResize = () => { if (mounted) { mounted.wrap.remove(); mounted = null; draw(''); } };
+    const end = () => {
+      if (!D.show) return;
+      D.show = false; clearInterval(tick);
+      document.removeEventListener('keydown', kd, true); window.removeEventListener('resize', onResize);
+      if (BCDK) { BCDK.removeEventListener('message', onMsg); BCDK.postMessage({ t: 'end' }); }
+      ov.remove();
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      flush(); go(idx());
+    };
     document.addEventListener('keydown', kd, true);
-    window.addEventListener('resize', draw);
-    draw();
-    if (ov.requestFullscreen) ov.requestFullscreen().catch(() => {});
-    document.addEventListener('fullscreenchange', function fc() { if (!document.fullscreenElement && D.show) { document.removeEventListener('fullscreenchange', fc); end(); } });
+    window.addEventListener('resize', onResize);
+    markTools();
+    if (!presenter && ov.requestFullscreen) ov.requestFullscreen().catch(() => {});
+    if (!presenter) document.addEventListener('fullscreenchange', function fc() { if (!document.fullscreenElement && D.show) { document.removeEventListener('fullscreenchange', fc); end(); } });
+    requestAnimationFrame(() => { draw(''); send(state()); });
+  }
+  // Beamer-Fenster der Referentenansicht: zeigt nur die Folie (mit Freihand und Laserpointer)
+  function audience() {
+    document.title = "Presentation – PDF-Stift";
+    const ov = document.createElement('div');
+    ov.className = 'dk-aud';
+    ov.innerHTML = "<div class=\"pr-cur\"><div class=\"pr-wait\">Waiting for the slide show …</div></div>";
+    document.body.appendChild(ov);
+    const cur = ov.querySelector('.pr-cur');
+    let deck = null, i = 0, mounted = null, live = null, laser = null, black = '';
+    const draw = (tr, back) => {
+      if (!deck) return;
+      D.deck = deck; H = slideH(deck.theme);
+      const old = mounted && mounted.wrap;
+      cur.querySelectorAll('.pr-wait').forEach((x) => x.remove());
+      mounted = mountSlide(cur, i, deck);
+      mounted.wrap.insertAdjacentHTML('beforeend', `<div class="pr-black ${black}"></div>`);
+      cur.appendChild(mounted.wrap);
+      transition(old, mounted.wrap, tr, back);
+    };
+    const ink = () => { if (!mounted) return; const old = mounted.wrap.querySelector('.dk-ink'); const tmp = document.createElement('div'); tmp.innerHTML = inkSvg(deck.slides[i]); if (old) old.replaceWith(tmp.firstChild); live = null; };
+    if (!BCDK) { cur.innerHTML = "<div class=\"pr-wait\">This browser does not support a second presentation window.</div>"; return; }
+    BCDK.addEventListener('message', (ev) => {
+      const m = ev.data || {};
+      if (m.t === 'state') { deck = m.deck; i = m.i; black = m.black || ''; draw(''); }
+      if (!deck) return;
+      if (m.t === 'slide') { i = m.i; draw(m.tr, m.back); }
+      if (m.t === 'ink' && m.i === i) { deck.slides[i].ink = m.ink; ink(); }
+      if (m.t === 'live' && m.i === i && mounted) {
+        const svg = mounted.wrap.querySelector('.dk-ink');
+        if (!live) { live = document.createElementNS('http://www.w3.org/2000/svg', 'path'); live.setAttribute('fill', 'none'); live.setAttribute('stroke-linecap', 'round'); live.setAttribute('stroke-linejoin', 'round'); if (svg) svg.appendChild(live); }
+        live.setAttribute('stroke', m.st.c); live.setAttribute('stroke-width', m.st.w); if (m.st.hl) live.setAttribute('stroke-opacity', '.38'); live.setAttribute('d', inkPath(m.st.p));
+      }
+      if (m.t === 'laser' && mounted) {
+        if (!laser) { laser = document.createElement('div'); laser.className = 'pr-laser'; }
+        if (laser.parentNode !== mounted.wrap) mounted.wrap.appendChild(laser);
+        laser.hidden = m.x < 0; laser.style.left = m.x * mounted.k + 'px'; laser.style.top = m.y * mounted.k + 'px';
+      }
+      if (m.t === 'black' && mounted) { black = m.v; const bl = mounted.wrap.querySelector('.pr-black'); if (bl) bl.className = 'pr-black ' + black; }
+      if (m.t === 'end') { cur.innerHTML = "<div class=\"pr-wait\">The slide show has ended.</div>"; mounted = null; setTimeout(() => window.close(), 1200); }
+    });
+    window.addEventListener('resize', () => { if (mounted) { mounted.wrap.remove(); mounted = null; draw(''); if (deck) ink(); } });
+    BCDK.postMessage({ t: 'hello' });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'F11' && document.documentElement.requestFullscreen) { ev.preventDefault(); document.documentElement.requestFullscreen().catch(() => {}); } });
+    ov.ondblclick = () => { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); };
   }
 
   // ================================================================== Als PDF: echte Schrift (durchsuchbar), Formen als Vektoren
@@ -2308,19 +2534,22 @@
       const th = theme();
       const P = await painter(doc, th, D.deck.slides.flatMap((s) => s.els));
       const K = 0.75; // Bildpunkt → pt
+      const hidden = D.deck.slides.filter((x) => x.hidden).length;
       for (const s of D.deck.slides) {
+        if (s.hidden) continue;
         const pg = doc.addPage([W * K, H * K]);
         // Ursprung oben links, y nach unten negativ
         pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(1, 0, 0, 1, 0, H * K));
         await drawBg(doc, pg, s, th, K);
         for (const e of [...s.els, ...hfEls(D.deck.slides.indexOf(s))]) if (!isPh(e)) await P.drawEl(pg, e, K, [1, 0, 0, 1, 0, H * K]);
+        for (const k of s.ink || []) { const d = inkPath(k.p); if (d) pg.drawSvgPath(d, { x: 0, y: 0, scale: K, borderColor: hexRgb(k.c), borderWidth: k.w * K, borderLineCap: 1, ...(k.hl ? { borderOpacity: 0.38, blendMode: PDFLib.BlendMode.Multiply } : {}) }); }
         pg.pushOperators(popGraphicsState());
       }
       const bytes = await doc.save();
       const name = (D.deck.title || "Presentation").replace(/[\\/:*?"<>|]+/g, ' ').trim() + '.pdf';
       const blob = new Blob([bytes], { type: 'application/pdf' });
       if (where === 'library') { await C.uploadPdf(blob, name); C.toast(`“${name}” is now in “My PDFs”.`, 5000); }
-      else { C.downloadBlob(blob, name); C.toast("PDF saved.", 2500); }
+      else { C.downloadBlob(blob, name); C.toast(hidden ? `PDF saved (${hidden} hidden slide${hidden > 1 ? 'n' : ''} not included).` : "PDF saved.", 3500); }
     } catch (err) { C.toast("PDF could not be created: " + err.message, 8000); }
   }
 
@@ -2336,5 +2565,5 @@
   }
 
   FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
-  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, replaceInEls };
+  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, replaceInEls, audience };
 })();
