@@ -134,11 +134,14 @@ async function about() {
     return;
   }
   let srv = '–', tab = '–';
-  try { const r = await sfetch(BASE + 'api.php?a=srvupdate', { headers: { 'X-PDFStift': '1' } }); const j = await r.json(); if (j.current) srv = j.current + (j.available ? ` (Update auf ${j.latest} bereit)` : ''); } catch (e) { /* offline */ }
-  try { const r = await sfetch(BASE + 'android/version.json', { cache: 'no-store' }); const j = await r.json(); if (j.versionName) tab = j.versionName; } catch (e) { /* */ }
+  // über die geöffnete Seite fragen (sie ist angemeldet)
+  const q = (u) => (win && !win.isDestroyed() ? win.webContents.executeJavaScript(`fetch(${JSON.stringify(BASE + u)}, { credentials: 'same-origin', cache: 'no-store', headers: { 'X-PDFStift': '1' } }).then((r) => r.json()).catch(() => null)`).catch(() => null) : Promise.resolve(null));
+  const [me, su, av] = await Promise.all([q('api.php?a=me'), q('api.php?a=srvupdate'), q('android/version.json')]);
+  if (me && me.version) srv = me.version + (su && su.available ? ` (Update auf ${su.latest} bereit)` : '');
+  if (av && av.versionName) tab = av.versionName;
   dialog.showMessageBox(win, {
-    type: 'info', title: 'Über PDF-Stift', message: `PDF-Stift für Windows – Version ${app.getVersion()}`,
-    detail: `Windows-App: ${app.getVersion()}\nServer (${BASE.replace(/^https?:\/\/|\/$/g, '')}): ${srv}\nAktuelle Tablet-App: ${tab}\n\n${BASE.replace(/^https?:\/\/|\/$/g, '')}`,
+    type: 'info', title: 'Über PDF-Stift', message: `PDF-Stift ${srv}`,
+    detail: `PDF-Stift selbst (vom Server ${BASE.replace(/^https?:\/\/|\/$/g, '')}): ${srv}\nWindows-Programmfenster: ${app.getVersion()} (ändert sich selten)\nAktuelle Tablet-App: ${tab}`,
     buttons: ['OK', 'Kurzanleitung'], defaultId: 0,
   }).then((r) => { if (r.response === 1) openHelp(); });
 }

@@ -139,12 +139,16 @@ Source code, updates and help: github.com/${G.repo || 'ek1-wq/pdf-stift'}`,
     return;
   }
   let srv = '–', tab = '–';
-  try { const r = await sfetch(BASE + 'api.php?a=srvupdate', { headers: { 'X-PDFStift': '1' } }); const j = await r.json(); if (j.current) srv = j.current + (j.available ? ` (update to ${j.latest} ready)` : ''); } catch (e) { /* offline */ }
-  try { const r = await sfetch(BASE + 'android/version.json', { cache: 'no-store' }); const j = await r.json(); if (j.versionName) tab = j.versionName; } catch (e) { /* */ }
+  // über die geöffnete Seite fragen (sie ist angemeldet)
+  const q = (u) => (win && !win.isDestroyed() ? win.webContents.executeJavaScript(`fetch(${JSON.stringify(BASE + u)}, { credentials: 'same-origin', cache: 'no-store', headers: { 'X-PDFStift': '1' } }).then((r) => r.json()).catch(() => null)`).catch(() => null) : Promise.resolve(null));
+  const [me, su, av] = await Promise.all([q('api.php?a=me'), q('api.php?a=srvupdate'), q('android/version.json')]);
+  if (me && me.version) srv = me.version + (su && su.available ? ` (update to ${su.latest} ready)` : '');
+  if (av && av.versionName) tab = av.versionName;
   dialog.showMessageBox(win, {
-    type: 'info', title: "About PDF-Stift", message: `PDF-Stift for Windows – version ${app.getVersion()}`,
-    detail: `Windows app: ${app.getVersion()}\nServer (${BASE.replace(/^https?:\/\/|\/$/g, '')}): ${srv}
-Current tablet app: ${tab}\n\n${BASE.replace(/^https?:\/\/|\/$/g, '')}`,
+    type: 'info', title: "About PDF-Stift", message: `PDF-Stift ${srv}`,
+    detail: `PDF-Stift itself (from the server ${BASE.replace(/^https?:\/\/|\/$/g, '')}): ${srv}
+Windows program window: ${app.getVersion()} (rarely changes)
+Current tablet app: ${tab}`,
     buttons: ['OK', "Quick guide"], defaultId: 0,
   }).then((r) => { if (r.response === 1) openHelp(); });
 }

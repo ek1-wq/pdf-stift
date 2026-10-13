@@ -2291,5 +2291,8 @@
   "Paket nicht geladen": null,
   "Paket defekt": null,
   "Paket unvollständig": null,
-  "Original zurückgeholt": null
+  "Original zurückgeholt": null,
+  "PDF-Stift selbst (vom Server ": "PDF-Stift itself (from the server ",
+  "\nWindows-Programmfenster: ": "\nWindows program window: ",
+  " (ändert sich selten)\nAktuelle Tablet-App: ": " (rarely changes)\nCurrent tablet app: "
 }
