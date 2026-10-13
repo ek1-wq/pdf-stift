@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.75.0';
+  const VERSION = '1.75.1';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -4673,6 +4673,7 @@
   // Ebene einer Seite zeichnen (ohne Bearbeitung); die gerade bearbeitete Seite zeichnet der Editor
   function obRender(P) {
     if (!P || !V.doc || V.board) return;
+    if (OBV.grid && P.i === 0) obGridSync();
     const list = obStrokes(P.i);
     P.obEls = list.map((s) => s.e);
     if (OB.ed && OB.P === P) { obSync(); return; }
@@ -4719,6 +4720,7 @@
       editOnFirstClick: (e) => !!e && e.t === 'text',
       copied: (list) => { OB.clip = list; },
       onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
+      ...OB_RIB,
       replaceAll: (f, r) => obReplaceAll(f, r),
       onInsertHtml: (html) => { const P = (OB.ed && OB.P) || obPage(); const ed = P && obActivate(P); if (ed) ed.insertHtmlAt(html); },
     };
@@ -4793,6 +4795,68 @@
       if (OB.ed) OB.ed.renderFmt(); else obIdle().renderFmt();
     }).catch(() => {});
   }
+  // Reiter des Menübands in der PDF-Ansicht (zusätzlich zu Start und Einfügen)
+  const OBV = { grid: false, snap: true };
+  try { Object.assign(OBV, ls('obView') || {}); } catch (e) { /* */ }
+  const ICP = {
+    sel: '<path d="M5 3.5l13 7.2-5.6 1.4L9.8 18z"/>', hand: '<path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 10.5V5a1.5 1.5 0 0 1 3 0v5.5"/><path d="M14 10.5V6.5a1.5 1.5 0 0 1 3 0v6.5c0 4-2.5 7-6.2 7-2.6 0-4-1.2-5.4-3.2L3.7 13a1.4 1.4 0 0 1 2.2-1.7L8 13.5"/>',
+    pen: '<path d="M16.5 3.5l4 4L8 20H4v-4z"/><path d="M14 6l4 4"/>', hl: '<path d="M9 15l-3 3H3l3-3"/><path d="M9 15l9-9 3 3-9 9z"/><path d="M3 21h9"/>', tx: '<path d="M8 15l4-9 4 9M9.6 12h4.8"/><path d="M4 20h16"/>',
+    sh: '<path d="M4 20L13 11"/><path d="M8.5 11H13v4.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/>', tt: '<path d="M5 6V4.5h14V6"/><path d="M12 4.5v15"/><path d="M9 19.5h6"/>',
+    la: '<path d="M12 4c5 0 8.5 2.3 8.5 5.2S17 14.5 12 14.5 3.5 12.2 3.5 9.2 7 4 12 4z" stroke-dasharray="3 2.4"/><path d="M6.5 13.5c-1 1.5-.4 3.4 1.6 3.6 1.8.2 2.1 2 .9 3.4"/>', lp: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>',
+    er: '<path d="M7 20h13"/><path d="M4.5 15.5l9-9a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L13 19H8.5z"/>', nt: '<path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-8l-4.5 3.5V16.5H5A1.5 1.5 0 0 1 3.5 15V6A1.5 1.5 0 0 1 5 4.5z"/>',
+    rot: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>', ins: '<path d="M6 3h8l4 4v14H6z"/><path d="M12 10v6M9 13h6"/>', del: '<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>',
+    org: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+    ov: '<rect x="3.5" y="3.5" width="7" height="9" rx="1"/><rect x="13.5" y="3.5" width="7" height="9" rx="1"/><path d="M4 16h16M4 20h10"/>', vrot: '<rect x="6" y="3.5" width="12" height="17" rx="1.5"/><path d="M21 9a6 6 0 0 0-3-5"/><path d="M21 4v5h-5" transform="translate(0 0)"/>',
+    begin: '<path d="M5 4v16"/><path d="M9 5l11 7-11 7z"/>', cur: '<rect x="3.5" y="5" width="11" height="9" rx="1"/><path d="M14 12l7 4.5-7 4.5z"/>', presenter: '<rect x="2.5" y="4" width="12" height="9" rx="1"/><rect x="16" y="4" width="5.5" height="4" rx=".8"/><path d="M16 11h5.5M16 13.5h4M5 17h7M8.5 13v4"/>',
+    fitw: '<path d="M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3"/>', fitp: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', single: '<rect x="7" y="3.5" width="10" height="17" rx="1.5"/>', two: '<rect x="2.5" y="4" width="9" height="16" rx="1.5"/><rect x="12.5" y="4" width="9" height="16" rx="1.5"/>',
+    zin: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20M8 10.5h5M10.5 8v5"/>', zout: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20M8 10.5h5"/>',
+    grid: '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17" stroke-opacity=".55"/>', magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4z"/><path d="M6 8h4M14 8h4"/>',
+  };
+  function obGridSync() {
+    const P0 = V.pages[0];
+    pagesEl.classList.toggle('ob-grid', !!OBV.grid);
+    if (P0) pagesEl.style.setProperty('--obg', (20 * (P0.cssW || 1) / P0.w) + 'px');
+  }
+  const OB_RIB = {
+    tabs: () => [['draw', "Drawing"], ['pages', "pages"], ['show', "Slide show"], ['view', "View"]],
+    tabContent: (tab, { grp, rows, big, sb }) => {
+      const tool = (k, l) => big(`data-f="pt:${k}"`, l, ICP[k]).replace('class="rb-big"', `class="rb-big${S.tool === k ? ' on' : ''}"`);
+      if (tab === 'draw') return grp("Dropdown", tool('sel', "Select text") + tool('hand', 'Hand') + tool('la', 'Lasso')) +
+        grp("Pens", tool('pen', "Pen") + tool('hl', "Highlighter") + tool('tx', "Highlight text") + tool('sh', "Lines and shapes")) +
+        grp("More", tool('tt', "Quick text") + tool('nt', "Comment") + tool('lp', "Laser pointer") + tool('er', "Eraser"));
+      if (tab === 'pages') return grp("page", big('data-f="pp:rotate"', "Rotate page", ICP.rot) + big('data-f="pp:ins"', "Blank page", ICP.ins) + big('data-f="pp:del"', "Delete page", ICP.del)) +
+        grp("All pages", big('data-f="pp:org"', "Organize pages", ICP.org) + big('data-f="pp:ov"', "Page overview", ICP.ov) + big('data-f="pp:vrot"', "Rotate view", ICP.rot));
+      if (tab === 'show') return grp("Start", big('data-f="ps:begin"', "From beginning", ICP.begin) + big('data-f="ps:cur"', "From current page", ICP.cur) + big('data-f="ps:presenter"', "Presenter view", ICP.presenter)) +
+        grp("Point", tool('lp', "Laser pointer") + tool('pen', "Pen"));
+      if (tab === 'view') {
+        const mode = viewMode();
+        return grp("Page view", big('data-f="pv:fitw"', "Fit width", ICP.fitw) + big('data-f="pv:fitp"', "Fit page", ICP.fitp) + big('data-f="pv:single"', "Single pages", ICP.single).replace('class="rb-big"', `class="rb-big${mode === 'single' ? ' on' : ''}"`) + big('data-f="pv:two"', 'Zwei Seiten', ICP.two).replace('class="rb-big"', `class="rb-big${mode !== 'single' ? ' on' : ''}"`)) +
+          grp('Zoom', big('data-f="pv:zin"', "Zoom in", ICP.zin) + big('data-f="pv:zout"', "Zoom out", ICP.zout) + `<span class="rb-zoom num">${Math.round((V.zoom || 1) * 100)} %</span>`) +
+          grp("Objects", rows(sb('pv:grid', "Show grid and snap to it", ICP.grid, { label: "Grid", on: OBV.grid }), sb('pv:snap', "Snap to other objects and the page centre", ICP.magnet, { label: "Snap", on: OBV.snap })));
+      }
+      return '';
+    },
+    fmtExt: (f) => {
+      const [g, a] = f.split(':');
+      if (!['pt', 'pp', 'ps', 'pv'].includes(g) || !a) return false;
+      const re = () => setTimeout(() => { const e2 = OB.ed || obIdle(); if (e2) e2.renderFmt(); }, 0);
+      if (g === 'pt') { S.tool = a; persistTools(); renderToolbar(); re(); return true; }
+      if (g === 'pp') {
+        if (a === 'rotate') menuAction('rotate'); if (a === 'ins') menuAction('ins-blank'); if (a === 'del') menuAction('delpage');
+        if (a === 'org') runTool('organize'); if (a === 'ov') openOverview(); if (a === 'vrot') rotateView(90);
+        return true;
+      }
+      if (g === 'ps') { if (a === 'begin') { goToPage(0); setTimeout(() => setPresent(true), 50); } if (a === 'cur') setPresent(true); if (a === 'presenter') prsStart(); return true; }
+      if (a === 'fitw') setZoom(1); if (a === 'fitp') fitWholePage(); if (a === 'single') setViewMode('single'); if (a === 'two') setViewMode('two');
+      if (a === 'zin') setZoom((V.zoom || 1) * 1.2); if (a === 'zout') setZoom((V.zoom || 1) / 1.2);
+      if (a === 'grid' || a === 'snap') { OBV[a] = !OBV[a]; ls('obView', OBV); obGridSync(); }
+      setTimeout(obGridSync, 300);
+      re();
+      return true;
+    },
+    snapOn: () => OBV.snap,
+    gridSize: () => (OBV.grid ? 20 : 0),
+  };
   // Menüband ohne ausgewähltes Objekt (alles zum Formatieren grau)
   function obIdle() {
     const DK = window.PDFSTIFT_DECK;
@@ -4802,6 +4866,7 @@
       els: () => [], setEls() {}, theme: () => OB_TH, snap: () => '[]', commit() {}, surface: () => null,
       placing: (on, kind) => obPlacing(on ? kind : null), pickImage: () => obPickImage(), alignWord: true,
       onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
+      ...OB_RIB,
       replaceAll: (f, r) => obReplaceAll(f, r),
       onInsertHtml: (html) => { const P = (OB.ed && OB.P) || obPage(); const ed = P && obActivate(P); if (ed) ed.insertHtmlAt(html); },
     });

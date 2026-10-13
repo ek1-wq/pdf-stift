@@ -1474,3 +1474,6 @@ body.ob-placing .page { cursor: crosshair !important; }
 .pr-endscreen { position: absolute; inset: 0; z-index: 7; background: #000; color: #ADB5BD; display: grid; place-items: center; font-size: 18px; }
 .dk-thumb.hid .dk-mini { opacity: .4; }
 .dk-thumb.hid .dk-no::after { content: " ⊘"; }
+/* Gitternetz über PDF-Seiten (Objekte rasten daran ein) */
+.pages.ob-grid .page::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3; background-image: linear-gradient(rgba(31, 79, 214, .13) 1px, transparent 1px), linear-gradient(90deg, rgba(31, 79, 214, .13) 1px, transparent 1px); background-size: var(--obg, 20px) var(--obg, 20px); }
+.rb-zoom { align-self: center; min-width: 52px; text-align: center; font-size: 13px; color: var(--muted); }
