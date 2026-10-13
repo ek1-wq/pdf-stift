@@ -1366,3 +1366,25 @@ body.ob-placing .page { cursor: crosshair !important; }
 #dockL .rb-grip-wrap, #dockR .rb-grip-wrap { padding: 0 0 4px; justify-content: center; }
 #dockL .rb-grip-wrap .tb-grip, #dockR .rb-grip-wrap .tb-grip { width: 32px; height: 16px; }
 #dockL .rb-grip-wrap .tb-grip::before, #dockR .rb-grip-wrap .tb-grip::before { width: 18px; height: 3px; }
+/* Menüband: Registerkarten und Formen-Galerie */
+.rb-fmt { flex-direction: column; min-width: 0; }
+.rb-tabs { display: flex; gap: 2px; padding: 0 4px 3px; border-bottom: 1px solid var(--line); margin-bottom: 3px; }
+.rb-tab { height: 25px; padding: 0 12px; border-radius: 6px 6px 0 0 !important; font-size: 12.5px !important; color: var(--muted) !important; border: 0 !important; background: transparent; }
+.rb-tab.on { color: var(--accent) !important; box-shadow: inset 0 -2px 0 var(--accent); background: transparent !important; font-weight: 600; }
+.rb-body { display: flex; align-items: stretch; min-width: 0; }
+.rb-gal { display: grid; grid-template-columns: repeat(6, 26px); gap: 1px; padding: 2px; border: 1px solid var(--line); border-radius: 7px 0 0 7px; align-self: center; margin-right: 0; }
+.rb-gal-all { grid-template-columns: repeat(12, 26px); border-radius: 7px; }
+.rb-sh { width: 26px; height: 24px; }
+.rb-galmore { align-self: center; width: 16px; height: 54px; margin-right: 6px; border: 1px solid var(--line) !important; border-left: 0 !important; border-radius: 0 7px 7px 0; font-size: 9px; color: var(--muted) !important; padding: 0; }
+.dk-gal-pop { position: fixed; z-index: 80; width: 330px; max-height: 70vh; overflow-y: auto; padding: 8px 10px 10px; background: var(--bar); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.dk-gal-pop .gp-cap { font-size: 11.5px; color: var(--muted); margin: 6px 0 3px; }
+.dk-gal-pop .gp-row { display: flex; flex-wrap: wrap; gap: 2px; }
+.dk-gal-pop button { width: 32px; height: 30px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--fg); cursor: pointer; padding: 0; }
+.dk-gal-pop button:hover { background: var(--accent-soft, #E6EAF5); border-color: var(--line); }
+.dk-gal-pop svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+#dockL .rb-body, #dockR .rb-body { flex-direction: column; }
+#dockL .rb-tabs, #dockR .rb-tabs { flex-wrap: wrap; }
+#dockL .rb-gal-all, #dockR .rb-gal-all { grid-template-columns: repeat(8, 26px); }
+.dk-tx s, .dk-cell s { text-decoration: line-through; }
+.dk-tx sup, .dk-tx sub, .dk-cell sup, .dk-cell sub { font-size: .65em; line-height: 0; }
+.dk-fmt.rb-band { flex-direction: column; align-items: stretch; }

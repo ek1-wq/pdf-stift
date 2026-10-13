@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.71.0';
+  const VERSION = '1.72.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -4717,6 +4717,7 @@
       editOnFirstClick: (e) => !!e && e.t === 'text',
       copied: (list) => { OB.clip = list; },
       onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
+      replaceAll: (f, r) => obReplaceAll(f, r),
     };
   }
   function obActivate(P) {
@@ -4798,8 +4799,32 @@
       els: () => [], setEls() {}, theme: () => OB_TH, snap: () => '[]', commit() {}, surface: () => null,
       placing: (on, kind) => obPlacing(on ? kind : null), pickImage: () => obPickImage(), alignWord: true,
       onIns: (k) => obIns(k), onPaste: () => obPaste(), clipboard: () => OB.clip, insertKind: () => OB.insert,
+      replaceAll: (f, r) => obReplaceAll(f, r),
     });
     return OB.idle;
+  }
+  // Suchen und Ersetzen in allen Objekten dieser PDF
+  function obReplaceAll(find, repl) {
+    const DK = window.PDFSTIFT_DECK;
+    if (!DK || !V.doc) return 0;
+    if (OB.ed) OB.ed.endEdit();
+    let n = 0;
+    const del = [], add = [];
+    for (const st of [...V.doc.strokes.values()]) {
+      if (st.t !== 'ob' || !st.e) continue;
+      const e = obClone(st.e);
+      const c = DK.replaceInEls([e], find, repl);
+      if (!c) continue;
+      n += c;
+      del.push(st);
+      add.push({ ...st, id: uid(), e, pts: [r2(e.x), r2(e.y)] });
+    }
+    if (!n) return 0;
+    opDel(V.path, del.map((x) => x.id));
+    opAdd(V.path, add);
+    pushHistory({ t: 'multi', acts: [{ t: 'del', strokes: del }, { t: 'add', strokes: add }] });
+    new Set(add.map((x) => x.p)).forEach((i) => { if (V.pages[i]) obRender(V.pages[i]); });
+    return n;
   }
   function obPaste() {
     if (!OB.clip) return;

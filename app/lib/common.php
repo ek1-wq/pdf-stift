@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.71.0';
+const PDFSTIFT_VERSION = '1.72.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -252,7 +252,7 @@ function stroke_obj($e): ?array
         't' => $t, 'x' => $num('x', -100000, 100000, 0), 'y' => $num('y', -100000, 100000, 0),
         'w' => $num('w', 1, 100000, 10), 'h' => $num('h', 1, 100000, 10), 'r' => $num('r', -360, 360, 0),
     ];
-    foreach (['fs' => [2, 400], 'lw' => [0.1, 50], 'pad' => [0, 200], 'iw' => [1, 100000], 'ih' => [1, 100000]] as $k => [$lo, $hi]) {
+    foreach (['fs' => [2, 400], 'lw' => [0.1, 50], 'pad' => [0, 200], 'iw' => [1, 100000], 'ih' => [1, 100000], 'lh' => [0.5, 4], 'op' => [0, 1]] as $k => [$lo, $hi]) {
         if (is_numeric($e[$k] ?? null)) {
             $o[$k] = max($lo, min($hi, round((float) $e[$k], 2)));
         }
@@ -265,6 +265,14 @@ function stroke_obj($e): ?array
     if (in_array($e['va'] ?? '', ['t', 'm', 'b'], true)) {
         $o['va'] = $e['va'];
     }
+    foreach (['sh', 'fx', 'fy'] as $k) {
+        if (!empty($e[$k])) {
+            $o[$k] = 1;
+        }
+    }
+    if (preg_match('/^[A-Za-z0-9_-]{4,40}$/', (string) ($e['g'] ?? ''))) {
+        $o['g'] = (string) $e['g'];
+    }
     // Schrift: Kürzel einer mitgelieferten Schrift oder „L:Name“ einer Schrift dieses Computers
     $ff = (string) ($e['ff'] ?? '');
     if (preg_match('/^[a-z0-9]{2,30}$/', $ff) || preg_match('/^L:[^"<>\\;{}]{1,100}$/u', $ff)) {
@@ -274,7 +282,7 @@ function stroke_obj($e): ?array
         $o['html'] = mb_substr($e['html'], 0, 50000);
     }
     if ($t === 'shape') {
-        $o['k'] = in_array($e['k'] ?? '', ['rect', 'round', 'ellipse', 'tri', 'arrowR', 'line', 'arrow'], true) ? $e['k'] : 'rect';
+        $o['k'] = preg_match('/^[A-Za-z0-9]{2,12}$/', (string) ($e['k'] ?? '')) ? (string) $e['k'] : 'rect';
     }
     if ($t === 'img') {
         if (!preg_match('/^[a-f0-9]{40}\.(jpg|png|gif|webp)$/', (string) ($e['src'] ?? ''))) {
