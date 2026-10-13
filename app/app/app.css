@@ -1504,3 +1504,24 @@ body.ob-placing .page { cursor: crosshair !important; }
 .rb-hint { display: flex; align-items: center; gap: 8px; width: 230px; font-size: 12px; line-height: 1.35; color: var(--muted); padding: 0 4px; }
 .rb-hint svg { width: 20px; height: 20px; }
 .card.dk-imp .thumb svg { width: 46px; height: 46px; color: var(--accent); }
+.card.dk-card .thumb { display: flex; align-items: center; justify-content: center; }
+/* Auswahl-Dialog (z. B. PowerPoint: Präsentation oder PDF) */
+.choose-dlg form { min-width: min(400px, 90vw); }
+.choose-dlg p { margin: 0 0 14px; }
+.choose-btns { display: flex; flex-direction: column; gap: 8px; }
+.choose-btns button { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--fg); font: inherit; cursor: pointer; }
+.choose-btns button:hover { background: var(--accent-soft, #E6EAF5); }
+.choose-btns button.primary { border-color: var(--accent); }
+.choose-btns button span { font-size: 12.5px; color: var(--muted); }
+.choose-btns button.ghost { align-self: flex-end; border: 0; padding: 6px 10px; color: var(--muted); }
+/* Animationen */
+.an-hid { visibility: hidden !important; }
+.an-in.an-fade { animation: anFade .55s ease-out both; }
+.an-in.an-fly { animation: anFly .55s cubic-bezier(.2, .8, .2, 1) both; }
+.an-in.an-zoom { animation: anZoom .45s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes anFade { from { opacity: 0; } }
+@keyframes anFly { from { opacity: 0; translate: 0 70px; } }
+@keyframes anZoom { from { opacity: 0; scale: .55; } }
+@media (prefers-reduced-motion: reduce) { .an-in.an-fade, .an-in.an-fly, .an-in.an-zoom { animation-duration: .01s; } }
+.dk-anbadge { position: absolute; z-index: 5; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 4px; background: #E8590C; color: #fff; font: 600 11px/18px system-ui, sans-serif; text-align: center; pointer-events: none; }
+.rb-note { display: block; max-width: 210px; font-size: 11.5px; line-height: 1.35; color: var(--muted); padding: 0 4px; white-space: normal; }

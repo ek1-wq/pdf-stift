@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('pdfstiftWin', {
   version: () => ipcRenderer.invoke('version'),
   menuBar: (on) => ipcRenderer.invoke('menu-bar', !!on),
   menuPop: (id, x, y) => ipcRenderer.invoke('menu-pop', id, x, y),
+  imgConv: (bytes, ext) => ipcRenderer.invoke('img-conv', bytes, ext),
+  onPptxOpen: (cb) => ipcRenderer.on('pptx-open', (_e, d) => cb(d)),
   state: () => ipcRenderer.invoke('upd-state'),
   onUpdate: (cb) => ipcRenderer.on('upd', (_e, d) => cb(d)),
   install: () => ipcRenderer.invoke('upd-install'),

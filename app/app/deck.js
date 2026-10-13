@@ -178,6 +178,8 @@
           const va = st.verticalAlign;
           el = document.createElement('span');
           if (c) el.style.color = c;
+          const fz = /^(\d*\.?\d+)em$/.exec(st.fontSize || '');
+          if (fz && +fz[1] >= 0.2 && +fz[1] <= 5 && Math.abs(+fz[1] - 1) > 0.005) el.style.fontSize = (Math.round(+fz[1] * 1000) / 1000) + 'em';
           if (bg) el.style.backgroundColor = bg;
           let inner = el;
           if (lt) { const x = document.createElement('s'); inner.appendChild(x); inner = x; }
@@ -256,6 +258,68 @@
   }
   const pos = (e) => `left:${e.x}px;top:${e.y}px;width:${e.w}px;height:${e.h}px;transform:rotate(${e.r || 0}deg)${e.fx || e.fy ? ` scale(${e.fx ? -1 : 1},${e.fy ? -1 : 1})` : ''}`;
   const look = (e) => `${e.op != null && e.op < 1 ? `opacity:${e.op};` : ''}${e.sh ? 'filter:drop-shadow(3px 3px 2.5px rgba(0,0,0,.35));' : ''}`;
+  // ------------------------------------------------------------------ Animationen (Objekte oder Absätze nacheinander einblenden)
+  const AN_LIST = [['', 'Ohne'], ['appear', 'Erscheinen'], ['fade', 'Verblassen'], ['fly', 'Hereinfliegen'], ['zoom', 'Zoomen']];
+  const AN_IC = {
+    '': '<circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/>', appear: '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 12h6"/>',
+    fade: '<rect x="5" y="5" width="14" height="14" rx="2" stroke-dasharray="2.5 2"/><path d="M9 9h6M9 12h6M9 15h4"/>', fly: '<rect x="7" y="4" width="11" height="10" rx="1.5"/><path d="M12 21v-4M9.5 19.5L12 17l2.5 2.5"/>',
+    zoom: '<rect x="8" y="8" width="8" height="8" rx="1"/><path d="M4 4l3 3M20 4l-3 3M4 20l3-3M20 20l-3-3"/>',
+  };
+  const animOrder = (s) => s.els.map((e, i) => ({ e, i })).filter((x) => x.e.an).sort((a, b) => (a.e.ao ?? a.i) - (b.e.ao ?? b.i) || a.i - b.i).map((x) => x.e);
+  function animUnits(n, e) {
+    if (!e.ap) return [n];
+    const tx = n.querySelector('.dk-tx');
+    if (!tx) return [n];
+    const out = [];
+    for (const c of tx.children) { if (/^(UL|OL)$/.test(c.tagName)) out.push(...[...c.children].filter((x) => x.tagName === 'LI')); else if (c.textContent.trim()) out.push(c); }
+    return out.length ? out : [n];
+  }
+  // n Schritte sichtbar; der letzte wird bei animate eingeblendet. Liefert die Zahl aller Schritte.
+  function applySteps(wrap, s, n, animate) {
+    if (!wrap || !s) return 0;
+    const steps = [];
+    let prev = null;
+    for (const e of animOrder(s)) {
+      const node = wrap.querySelector(`.dk-el[data-id="${e.id}"]`);
+      if (!node) continue;
+      // gleiche Nummer (z. B. eine Gruppe aus PowerPoint): ein gemeinsamer Schritt
+      if (prev && !e.ap && !prev.ap && e.ao != null && e.ao === prev.ao) steps[steps.length - 1].push({ u: node, k: e.an });
+      else for (const u of animUnits(node, e)) steps.push([{ u, k: e.an }]);
+      prev = e;
+    }
+    steps.forEach((st, i) => st.forEach((x) => { x.u.classList.toggle('an-hid', i >= n); x.u.classList.remove('an-in', 'an-appear', 'an-fade', 'an-fly', 'an-zoom'); }));
+    const last = steps[n - 1];
+    if (animate && last) last.forEach((x) => { void x.u.offsetWidth; x.u.classList.add('an-in', 'an-' + x.k); });
+    return steps.length;
+  }
+  // verbundene Tabellenzellen: e.mg = [[Zeile, Spalte, Zeilen, Spalten], …]
+  function mergeMap(e) {
+    const R = e.rows.length, Cn = e.rows[0] ? e.rows[0].length : 0, span = {}, hid = new Set();
+    for (const m of e.mg || []) {
+      if (!Array.isArray(m)) continue;
+      const [r, c] = m;
+      if (!(r >= 0 && c >= 0 && r < R && c < Cn) || hid.has(r + ',' + c) || span[r + ',' + c]) continue;
+      const rs = Math.max(1, Math.min(m[2] || 1, R - r)), cs = Math.max(1, Math.min(m[3] || 1, Cn - c));
+      let clash = false;
+      for (let i = 0; i < rs; i++) for (let j = 0; j < cs; j++) if ((i || j) && (hid.has((r + i) + ',' + (c + j)) || span[(r + i) + ',' + (c + j)])) clash = true;
+      if (clash || rs * cs < 2) continue;
+      span[r + ',' + c] = [rs, cs];
+      for (let i = 0; i < rs; i++) for (let j = 0; j < cs; j++) if (i || j) hid.add((r + i) + ',' + (c + j));
+    }
+    return { span, hid };
+  }
+  // nach dem Einfügen/Löschen von Zeilen oder Spalten die Verbindungen mitschieben
+  function mergeShift(e, axis, idx, d) {
+    if (!e.mg) return;
+    const a = axis === 'r' ? 0 : 1, n = axis === 'r' ? 2 : 3;
+    e.mg = e.mg.map((m) => {
+      m = m.slice();
+      if (d > 0) { if (m[a] >= idx) m[a] += 1; else if (m[a] + m[n] > idx) m[n] += 1; }
+      else if (m[a] > idx) m[a] -= 1; else if (m[a] + m[n] > idx) m[n] -= 1;
+      return m;
+    }).filter((m) => m[2] * m[3] >= 2 && m[2] >= 1 && m[3] >= 1);
+    if (!e.mg.length) delete e.mg;
+  }
   function elNode(e, th) {
     th = th || DEF_TH;
     const n = document.createElement('div');
@@ -305,8 +369,9 @@
       tb.style.setProperty('--bc', e.line || '#868E96');
       const cw = e.cw || e.rows[0].map(() => 1 / e.rows[0].length);
       const cp = Math.max(1, Math.round((e.fs || 18) / 3));
+      const MG = mergeMap(e);
       tb.innerHTML = '<colgroup>' + cw.map((f) => `<col style="width:${f * 100}%">`).join('') + '</colgroup>' +
-        e.rows.map((row, ri) => '<tr>' + row.map((cell, ci) => `<td data-r="${ri}" data-c="${ci}" class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${th.fg}`}"><div class="dk-cell" style="padding:${cp}px">${clean(cell)}</div></td>`).join('') + '</tr>').join('');
+        e.rows.map((row, ri) => '<tr>' + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${th.fg}`}"><div class="dk-cell" style="padding:${cp}px">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
       n.appendChild(tb);
     }
     return n;
@@ -407,6 +472,8 @@
     arrange: '<rect x="3.5" y="3.5" width="10" height="10" rx="1.2"/><rect x="10.5" y="10.5" width="10" height="10" rx="1.2" fill="currentColor" fill-opacity=".25"/>',
     selall: '<path d="M4 4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4"/><path d="M9 8l7 4-3 1-1.5 3z"/>',
     rot: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4.5H15"/>',
+    mergeR: '<rect x="3.5" y="6" width="17" height="12" rx="1"/><path d="M12 6v3M12 15v3M8 12h8M14 10l2 2-2 2"/>', mergeD: '<rect x="6" y="3.5" width="12" height="17" rx="1"/><path d="M6 12h3M15 12h3M12 8v8M10 14l2 2 2-2"/>',
+    unmerge: '<rect x="3.5" y="6" width="17" height="12" rx="1"/><path d="M12 6v12" stroke-dasharray="2 2"/>',
     rowAdd: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M12 16.5v5M9.5 19h5"/>', rowDel: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M9.5 19h5"/>',
     colAdd: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5M19 9.5v5"/>', colDel: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5"/>',
     newslide: '<rect x="3.5" y="5" width="13" height="10" rx="1"/><path d="M19 13v6M16 16h6"/>', layout: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9h17M10 9v10.5"/>',
@@ -841,7 +908,8 @@
         // je nach Auswahl: Tabelle, Bild
         if (e && e.t === 'table') {
           h += grp('Tabelle', rows(sb('row+', 'Zeile darunter einfügen', RI.rowAdd, { label: 'Zeile' }) + sb('col+', 'Spalte rechts einfügen', RI.colAdd, { label: 'Spalte' }),
-            sb('row-', 'Zeile löschen', RI.rowDel, { label: 'Zeile' }) + sb('col-', 'Spalte löschen', RI.colDel, { label: 'Spalte' })) + big('data-f="head"', 'Kopfzeile', ICON.table, true), 'ctx');
+            sb('row-', 'Zeile löschen', RI.rowDel, { label: 'Zeile' }) + sb('col-', 'Spalte löschen', RI.colDel, { label: 'Spalte' })) + big('data-f="head"', 'Kopfzeile', ICON.table, true) +
+            rows(sb('mergeR', 'Zelle mit der rechten Nachbarzelle verbinden (erst in eine Zelle klicken)', RI.mergeR, { label: 'Rechts verbinden', en: !!(ED.edit && ED.edit.cell) }), sb('mergeD', 'Zelle mit der Zelle darunter verbinden (erst in eine Zelle klicken)', RI.mergeD, { label: 'Unten verbinden', en: !!(ED.edit && ED.edit.cell) }), sb('unmerge', 'Verbundene Zelle wieder teilen', RI.unmerge, { label: 'Teilen', en: !!(e.mg && e.mg.length) })), 'ctx');
         }
         if (e && e.t === 'img') h += grp('Bild', big('data-f="imgreset"', 'Originalform', ICON.img, true), 'ctx');
         if (e && e.t === 'chart') h += grp('Diagramm', big('data-f="chartdata"', 'Daten bearbeiten', RI.chart) + rows(mb('ctype', 'Diagrammart', RI.chart, true, (CHART_TYPES.find((c) => c[0] === e.ct) || CHART_TYPES[0])[1]), sb('legend', 'Legende ein/aus', RI.legend, { label: 'Legende', on: e.legend !== 0 })), 'ctx');
@@ -966,6 +1034,7 @@
       if (f === 'selall') { select(els().map((x) => x.id)); return; }
       if (f === 'rot90') { each((x) => { x.r = ((x.r || 0) + 90) % 360; }); return; }
       if (f === 'rot0') { each((x) => { x.r = 0; }); return; }
+      if ((f === 'fs' || f === 'fs+' || f === 'fs-') && ED.edit && sizeSelection(f, v)) return;
       if (f === 'fs+' || f === 'fs-') { each((x) => { const c = x.fs || 24; x.fs = f === 'fs+' ? (SIZES.find((z) => z > c) || c + 8) : ([...SIZES].reverse().find((z) => z < c) || Math.max(4, c - 2)); }); return; }
       if (f === 'lh') { each((x) => { if (+v === 1.2) delete x.lh; else x.lh = +v; }); return; }
       if (f === 'sh') { const on = !(byId(ids[0]) || {}).sh; each((x) => { if (on) x.sh = 1; else delete x.sh; }); return; }
@@ -1029,10 +1098,32 @@
         const ri = cell ? cell[0] : e.rows.length - 1, ci = cell ? cell[1] : cols - 1;
         endEdit();
         change(() => {
-          if (f === 'row+') { e.rows.splice(ri + 1, 0, Array(cols).fill('')); e.h = r1(e.h + e.h / (e.rows.length - 1)); }
-          if (f === 'row-' && e.rows.length > 1) { e.h = r1(e.h - e.h / e.rows.length); e.rows.splice(ri, 1); }
-          if (f === 'col+') { e.rows.forEach((r) => r.splice(ci + 1, 0, '')); e.cw = Array(cols + 1).fill(1 / (cols + 1)); }
-          if (f === 'col-' && cols > 1) { e.rows.forEach((r) => r.splice(ci, 1)); e.cw = Array(cols - 1).fill(1 / (cols - 1)); }
+          if (f === 'row+') { e.rows.splice(ri + 1, 0, Array(cols).fill('')); e.h = r1(e.h + e.h / (e.rows.length - 1)); mergeShift(e, 'r', ri + 1, 1); }
+          if (f === 'row-' && e.rows.length > 1) { e.h = r1(e.h - e.h / e.rows.length); e.rows.splice(ri, 1); mergeShift(e, 'r', ri, -1); }
+          if (f === 'col+') { e.rows.forEach((r) => r.splice(ci + 1, 0, '')); e.cw = Array(cols + 1).fill(1 / (cols + 1)); mergeShift(e, 'c', ci + 1, 1); }
+          if (f === 'col-' && cols > 1) { e.rows.forEach((r) => r.splice(ci, 1)); e.cw = Array(cols - 1).fill(1 / (cols - 1)); mergeShift(e, 'c', ci, -1); }
+          if (f === 'mergeR' || f === 'mergeD' || f === 'unmerge') {
+            const MG = mergeMap(e);
+            // Anker der Zelle, in der die Schreibmarke steht
+            let ar = ri, ac = ci;
+            for (const k in MG.span) { const [r0, c0] = k.split(',').map(Number), [rs, cs] = MG.span[k]; if (ri >= r0 && ri < r0 + rs && ci >= c0 && ci < c0 + cs) { ar = r0; ac = c0; } }
+            const [rs, cs] = MG.span[ar + ',' + ac] || [1, 1];
+            e.mg = (e.mg || []).filter((m) => !(m[0] === ar && m[1] === ac));
+            if (f === 'unmerge') { if (!e.mg.length) delete e.mg; return; }
+            let nrs = rs, ncs = cs;
+            if (f === 'mergeR' && ac + cs < cols) ncs++;
+            if (f === 'mergeD' && ar + rs < e.rows.length) nrs++;
+            // Inhalt der neu hinzukommenden Zellen an den Anker hängen; berührte andere Verbindungen lösen
+            for (let i = 0; i < nrs; i++) for (let j = 0; j < ncs; j++) {
+              if (i < rs && j < cs) continue;
+              const r = ar + i, c = ac + j, t = e.rows[r][c];
+              if (t && plain(t)) e.rows[ar][ac] = (e.rows[ar][ac] || '') + ' ' + t;
+              e.rows[r][c] = '';
+              e.mg = e.mg.filter((m) => !(r >= m[0] && r < m[0] + m[2] && c >= m[1] && c < m[1] + m[3]));
+            }
+            if (nrs * ncs >= 2) e.mg.push([ar, ac, nrs, ncs]);
+            if (!e.mg.length) delete e.mg;
+          }
           if (f === 'head') e.head = !e.head;
         }, true);
       }
@@ -1124,6 +1215,38 @@
       C.toast(n ? `${n}× ersetzt.` : `„${find}“ wurde nicht gefunden.`, 3500);
     }
     function selAll(n) { const r = document.createRange(); r.selectNodeContents(n); const s = getSelection(); s.removeAllRanges(); s.addRange(r); n.focus(); }
+    // Schriftgröße nur für die markierten Wörter (relativ zur Größe des Felds, damit „größer/kleiner“ fürs ganze Feld mitwächst)
+    function sizeSelection(f, v) {
+      const n = host.box() && host.box().querySelector('.dk-el.editing');
+      if (!n) return false;
+      const sel = window.getSelection();
+      let rg = sel && sel.rangeCount && !sel.isCollapsed && n.contains(sel.anchorNode) ? sel.getRangeAt(0) : null;
+      if (!rg && ED.lastRange && n.contains(ED.lastRange.startContainer)) rg = ED.lastRange;
+      if (!rg || rg.collapsed) return false;
+      const ed = (rg.startContainer.nodeType === 3 ? rg.startContainer.parentElement : rg.startContainer).closest('[contenteditable="true"]');
+      if (!ed) return false;
+      ed.focus({ preventScroll: true });
+      sel.removeAllRanges(); sel.addRange(rg);
+      const at0 = rg.startContainer.nodeType === 3 ? rg.startContainer.parentElement : rg.startContainer;
+      const cur = parseFloat(getComputedStyle(at0).fontSize) || 24;
+      const target = f === 'fs' ? +v : f === 'fs+' ? (SIZES.find((z) => z > cur + 0.1) || cur + 8) : ([...SIZES].reverse().find((z) => z < cur - 0.1) || Math.max(4, cur - 2));
+      if (!target) return true;
+      document.execCommand('styleWithCSS', false, false);
+      document.execCommand('fontSize', false, '7');
+      const made = [];
+      ed.querySelectorAll('font[size="7"]').forEach((fo) => {
+        const sp = document.createElement('span');
+        while (fo.firstChild) sp.appendChild(fo.firstChild);
+        fo.replaceWith(sp);
+        sp.querySelectorAll('span').forEach((x) => { x.style.fontSize = ''; });
+        made.push(sp);
+      });
+      for (const sp of made) { const pz = parseFloat(getComputedStyle(sp.parentElement).fontSize) || cur; sp.style.fontSize = (Math.round((target / pz) * 1000) / 1000) + 'em'; }
+      if (made.length) { const r2 = document.createRange(); r2.setStartBefore(made[0]); r2.setEndAfter(made[made.length - 1]); sel.removeAllRanges(); sel.addRange(r2); ED.lastRange = r2.cloneRange(); }
+      syncEdit(n);
+      renderFmt();
+      return true;
+    }
     function execFmt(f, v) {
       document.execCommand('styleWithCSS', false, false);
       if (f === 'bold' || f === 'italic' || f === 'underline') document.execCommand(f);
@@ -1140,6 +1263,12 @@
     }
 
     // ---------------------------------------------------------------- Text bearbeiten (wie in PowerPoint: Feld anklicken, dann tippen)
+    document.addEventListener('selectionchange', () => {
+      if (!ED.edit) return;
+      const sel = window.getSelection();
+      const n = host.box() && host.box().querySelector('.dk-el.editing');
+      if (n && sel && sel.rangeCount && !sel.isCollapsed && n.contains(sel.anchorNode)) ED.lastRange = sel.getRangeAt(0).cloneRange();
+    });
     function startEdit(id, ev) {
       const e = byId(id);
       if (e && e.t === 'chart') { openChart(id); return; }
@@ -1583,20 +1712,40 @@
       if (VIEW.guides) { const g = document.createElement('div'); g.className = 'dk-guideov'; sl.appendChild(g); }
       return sl;
     },
-    rendered: () => fit(),
+    rendered: () => {
+      fit();
+      // Reihenfolge der Animationen als kleine Nummern an den Objekten
+      const s0 = slide(), sl = D.root && $('.dk-box .dk-slide', D.root);
+      if (!s0 || !sl) return;
+      const k = 1 / (D.k || 1);
+      animOrder(s0).forEach((e, i) => { const b = document.createElement('div'); b.className = 'dk-anbadge'; b.textContent = e.ao != null ? e.ao : i + 1; b.title = (AN_LIST.find((x) => x[0] === e.an) || ['', ''])[1] + (e.ap ? ' (absatzweise)' : ''); b.style.cssText = `left:${e.x}px;top:${e.y}px;transform:translate(-110%,0) scale(${k});transform-origin:100% 0`; sl.appendChild(b); });
+    },
     placing: (on, kind) => { if (!D.root) return; D.root.classList.toggle('dk-placing', !!on); D.root.querySelectorAll('[data-ins]').forEach((b) => b.classList.toggle('on', !!on && b.dataset.ins === kind)); },
     pickImage: () => $('.dk-file', D.root).click(),
     replaceAll: (f, r) => { let n = 0; D.ed.change(() => { for (const s0 of D.deck.slides) n += replaceInEls(s0.els, f, r); }, true); return n; },
     ribbonPre: ({ grp, rows, big, mb }) => grp('Folien', big('data-menu="newslide"', 'Neue Folie', RI.newslide, true, true) +
       rows(mb('layout', 'Layout dieser Folie', RI.layout, true, 'Layout'), mb('bg', 'Hintergrund', RI.bg, true, 'Hintergrund'), mb('design', 'Design aller Folien', RI.design, true, 'Design'))),
     act: (a) => { if (a === 'hf') { hfDialog(); return true; } return false; },
-    tabs: () => [['design', 'Entwurf'], ['show', 'Bildschirmpräsentation'], ['view', 'Ansicht']],
+    tabs: () => [['design', 'Entwurf'], ['anim', 'Animationen'], ['show', 'Bildschirmpräsentation'], ['view', 'Ansicht']],
     tabContent: (tab, { grp, rows, big, sb, mb }) => {
       const th = theme();
       if (tab === 'design') {
         return grp('Designs', `<div class="dk-themes">${THEMES.map(([n, t]) => themeTile(n, t)).join('')}</div>`) +
           grp('Anpassen', rows(mb('accent', 'Akzentfarbe (Tabellenkopf, neue Formen)', RI.design, true, 'Farben'), fontSelect(th.font || 'sans', true).replace('data-f="ff"', 'data-f="thfont"').replace('title="Schriftart"', 'title="Schrift aller Folien"'), mb('bgfmt', 'Hintergrund', RI.bg, true, 'Hintergrund'))) +
           grp('Folien', big('data-menu="size"', th.size === '43' ? 'Foliengröße 4:3' : 'Foliengröße 16:9', RI.layout, true, true) + big('data-menu="layout"', 'Layout', RI.layout, true, true));
+      }
+      if (tab === 'anim') {
+        const s0 = slide() || { els: [] };
+        const sel = D.ed.sel.map((id) => s0.els.find((x) => x.id === id)).filter(Boolean);
+        const e0 = sel[0], has = !!e0, cur = e0 ? e0.an || '' : null;
+        const ordList = animOrder(s0), nr = e0 && e0.an ? ordList.indexOf(e0) + 1 : 0;
+        const texty = !!(e0 && e0.an && e0.html && plain(e0.html));
+        return grp('Vorschau', big('data-f="an:preview"', 'Vorschau', RI.play1, ordList.length > 0)) +
+          grp('Animation', AN_LIST.map(([k, l]) => big(`data-f="an:set" data-v="${k}"`, l, AN_IC[k], has).replace('class="rb-big"', `class="rb-big${cur === k ? ' on' : ''}"`)).join('')) +
+          grp('Einstellungen', rows(sb('an:para', 'Bei Text: jeden Absatz (Aufzählungspunkt) einzeln einblenden', RI.ul, { label: 'Absatzweise', on: !!(e0 && e0.ap), en: texty }),
+            sb('an:earlier', 'In der Reihenfolge früher', RI.vt, { label: 'Früher', en: nr > 1 }), sb('an:later', 'In der Reihenfolge später', RI.vb, { label: 'Später', en: nr > 0 && nr < ordList.length }))) +
+          grp('Diese Folie', rows(`<span class="rb-note">${ordList.length ? `${ordList.length} ${ordList.length === 1 ? 'Animation' : 'Animationen'} – ein Klick beim Vortragen zeigt die nächste.` : 'Noch keine Animation. Objekt wählen, dann oben eine Animation.'}</span>`,
+            sb('an:clear', 'Alle Animationen dieser Folie entfernen', ICON.del, { label: 'Alle entfernen', en: ordList.length > 0 })));
       }
       if (tab === 'show') {
         const s0 = slide() || {}, trN = (TR_LIST.find((t) => t[0] === (s0.tr || '')) || TR_LIST[0])[1];
@@ -1614,6 +1763,7 @@
     fmtExt: (f, v) => {
       if (f === 'theme') { const t = (THEMES.find((x) => x[0] === v) || [])[1]; if (t) change(() => { const sz = theme().size; D.deck.theme = { ...clone(t), ...(sz ? { size: sz } : {}) }; D.deck.slides.forEach((s0) => { delete s0.bg; delete s0.bgGrad; delete s0.bgImg; }); }); return true; }
       if (f === 'thfont') { if (fontOk(v)) change(() => { theme().font = v; }); return true; }
+      if (f.startsWith('an:')) { animAct(f.slice(3), v); return true; }
       if (f.startsWith('vw:')) { viewAct(f.slice(3)); return true; }
       if (f.startsWith('pr:')) {
         const a = f.slice(3);
@@ -2031,6 +2181,48 @@
     else done();
   }
   /* Vortragen. presenter = Referentenansicht (zweites Fenster für den Beamer, hier Notizen, nächste Folie, Uhr) */
+  function animAct(a, v) {
+    const s0 = slide();
+    if (!s0) return;
+    const sel = D.ed.sel.map((id) => s0.els.find((x) => x.id === id)).filter(Boolean);
+    const renumber = (list) => list.forEach((e, i) => { e.ao = i + 1; });
+    if (a === 'preview') { animPreview(); return; }
+    if (a === 'clear') { change(() => s0.els.forEach((e) => { delete e.an; delete e.ao; delete e.ap; })); return; }
+    if (a === 'set') {
+      change(() => {
+        for (const e of sel) {
+          if (!v) { delete e.an; delete e.ao; delete e.ap; continue; }
+          if (!e.an) { e.ao = animOrder(s0).length + 1; const blocks = e.html ? (clean(e.html).match(/<(li|div)\b/g) || []).length : 0; if (blocks > 1) e.ap = 1; }
+          e.an = v;
+        }
+        renumber(animOrder(s0));
+      });
+      if (v) setTimeout(animPreview, 50);
+      return;
+    }
+    if (a === 'para') { change(() => sel.forEach((e) => { if (e.ap) delete e.ap; else e.ap = 1; })); return; }
+    if (a === 'earlier' || a === 'later') {
+      const e = sel[0];
+      if (!e || !e.an) return;
+      change(() => {
+        const list = animOrder(s0), i = list.indexOf(e), j = i + (a === 'earlier' ? -1 : 1);
+        if (j < 0 || j >= list.length) return;
+        [list[i], list[j]] = [list[j], list[i]];
+        renumber(list);
+      });
+    }
+  }
+  // die Animationen der Folie im Bearbeitungsfenster einmal abspielen
+  function animPreview() {
+    const s0 = slide(), box = D.root && $('.dk-box', D.root);
+    const sl = box && box.querySelector('.dk-slide');
+    if (!s0 || !sl) return;
+    clearTimeout(D.anT);
+    const tot = applySteps(sl, s0, 0, false);
+    let n = 0;
+    const next = () => { n++; applySteps(sl, s0, n, true); if (n < tot) D.anT = setTimeout(next, 650); else D.anT = setTimeout(() => D.ed.render(), 900); };
+    if (tot) D.anT = setTimeout(next, 300);
+  }
   function present(from, presenter) {
     D.ed.endEdit(); flush();
     const ord = order();
@@ -2055,10 +2247,10 @@
     document.body.appendChild(ov);
     D.show = true;
     const cur = ov.querySelector('.pr-cur');
-    let mounted = null, laserEl = null, laserT = 0;
+    let mounted = null, laserEl = null, laserT = 0, stp = 0, stTot = 0;
     const idx = () => ord[pos];
     const send = (m) => { if (BCDK) BCDK.postMessage(m); };
-    const state = () => ({ t: 'state', deck: clone(D.deck), i: idx(), black: P.black });
+    const state = () => ({ t: 'state', deck: clone(D.deck), i: idx(), black: P.black, n: stp });
     const markTools = () => {
       ov.querySelectorAll('[data-t]').forEach((b) => b.classList.toggle('on', b.dataset.t === P.tool));
       ov.querySelectorAll('[data-c]').forEach((b) => b.classList.toggle('on', b.dataset.c === P.color));
@@ -2069,6 +2261,8 @@
       mounted = mountSlide(cur, idx());
       cur.appendChild(mounted.wrap);
       mounted.wrap.insertAdjacentHTML('beforeend', `<div class="pr-black ${P.black}"></div>`);
+      stTot = applySteps(mounted.wrap, D.deck.slides[idx()], stp, false);
+      if (stp > stTot) stp = stTot;
       transition(old, mounted.wrap, tr, back);
       if (presenter) {
         const nx = ov.querySelector('.pr-next'); nx.innerHTML = '';
@@ -2077,14 +2271,19 @@
         const nt = ov.querySelector('.pr-notes'); nt.textContent = notes || 'Keine Notizen zu dieser Folie.'; nt.classList.toggle('muted', !notes); nt.style.fontSize = P.notesFs + 'px';
         ov.querySelector('.pr-no').textContent = `Folie ${idx() + 1} von ${D.deck.slides.length}`;
       }
-      send({ t: 'slide', i: idx(), tr: tr || '', back: !!back });
+      send({ t: 'slide', i: idx(), tr: tr || '', back: !!back, n: stp });
     };
+    // Animationen: erst die Schritte der Folie, dann die nächste Folie
+    const stepTo = (n) => { stp = n; applySteps(mounted.wrap, D.deck.slides[idx()], stp, true); send({ t: 'step', i: idx(), n: stp }); };
     const go2 = (np, back) => {
+      if (mounted && !P.end && np === pos + 1 && stp < stTot) { stepTo(stp + 1); return; }
+      if (mounted && np === pos - 1 && stp > 0) { stepTo(stp - 1); return; }
       if (np < 0) return;
       if (np >= ord.length) { if (!P.end) { P.end = true; cur.querySelectorAll('.pr-endscreen').forEach((x) => x.remove()); cur.insertAdjacentHTML('beforeend', '<div class="pr-endscreen">Ende der Präsentation – zum Beenden klicken oder Esc</div>'); send({ t: 'black', v: 'b' }); return; } end(); return; }
       P.end = false; cur.querySelectorAll('.pr-endscreen').forEach((x) => x.remove());
       if (P.black) { P.black = ''; send({ t: 'black', v: '' }); }
       const back2 = np < pos;
+      stp = back2 && np === pos - 1 ? 9999 : 0;
       pos = np;
       draw(back2 ? '' : D.deck.slides[idx()].tr || '', back2);
     };
@@ -2190,7 +2389,7 @@
     ov.innerHTML = '<div class="pr-cur"><div class="pr-wait">Warte auf die Präsentation …</div></div>';
     document.body.appendChild(ov);
     const cur = ov.querySelector('.pr-cur');
-    let deck = null, i = 0, mounted = null, live = null, laser = null, black = '';
+    let deck = null, i = 0, mounted = null, live = null, laser = null, black = '', n = 0;
     const draw = (tr, back) => {
       if (!deck) return;
       D.deck = deck; H = slideH(deck.theme);
@@ -2199,15 +2398,17 @@
       mounted = mountSlide(cur, i, deck);
       mounted.wrap.insertAdjacentHTML('beforeend', `<div class="pr-black ${black}"></div>`);
       cur.appendChild(mounted.wrap);
+      applySteps(mounted.wrap, deck.slides[i], n, false);
       transition(old, mounted.wrap, tr, back);
     };
     const ink = () => { if (!mounted) return; const old = mounted.wrap.querySelector('.dk-ink'); const tmp = document.createElement('div'); tmp.innerHTML = inkSvg(deck.slides[i]); if (old) old.replaceWith(tmp.firstChild); live = null; };
     if (!BCDK) { cur.innerHTML = '<div class="pr-wait">Dieser Browser unterstützt kein zweites Präsentationsfenster.</div>'; return; }
     BCDK.addEventListener('message', (ev) => {
       const m = ev.data || {};
-      if (m.t === 'state') { deck = m.deck; i = m.i; black = m.black || ''; draw(''); }
+      if (m.t === 'state') { deck = m.deck; i = m.i; black = m.black || ''; n = m.n || 0; draw(''); }
       if (!deck) return;
-      if (m.t === 'slide') { i = m.i; draw(m.tr, m.back); }
+      if (m.t === 'slide') { i = m.i; n = m.n || 0; draw(m.tr, m.back); }
+      if (m.t === 'step' && m.i === i && mounted) { const up = m.n > n; n = m.n; applySteps(mounted.wrap, deck.slides[i], n, up); }
       if (m.t === 'ink' && m.i === i) { deck.slides[i].ink = m.ink; ink(); }
       if (m.t === 'live' && m.i === i && mounted) {
         const svg = mounted.wrap.querySelector('.dk-ink');
@@ -2261,6 +2462,7 @@
         const s2 = { ...st };
         if (tag === 'b') s2.b = 1; if (tag === 'i') s2.i = 1; if (tag === 'u') s2.u = 1; if (tag === 's') s2.s = 1;
         if (tag === 'sup') { s2.sup = 1; delete s2.sub; } if (tag === 'sub') { s2.sub = 1; delete s2.sup; }
+        if (tag === 'span' && /em$/.test(c.style.fontSize || '')) s2.z = (st.z || 1) * (parseFloat(c.style.fontSize) || 1);
         if (tag === 'span' && c.style.color) s2.c = c.style.color;
         if (tag === 'span' && c.style.backgroundColor) s2.bg = c.style.backgroundColor;
         if (tag === 'a') { s2.href = c.getAttribute('href'); s2.u = 1; if (!st.c || st.c === base) s2.c = '#1F4FD6'; }
@@ -2285,7 +2487,7 @@
     // Schriftfamilie für ein Element (eingebettet, nur benutzte Zeichen)
     await FM.ready;
     const famOf = async (ff) => {
-      const base0 = th.font === 'serif' ? 'serif' : 'sans';
+      const base0 = th.font && fontOk(th.font) ? th.font : 'sans';
       ff = ff && fontOk(ff) ? ff : base0;
       if (fams[ff]) return fams[ff];
       if (STD[ff]) {
@@ -2324,11 +2526,11 @@
         fams[ff] = { r, b, i, bi, custom: true, set: new Set(r.getCharacterSet()) };
       } catch (err) {
         C.toast(err.message + ' – im PDF steht dort Helvetica.', 7000);
-        fams[ff] = await famOf(base0);
+        fams[ff] = await famOf(ff === base0 ? 'sans' : base0);
       }
       return fams[ff];
     };
-    const F = await famOf(th.font === 'serif' ? 'serif' : 'sans');
+    const F = await famOf(th.font && fontOk(th.font) ? th.font : 'sans');
     let uni = null; // DejaVu für Zeichen außerhalb von WinAnsi (z. B. Pfeile, griechische Buchstaben)
     const needUni = (allEls || []).some((e) => [e.html || '', ...(e.rows || []).flat(), e.title || '', ...(e.labels || []), ...(e.series || []).map((x) => x.n || '')].join('').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').split('').some((ch) => !winOk(ch) && ch !== '\n'));
     if (needUni) {
@@ -2372,7 +2574,7 @@
     };
     const col = (c) => (SH ? PDFLib.rgb(0, 0, 0) : hexRgb(c));
     const opa = () => { const o = SH ? 0.3 * OP : OP; return o < 1 ? { opacity: o, borderOpacity: o } : {}; };
-    const tsz = (tk, fs) => (tk.sup || tk.sub ? fs * 0.65 : fs);
+    const tsz = (tk, fs) => (tk.sup || tk.sub ? fs * 0.65 : fs) * (tk.z || 1);
     // Text in ein Rechteck setzen (w in Einheiten)
     const layoutText = (ps, fs, w) => {
       const lines = [];
@@ -2383,7 +2585,7 @@
         const toks = [];
         for (const r of p.runs) for (const part of r.t.split(/(\s+)/)) if (part) toks.push({ ...r, t: part });
         let line = [], lw = 0, first = true;
-        const push = (last) => { lines.push({ toks: line, w: lw, al: p.al, ind, bullet: first ? p : null, last }); first = false; line = []; lw = 0; };
+        const push = (last) => { const m = line.length ? Math.max(...line.map((t) => t.z || 1)) : (p.runs[0] && p.runs[0].z) || 1; lines.push({ toks: line, w: lw, al: p.al, ind, bullet: first ? p : null, last, m }); first = false; line = []; lw = 0; };
         for (const tk of toks) {
           const tw = width(tk);
           tk.w = tw;
@@ -2397,20 +2599,21 @@
     };
     const drawRuns = (pg, ln, x0, yTop, fs, color, K, lhm, gap) => {
       let x = x0;
-      const base = yTop + fs * (0.92 + (lhm - 1.2) / 2);
+      const fsL = fs * (ln.m || 1);
+      const base = yTop + fsL * (0.92 + (lhm - 1.2) / 2);
       for (const tk of ln.toks) {
-        const z = tsz(tk, fs), dy = tk.sup ? -fs * 0.33 : tk.sub ? fs * 0.14 : 0;
+        const z = tsz(tk, fs), dy = tk.sup ? -z * 0.5 : tk.sub ? z * 0.2 : 0;
         // Markerfarbe hinter dem Wort (auch über die Lücke zum nächsten Wort)
-        if (tk.bg && !SH) pg.drawRectangle({ x: x * K, y: -(yTop + fs * lhm) * K, width: (tk.w + (gap || 0)) * K, height: fs * lhm * K, color: hexRgb(tk.bg), ...opa() });
+        if (tk.bg && !SH) pg.drawRectangle({ x: x * K, y: -(yTop + fsL * lhm) * K, width: (tk.w + (gap || 0)) * K, height: fsL * lhm * K, color: hexRgb(tk.bg), ...opa() });
         let seg = '', segF = null;
         const flush2 = () => {
           if (!seg) return;
           pg.drawText(seg, { x: x * K, y: -(base + dy) * K, size: z * K, font: segF, color: col(tk.c || color), ...(opa().opacity != null ? { opacity: opa().opacity } : {}) });
           const w = segF.widthOfTextAtSize(seg, z);
-          const lineAt = (yy) => pg.drawLine({ start: { x: x * K, y: -yy * K }, end: { x: (x + w) * K, y: -yy * K }, thickness: Math.max(0.5, fs * 0.06 * K), color: col(tk.c || color), ...(opa().opacity != null ? { opacity: opa().opacity } : {}) });
+          const lineAt = (yy) => pg.drawLine({ start: { x: x * K, y: -yy * K }, end: { x: (x + w) * K, y: -yy * K }, thickness: Math.max(0.5, z * 0.06 * K), color: col(tk.c || color), ...(opa().opacity != null ? { opacity: opa().opacity } : {}) });
           if (tk.u) lineAt(base + dy + z * 0.12);
           if (tk.s) lineAt(base + dy - z * 0.3);
-          if (tk.href && !SH) addLink(pg, tk.href, x * K, -(yTop + fs * lhm) * K, (x + w) * K, -yTop * K);
+          if (tk.href && !SH) addLink(pg, tk.href, x * K, -(yTop + fsL * lhm) * K, (x + w) * K, -yTop * K);
           x += w; seg = '';
         };
         for (const ch of tk.t) {
@@ -2425,24 +2628,24 @@
     const drawTextBox = (pg, html, x, y, w, h, fs, color, va, pad, K, lhm) => {
       lhm = lhm || 1.2;
       const lines = layoutText(paras(html, color), fs, w - 2 * pad);
-      const lh = fs * lhm;
-      const total = lines.reduce((a0, l) => a0 + lh + (l.last ? fs * 0.3 : 0), 0) - (lines.length ? fs * 0.3 : 0);
+      const lhOf = (l) => fs * (l.m || 1) * lhm;
+      const total = lines.reduce((a0, l) => a0 + lhOf(l) + (l.last ? fs * (l.m || 1) * 0.3 : 0), 0) - (lines.length ? fs * (lines[lines.length - 1].m || 1) * 0.3 : 0);
       let yy = y + pad + (va === 'm' ? Math.max(0, (h - 2 * pad - total) / 2) : va === 'b' ? Math.max(0, h - 2 * pad - total) : 0);
       for (const ln of lines) {
         const avail = w - 2 * pad - ln.ind;
         const lx = x + pad + ln.ind + (ln.al === 'center' ? (avail - ln.w) / 2 : ln.al === 'right' ? avail - ln.w : 0);
         if (ln.bullet && ln.bullet.list) {
           const mark = ln.bullet.list === 'ol' ? ln.bullet.num + '.' : '•';
-          pg.drawText(mark, { x: (x + pad + ln.ind - fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8)) * K, y: -(yy + fs * (0.92 + (lhm - 1.2) / 2)) * K, size: fs * K, font: FF.custom ? FF.r : F.r, color: col(color) });
+          pg.drawText(mark, { x: (x + pad + ln.ind - fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8)) * K, y: -(yy + fs * (ln.m || 1) * (0.92 + (lhm - 1.2) / 2)) * K, size: fs * K, font: FF.custom ? FF.r : F.r, color: col(color) });
         }
         // Blocksatz: Lücken gleichmäßig strecken (nicht in der letzten Zeile eines Absatzes)
         let gap = 0;
         if (ln.al === 'justify' && !ln.last) {
           const spaces = ln.toks.filter((t) => !t.t.trim()).length;
-          if (spaces) { const extra = (avail - ln.w) / spaces; ln.toks.forEach((t) => { if (!t.t.trim()) t.w += extra; }); gap = 0; drawJust(pg, ln, lx, yy, fs, color, K, lhm, extra); yy += lh; continue; }
+          if (spaces) { const extra = (avail - ln.w) / spaces; ln.toks.forEach((t) => { if (!t.t.trim()) t.w += extra; }); gap = 0; drawJust(pg, ln, lx, yy, fs, color, K, lhm, extra); yy += lhOf(ln); continue; }
         }
         drawRuns(pg, ln, lx, yy, fs, color, K, lhm, gap);
-        yy += lh + (ln.last ? fs * 0.3 : 0);
+        yy += lhOf(ln) + (ln.last ? fs * (ln.m || 1) * 0.3 : 0);
       }
     };
     // Blocksatz-Zeile: Wort für Wort setzen
@@ -2450,7 +2653,7 @@
       let x = x0;
       for (const tk of ln.toks) {
         if (!tk.t.trim()) { x += tk.w; continue; }
-        drawRuns(pg, { toks: [tk] }, x, yTop, fs, color, K, lhm, 0);
+        drawRuns(pg, { toks: [tk], m: ln.m }, x, yTop, fs, color, K, lhm, 0);
         x += tk.w;
       }
       void extra;
@@ -2520,15 +2723,20 @@
         const cw = e.cw || Array(cols).fill(1 / cols);
         const rh = e.h / rows;
         const cp = Math.max(1, Math.round((e.fs || 18) / 3));
+        const MG = mergeMap(e);
         let yy = 0;
         for (let ri = 0; ri < rows; ri++) {
           let xx = 0;
           for (let ci = 0; ci < cols; ci++) {
-            const w = e.w * cw[ci];
+            const w0 = e.w * cw[ci];
+            if (MG.hid.has(ri + ',' + ci)) { xx += w0; continue; }
+            const [rs, cs] = MG.span[ri + ',' + ci] || [1, 1];
+            let w = 0; for (let j = 0; j < cs; j++) w += e.w * cw[ci + j];
+            const hh = rh * rs;
             const head = ri === 0 && e.head;
-            pg.drawRectangle({ x: xx * K, y: -(yy + rh) * K, width: w * K, height: rh * K, color: head ? col(th.accent) : (SH ? col('#000000') : undefined), borderColor: col(e.line || '#868E96'), borderWidth: 0.75, ...opa() });
-            if (!SH) drawTextBox(pg, (head ? '<b>' : '') + (e.rows[ri][ci] || '') + (head ? '</b>' : ''), xx, yy, w, rh, e.fs || 18, head ? '#FFFFFF' : th.fg, 'm', cp, K, e.lh);
-            xx += w;
+            pg.drawRectangle({ x: xx * K, y: -(yy + hh) * K, width: w * K, height: hh * K, color: head ? col(th.accent) : (SH ? col('#000000') : undefined), borderColor: col(e.line || '#868E96'), borderWidth: 0.75, ...opa() });
+            if (!SH) drawTextBox(pg, (head ? '<b>' : '') + (e.rows[ri][ci] || '') + (head ? '</b>' : ''), xx, yy, w, hh, e.fs || 18, head ? '#FFFFFF' : th.fg, 'm', cp, K, e.lh);
+            xx += w0;
           }
           yy += rh;
         }
@@ -2620,5 +2828,5 @@
   FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'F1' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); ev.stopImmediatePropagation(); rbCollapse(); } }, true);
   window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
-    PX: { W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, inkSvg, hfEls, uid, bgOf, DEF_TH }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
+    PX: { mergeMap, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, inkSvg, hfEls, uid, bgOf, DEF_TH }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();

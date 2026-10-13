@@ -14,7 +14,7 @@ let BASE = LOCAL ? 'http://127.0.0.1/' : 'https://pdf-stift.example.org/';
 const PART = 'persist:pdfstift';
 const DROP0 = LANG === 'en' ? 'Documents' : 'Dokumente';
 // Anfragen an PDF-Stift aus dem Programm selbst (in der freien Ausgabe mit dem Schlüssel des internen Servers)
-const sfetch = (url, opt = {}) => sfetch(url, LOCAL ? { ...opt, headers: { ...(opt.headers || {}), 'X-PDFStift-Local': local.KEY } } : opt);
+const sfetch = (url, opt = {}) => fetch(url, LOCAL ? { ...opt, headers: { ...(opt.headers || {}), 'X-PDFStift-Local': local.KEY } } : opt);
 const helpName = () => (LANG === 'en' ? 'hilfe.en.html' : 'hilfe.html');
 let win = null;
 let ready = false;
@@ -380,6 +380,21 @@ ipcMain.handle('lib-pick', () => (LOCAL ? pickLibrary() : null));
 async function openFile(file, opt = {}) {
   if (!ready) { if (!opt.print) waiting.push(file); return false; }
   let tmpDir = '';
+  // PowerPoint: als bearbeitbare Präsentation oder als PDF zum Beschreiben?
+  if (!opt.print && /\.(pptx|pptm|ppsx|potx)$/i.test(file)) {
+    const can = await win.webContents.executeJavaScript('window.__pdfstiftPptx === true').catch(() => false);
+    if (can) {
+      const { response } = await dialog.showMessageBox(win, { type: 'question', title: 'PDF-Stift', message: `Wie möchten Sie „${path.basename(file)}“ öffnen?`, buttons: ['Als bearbeitbare Präsentation', 'Als PDF zum Beschreiben', 'Abbrechen'], defaultId: 0, cancelId: 2, noLink: true });
+      if (response === 2) return false;
+      if (response === 0) {
+        if (win.isMinimized()) win.restore();
+        win.show(); win.focus();
+        win.webContents.send('pptx-open', { name: path.basename(file), bytes: new Uint8Array(fs.readFileSync(file)) });
+        try { app.addRecentDocument(file); } catch (e) { /* */ }
+        return true;
+      }
+    }
+  }
   if (OFFICE.test(file)) {
     const t0 = Date.now(), ext = path.extname(file).slice(1).toLowerCase();
     try { const r = await officeToPdf(file); tmpDir = r.dir; file = r.out; usage('tool', 'Office → PDF (Windows)'); usage('perf', 'Office → PDF (Windows)', Date.now() - t0, ext); } catch (e) {
@@ -847,6 +862,19 @@ function updates(byUser) {
     if (p && p.catch) p.catch((e) => { if (byUser) send({ state: 'error', message: String(e.message || e) }); });
   } catch (e) { /* ohne Updater weiter */ }
 }
+// Windows-Grafiken (EMF, WMF, TIFF) aus PowerPoint-Dateien in PNG umwandeln (der Browser kann sie nicht anzeigen)
+ipcMain.handle('img-conv', async (_e, bytes, ext) => {
+  if (process.platform !== 'win32') return null;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdfstift-img-'));
+  const inp = path.join(dir, 'bild.' + String(ext || 'emf').replace(/[^a-z]/gi, '').slice(0, 5)), out = path.join(dir, 'bild.png');
+  try {
+    fs.writeFileSync(inp, Buffer.from(bytes));
+    const q = (p) => "'" + p.replace(/'/g, "''") + "'";
+    const ps = `Add-Type -AssemblyName System.Drawing; $i=[System.Drawing.Image]::FromFile(${q(inp)}); $s=[Math]::Min(4,[Math]::Max(1,2000/[Math]::Max($i.Width,$i.Height))); $w=[int]($i.Width*$s); $h=[int]($i.Height*$s); $b=New-Object System.Drawing.Bitmap $w,$h; $g=[System.Drawing.Graphics]::FromImage($b); $g.SmoothingMode='HighQuality'; $g.InterpolationMode='HighQualityBicubic'; $g.Clear([System.Drawing.Color]::Transparent); $g.DrawImage($i,0,0,$w,$h); $b.Save(${q(out)},[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $b.Dispose(); $i.Dispose()`;
+    await new Promise((res) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', ps], { windowsHide: true, timeout: 60000 }, () => res()));
+    return fs.existsSync(out) ? new Uint8Array(fs.readFileSync(out)) : null;
+  } catch (e) { return null; } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* */ } }
+});
 ipcMain.handle('version', () => app.getVersion());
 // Menüband als Hauptmenü: die Menüleiste ausblenden (Alt zeigt sie weiterhin) und einzelne Menüs unter einem Reiter aufklappen
 ipcMain.handle('menu-bar', (_e, on) => { if (!win || win.isDestroyed()) return; win.setAutoHideMenuBar(!on); win.setMenuBarVisibility(!!on); });

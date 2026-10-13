@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.77.0';
+  const VERSION = '1.78.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -174,6 +174,18 @@
       $('#confirmYes').textContent = yes;
       d.returnValue = '';
       d.addEventListener('close', () => res(d.returnValue === 'yes'), { once: true });
+      d.showModal();
+    });
+  }
+
+  // Auswahl zwischen mehreren Möglichkeiten (Wert der gewählten Möglichkeit oder null)
+  function chooseDlg(title, text, opts) {
+    return new Promise((res) => {
+      const d = document.createElement('dialog');
+      d.className = 'dk-dlg choose-dlg';
+      d.innerHTML = `<form method="dialog"><h3>${esc(title)}</h3><p class="muted">${esc(text)}</p><div class="choose-btns">${opts.map(([v, l, sub], i) => `<button type="submit" value="${esc(v)}" class="${i === 0 ? 'primary' : ''}"><b>${esc(l)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</button>`).join('')}<button type="submit" value="" class="ghost">Abbrechen</button></div></form>`;
+      document.body.appendChild(d);
+      d.addEventListener('close', () => { res(d.returnValue || null); d.remove(); }, { once: true });
       d.showModal();
     });
   }
@@ -1596,6 +1608,16 @@
   const OFF_RE = /\.(docx?|docm|dotx?|rtf|odt|pptx?|pptm|ppsx?|potx?|odp|xlsx?|xlsm|xlsb|ods)$/i;
   async function uploadCore(files, folder, to, say, oneImg) {
     files = [...files];
+    // PowerPoint-Dateien: bearbeitbar übernehmen, als PDF zum Beschreiben ablegen – oder beides
+    const pps = to === 'local' ? files.filter((f) => /\.(pptx|pptm|ppsx|potx)$/i.test(f.name)) : [];
+    if (pps.length) {
+      const v = await chooseDlg("PowerPoint file", pps.length === 1 ? `How would you like to open “${pps[0].name}”?` : `How would you like to open the ${pps.length} PowerPoint files?`,
+        [['deck', "As an editable presentation", "Edit slides, present, save as PowerPoint or PDF"], ['pdf', "As a PDF to write on", "with pen and highlighter, like any PDF"], ['both', "Both", "Presentation and PDF"]]);
+      if (!v) files = files.filter((f) => !pps.includes(f));
+      if (v === 'deck' || v === 'both') for (const f of pps) await pptxImport(f, { open: pps.length === 1 && v === 'deck' && files.length === 1 });
+      if (v === 'deck') files = files.filter((f) => !pps.includes(f));
+      if (!files.length) return { ok: true, status: 200, saved: [], errs: [], notes: [], none: true };
+    }
     const fd = new FormData();
     fd.append('folder', folder);
     const notes = [], localErrs = [];
@@ -1657,6 +1679,7 @@
     try { r = await uploadCore(files, $('#upFolder').value.trim(), to, (t) => { $('#upMsg').textContent = t; }, $('#upImgOne').checked); }
     catch (err) { $('#upGo').disabled = false; $('#upMsg').textContent = "A file couldn’t be read: " + err.message; return; }
     $('#upGo').disabled = false;
+    if (r.none) { $('#uploadDlg').close(); return; }
     if (!r.ok) { $('#upMsg').textContent = r.error || "Upload failed (" + r.status + "). Is the file too large for the server?"; return; }
     const n = r.saved.length;
     if (!n && r.errs.length) { $('#upMsg').textContent = r.errs.join(' · '); return; }
@@ -1677,6 +1700,7 @@
     let r;
     try { r = await uploadCore(files, folder, 'local', (t) => toast(t, 120000), false); }
     catch (err) { toast("A file couldn’t be read: " + err.message, 7000); return; }
+    if (r.none) return;
     if (!r.ok) { toast(r.error || "Upload failed (" + r.status + ').', 8000); return; }
     const n = r.saved.length;
     if (!n) { toast(r.errs.length ? r.errs.join(' · ') : "Nothing was saved.", 12000); return; }
@@ -5144,7 +5168,7 @@
     inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) pptxImport(f); };
     inp.click();
   }
-  async function pptxImport(file) {
+  async function pptxImport(file, o = {}) {
     if (!/\.(pptx|potx|ppsx|pptm)$/i.test(file.name || '')) { toast("Please choose a PowerPoint file (.pptx). Save older .ppt files as .pptx in PowerPoint first.", 7000); return; }
     toast("Reading PowerPoint file …", 120000);
     try {
@@ -5156,7 +5180,7 @@
       const miss = warn.emf + warn.other;
       toast(`“${deck.title}” imported: ${deck.slides.length} ${deck.slides.length === 1 ? 'Folie' : "slides"}.` + (miss ? ` ${miss} picture(s) in a format the browser cannot show (e.g. EMF) were left out.` : ''), miss ? 9000 : 5000);
       track('tool', "Open PowerPoint");
-      openDoc(r.path);
+      if (o.open !== false) openDoc(r.path); else if (S.src === 'dk') loadDecks();
     } catch (e) { toast(e.message || String(e), 8000); }
   }
   async function newDeck() {
@@ -11715,6 +11739,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
 
   // ================================================================== Windows-App: Update-Hinweis oben rechts
   const WIN = window.pdfstiftWin || null;
+  if (WIN && WIN.onPptxOpen) { window.__pdfstiftPptx = true; WIN.onPptxOpen((d) => { try { pptxImport(new File([d.bytes], d.name)); } catch (e) { toast(e.message); } }); }
   // Menüleiste nur zeigen, solange das Menüband (mit Datei, Bearbeiten … in der Reiterzeile) nicht zu sehen ist – und nie beim Präsentieren oder im Vollbild
   if (WIN && WIN.menuBar && WIN.menuPop) {
     let mbLast = null;

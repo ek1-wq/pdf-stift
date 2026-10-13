@@ -841,6 +841,13 @@ switch ($a) {
         }
         json_out($r);
 
+    // Windows-Grafiken (EMF, WMF, TIFF) aus PowerPoint-Dateien → SVG (mit LibreOffice auf dem Server)
+    case 'imgconv':
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        json_out(['svgs' => vector_to_svg($_FILES['files'] ?? [])]);
+
     case 'img':
         $f = img_file((string) ($_GET['src'] ?? ''));
         if (!$f) {

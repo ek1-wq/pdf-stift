@@ -36,6 +36,27 @@
     return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
   }
 
+  // LibreOffice legt eine umgewandelte Grafik auf eine ganze Seite: auf den Inhalt zuschneiden
+  async function svgCrop(text) {
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden';
+    box.innerHTML = String(text).replace(/<\?xml[^>]*>|<!DOCTYPE[^>]*>/gi, '').replace(/<script[\s\S]*?<\/script>/gi, '');
+    document.body.appendChild(box);
+    try {
+      const svg = box.querySelector('svg');
+      if (!svg) return null;
+      const bb = svg.getBBox();
+      if (!bb.width || !bb.height) return null;
+      const vb = svg.viewBox && svg.viewBox.baseVal;
+      const wAttr = svg.getAttribute('width') || '';
+      const per = vb && vb.width && /mm$/.test(wAttr) ? parseFloat(wAttr) / vb.width : 25.4 / 96;
+      svg.setAttribute('viewBox', `${bb.x} ${bb.y} ${bb.width} ${bb.height}`);
+      svg.setAttribute('width', (bb.width * per).toFixed(2) + 'mm');
+      svg.setAttribute('height', (bb.height * per).toFixed(2) + 'mm');
+      return new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' });
+    } catch (e) { return null; } finally { box.remove(); }
+  }
+
   // ================================================================== Einlesen
   async function importPptx(file, progress) {
     const u8 = new Uint8Array(await file.arrayBuffer());
@@ -159,11 +180,17 @@
         const b = z[mediaPath];
         if (!b) return null;
         const ext = (mediaPath.split('.').pop() || '').toLowerCase();
-        if (/^(emf|wmf|tif|tiff)$/.test(ext)) { warn.emf++; return null; }
-        const type = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp' }[ext];
+        let type = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp' }[ext];
+        let blob = null;
+        if (/^(emf|wmf|tif|tiff)$/.test(ext)) {
+          const cv = conv[mediaPath];
+          if (cv && cv.png) { type = 'image/png'; blob = new Blob([cv.png], { type }); }
+          else if (cv && cv.svg) { blob = await svgCrop(cv.svg); type = 'image/svg+xml'; }
+          if (!blob) { warn.emf++; return null; }
+        }
         if (!type) { warn.other++; return null; }
-        let blob = new Blob([b], { type });
-        const needCanvas = crop || type === 'image/svg+xml' || type === 'image/bmp' || b.length > 6e6;
+        blob = blob || new Blob([b], { type });
+        const needCanvas = crop || type === 'image/svg+xml' || type === 'image/bmp' || blob.size > 6e6;
         if (needCanvas) {
           const url = URL.createObjectURL(blob);
           try {
@@ -188,6 +215,20 @@
       })());
     }
 
+    // ---- Windows-Grafiken (EMF, WMF, TIFF) vorab umwandeln: auf dem Server mit LibreOffice, sonst in der Windows-App
+    const conv = {};
+    const vec = Object.keys(z).filter((k) => /^ppt\/media\/[^/]+\.(emf|wmf|tiff?)$/i.test(k)).slice(0, 80);
+    if (vec.length) {
+      progress && progress(`${vec.length} Grafik(en) werden umgewandelt …`);
+      try {
+        const fd = new FormData();
+        vec.forEach((k) => fd.append('files[]', new Blob([z[k]]), k.split('/').pop()));
+        const r = await fetch(C.API + '?a=imgconv', { method: 'POST', credentials: 'same-origin', headers: { 'X-PDFStift': '1' }, body: fd });
+        if (r.ok) { const j = await r.json(); vec.forEach((k, i) => { const t = j.svgs && j.svgs[i]; if (t) conv[k] = { svg: t }; }); }
+      } catch (e) { /* kein LibreOffice */ }
+      const WN = window.pdfstiftWin;
+      if (WN && WN.imgConv) for (const k of vec) if (!conv[k]) { try { const png = await WN.imgConv(z[k], k.split('.').pop()); if (png && png.length) conv[k] = { png }; } catch (e) { /* */ } }
+    }
     // ---- Platzhalter: Lage und Textstile aus Layout und Master
     const phOf = (sp) => path(sp, sp.localName === 'pic' ? 'nvPicPr' : sp.localName === 'graphicFrame' ? 'nvGraphicFramePr' : 'nvSpPr', 'nvPr', 'ph');
     const phType = (ph) => at(ph, 'type') || (ph ? 'body' : '');
@@ -307,7 +348,7 @@
         let h = esc(r.t).replace(/\t/g, ' ').replace(/ {2}/g, ' &nbsp;');
         if (r.sup) h = `<sup>${h}</sup>`; if (r.sub) h = `<sub>${h}</sub>`;
         if (r.u) h = `<u>${h}</u>`; if (r.s) h = `<s>${h}</s>`; if (r.i) h = `<i>${h}</i>`; if (r.b) h = `<b>${h}</b>`;
-        const st = (r.c && r.c !== c ? `color:${r.c};` : '') + (r.hi ? `background-color:${r.hi};` : '');
+        const st = (r.c && r.c !== c ? `color:${r.c};` : '') + (r.hi ? `background-color:${r.hi};` : '') + (Math.abs(r.sz - fs) / fs > 0.03 ? `font-size:${Math.round((r.sz / fs) * 1000) / 1000}em;` : '');
         if (st) h = `<span style="${st}">${h}</span>`;
         if (r.href) h = `<a href="${esc(r.href)}">${h}</a>`;
         return h;
@@ -361,11 +402,21 @@
         }
         const id = X().uid();
         const before = out.length;
-        for (const c of sp.children) await convert(c, ctx, M2, out, gid || id);
+        const gcid = at(path(sp, 'nvGrpSpPr', 'cNvPr'), 'id');
+        const ctx2 = ctx.anim ? { ...ctx, grpIds: [...(ctx.grpIds || []), gcid] } : ctx;
+        for (const c of sp.children) await convert(c, ctx2, M2, out, gid || id);
         if (out.length - before < 2 && !gid) for (let i = before; i < out.length; i++) delete out[i].g;
         return;
       }
       if (!/^(sp|pic|cxnSp|graphicFrame)$/.test(ln)) return;
+      const outBefore = out.length;
+      try { await convertOne(sp, ctx, M, out, gid); } finally {
+        if (ctx.anim) { const cid = at(path(sp, ...[{ sp: 'nvSpPr', pic: 'nvPicPr', cxnSp: 'nvCxnSpPr', graphicFrame: 'nvGraphicFramePr' }[ln], 'cNvPr']), 'id'); for (let i = outBefore; i < out.length; i++) { out[i]._spid = cid; out[i]._grp = ctx.grpIds || []; } }
+      }
+    }
+    async function convertOne(sp, ctx, M, out, gid) {
+      const T = ctx.T;
+      const ln = sp.localName;
       const spPr = kid(sp, 'spPr');
       const style = kid(sp, 'style');
       const ph = phOf(sp);
@@ -411,10 +462,13 @@
           const def = all(pres, 'defaultTextStyle')[0]; if (def) chain.push(def);
           const tx = T.master && all(T.master, 'txStyles')[0]; if (tx && kid(tx, 'otherStyle')) chain.push(kid(tx, 'otherStyle'));
           let fs = null, lineC = null, headFill = 0;
+          const mg = [];
           const rows = [];
           for (const tr of kids(tbl, 'tr')) {
             const row = [];
             for (const tc of kids(tr, 'tc')) {
+              const gs = num(at(tc, 'gridSpan'), 1), rsp = num(at(tc, 'rowSpan'), 1);
+              if (gs > 1 || rsp > 1) mg.push([rows.length, row.length, Math.max(1, rsp), Math.max(1, gs)]);
               if (at(tc, 'hMerge') === '1' || at(tc, 'vMerge') === '1') { row.push(''); continue; }
               if (!rows.length && path(tc, 'tcPr', 'solidFill')) headFill++;
               const t = textOf(kid(tc, 'txBody'), chain, ctx, { sz: 18 });
@@ -429,6 +483,7 @@
           const e = { ...base, t: 'table', rows, cw: grid.map((g) => Math.round((g / tot) * 1000) / 1000), fs: Math.round(fs || 18) };
           if (at(kid(tbl, 'tblPr'), 'firstRow') === '1' || (headFill && headFill >= rows[0].length && rows.length > 1)) e.head = 1;
           if (lineC) e.line = lineC;
+          if (mg.length) e.mg = mg;
           delete e.r;
           e.r = 0;
           out.push(e);
@@ -545,6 +600,26 @@
       out.push(e);
     }
 
+    // Eingangsanimationen einer Folie: Form-ID → { an, ao (Klick), ap (absatzweise) }
+    function animOf(d) {
+      const map = {};
+      const timing = all(d, 'timing')[0];
+      if (!timing) return map;
+      const seq = all(timing, 'seq').find((sq) => at(kid(sq, 'cTn'), 'nodeType') === 'mainSeq');
+      if (!seq) return map;
+      const PRESET = { 1: 'appear', 21: 'appear', 10: 'fade', 9: 'fade', 2: 'fly', 3: 'fly', 12: 'fly', 47: 'fly', 23: 'zoom', 53: 'zoom', 31: 'zoom' };
+      kids(path(seq, 'cTn', 'childTnLst'), 'par').forEach((par, ci) => {
+        for (const ctn of all(par, 'cTn')) {
+          if (at(ctn, 'presetClass') !== 'entr') continue;
+          const id = at(all(ctn, 'spTgt')[0], 'spid');
+          if (!id || map[id]) continue;
+          map[id] = { an: PRESET[num(at(ctn, 'presetID'))] || 'fade', ao: ci + 1 };
+        }
+      });
+      for (const b of all(timing, 'bldP')) { const id = at(b, 'spid'); if (map[id] && at(b, 'build') === 'p') map[id].ap = 1; }
+      return map;
+    }
+
     // Hintergrund einer Folie, eines Layouts oder des Masters
     async function bgOfDoc(doc, rels, T) {
       const bg = doc && path(doc.documentElement, 'cSld', 'bg');
@@ -613,7 +688,18 @@
       if (mR && showMaster) for (const e of await deco(mR.target, { T, layout: null, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid() });
       if (layR) for (const e of await deco(layR.target, { T, layout, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid() });
       const tree = all(d, 'spTree')[0];
-      if (tree) for (const c of tree.children) await convert(c, ctx, ID, els);
+      const nDeco = els.length;
+      if (tree) for (const c of tree.children) await convert(c, { ...ctx, anim: true }, ID, els);
+      // Animationen (Eingang): Reihenfolge der Klicks, Art, absatzweise
+      const am = animOf(d);
+      for (let k = nDeco; k < els.length; k++) {
+        const e = els[k];
+        const a = am[e._spid] || (e._grp || []).map((g) => am[g]).find(Boolean);
+        if (a) { e.an = a.an; e.ao = a.ao; if (a.ap && e.html) e.ap = 1; }
+        delete e._spid; delete e._grp;
+      }
+      const ranks = [...new Set(els.filter((e) => e.an).map((e) => e.ao))].sort((a, b) => a - b);
+      for (const e of els) if (e.an) e.ao = ranks.indexOf(e.ao) + 1;
       // Gruppen-IDs je Folie neu vergeben (Gestaltungselemente werden mehrfach verwendet)
       const gmap = {};
       for (const e of els) if (e.g) e.g = gmap[e.g] || (gmap[e.g] = X().uid());
@@ -697,7 +783,7 @@
         if (tag === 'b') s2.b = 1; else if (tag === 'i') s2.i = 1; else if (tag === 'u') s2.u = 1; else if (tag === 's') s2.s = 1;
         else if (tag === 'sup') s2.sup = 1; else if (tag === 'sub') s2.sub = 1;
         else if (tag === 'a') s2.href = k.getAttribute('href');
-        else if (tag === 'span') { if (k.style.color) s2.c = toHex(k.style.color); if (k.style.backgroundColor) s2.hi = toHex(k.style.backgroundColor); }
+        else if (tag === 'span') { if (k.style.color) s2.c = toHex(k.style.color); if (k.style.backgroundColor) s2.hi = toHex(k.style.backgroundColor); if (/em$/.test(k.style.fontSize || '')) s2.z = (st.z || 1) * (parseFloat(k.style.fontSize) || 1); }
         walk(k, s2, blk);
       }
     };
@@ -715,7 +801,8 @@
         if (r.st.sup) op.superscript = true; if (r.st.sub) op.subscript = true;
         if (r.st.c) op.color = r.st.c; else if (o && o.color) op.color = o.color;
         if (r.st.hi) op.highlight = r.st.hi;
-        if (r.st.href) op.hyperlink = { url: r.st.href };
+        if (r.st.z && o && o.fs) op.fontSize = Math.round(o.fs * r.st.z * 10) / 10;
+        if (r.st.href) { op.hyperlink = { url: r.st.href }; if (!r.st.c) op.color = '1F4FD6'; op.underline = { style: 'sng' }; }
         if (ri === runs.length - 1 && pi < paras.length - 1) op.breakLine = true;
         out.push({ text: r.t, options: op });
       });
@@ -771,7 +858,7 @@
             if (e.fill) o.fill = { color: noHash(e.fill), transparency: tr || undefined };
             if (e.line) o.line = { color: noHash(e.line), width: e.lw || 2 };
             if (e.lh) o.lineSpacingMultiple = Math.round((e.lh / 1.2) * 100) / 100;
-            sl.addText(runsOf(e.html, { color: noHash(e.c || th.fg) }), o);
+            sl.addText(runsOf(e.html, { color: noHash(e.c || th.fg), fs: e.fs || 24 }), o);
           } else if (e.t === 'shape') {
             const lineK = LINE_K.includes(e.k), openK = OPEN_K.includes(e.k);
             if (lineK) {
@@ -786,7 +873,7 @@
             }
             if (e.html && !openK) {
               Object.assign(o, { fontFace: face, fontSize: e.fs || 20, color: noHash(e.c || (e.fill ? '#FFFFFF' : th.fg)), valign: VA[e.va || 'm'], margin: e.pad != null ? e.pad : 8, align: 'center' });
-              sl.addText(runsOf(e.html, { color: o.color }), o);
+              sl.addText(runsOf(e.html, { color: o.color, fs: e.fs || 20 }), o);
             } else sl.addText('', o);
           } else if (e.t === 'img') {
             const o = { ...boxO, data: await imgData(e.src), flipH: !!e.fx, flipV: !!e.fy, shadow };
@@ -795,11 +882,16 @@
           } else if (e.t === 'table') {
             const n = e.rows[0] ? e.rows[0].length : 1;
             const cw = e.cw || e.rows[0].map(() => 1 / n);
-            const rows = e.rows.map((row, ri) => row.map((cell) => {
+            const MG = P.mergeMap(e);
+            const rows = e.rows.map((row, ri) => row.map((cell, ci) => {
+              if (MG.hid.has(ri + ',' + ci)) return null;
+              const sp = MG.span[ri + ',' + ci];
               const head = ri === 0 && e.head;
               const color = head ? 'FFFFFF' : noHash(th.fg);
-              return { text: runsOf(cell, { color }), options: { color, fill: head ? { color: noHash(th.accent) } : undefined, bold: head ? true : undefined } };
-            }));
+              const options = { color, fill: head ? { color: noHash(th.accent) } : undefined, bold: head ? true : undefined };
+              if (sp) { if (sp[0] > 1) options.rowspan = sp[0]; if (sp[1] > 1) options.colspan = sp[1]; }
+              return { text: runsOf(cell, { color, fs: e.fs || 18 }), options };
+            }).filter(Boolean));
             sl.addTable(rows, { x: inch(e.x), y: inch(e.y), w: inch(e.w), colW: cw.map((f) => inch(f * e.w)), rowH: inch(e.h / Math.max(1, e.rows.length)), fontFace: face, fontSize: e.fs || 18, valign: 'middle', border: { type: 'solid', pt: 1, color: noHash(e.line || '#868E96') }, margin: Math.max(1, Math.round((e.fs || 18) / 3)) });
           } else if (e.t === 'chart') {
             const T = { col: 'bar', bar: 'bar', line: 'line', pie: 'pie' }[e.ct] || 'bar';
