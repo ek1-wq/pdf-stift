@@ -14,6 +14,8 @@ Alles bleibt auf Ihrem Gerät. Unter Windows und Linux braucht PDF-Stift kein Ko
 
 ![Folien links, Notizseite rechts – Folien einfach hinüberziehen](docs/screenshots/split.png)
 
+![Eine PowerPoint-Datei als bearbeitbare Präsentation](docs/screenshots/presentation.png)
+
 ## Was PDF-Stift kann
 
 - **Schreiben und markieren.** Stift, Marker, Text markieren, unterstreichen und durchstreichen, Formen, Textfelder, Notizzettel, Lasso, Radierer und ein Laserpointer für Präsentationen. Drucksensitive Stifte funktionieren auf Touchscreens und Grafiktabletts.
@@ -23,6 +25,8 @@ Alles bleibt auf Ihrem Gerät. Unter Windows und Linux braucht PDF-Stift kein Ko
 - **Scans aufbereiten.** Schiefe Seiten gerade richten, leere Seiten entfernen und den Kontrast verstärken.
 - **Passt zu Windows.** PDFs aus dem Explorer öffnen („In PDF-Stift öffnen“, „Senden an“), Word-, PowerPoint- und Excel-Dateien hineinziehen (umgewandelt mit Ihrem installierten Microsoft Office), aus jedem Programm auf den Drucker „PDF-Stift“ drucken, einen Ordner überwachen lassen und PDFs in den Explorer oder in eine E-Mail herausziehen.
 - **Notizbuch.** Seiten mit unendlicher Fläche, geordnet in Notizbüchern und Abschnitten. Folien samt Notizen mit einem Klick oder per Ziehen übernehmen, Seitenvorlagen (Cornell, Besprechung, Vorlesung), Suche in getipptem Text und übernommenen Folien, Verknüpfungen zwischen Notizen und PDFs, frühere Stände wiederherstellen, als PDF speichern oder drucken (auf A4 verteilt).
+- **Präsentationen.** Folien mit Text, Formen, Bildern, Tabellen und Diagrammen gestalten – oder PowerPoint-Dateien (`.pptx`, einzeln oder einen ganzen Ordner) als bearbeitbare Präsentationen öffnen, samt SmartArt, Formeln, Farbverläufen, Animationen und Übergängen. Vorführen, als PDF speichern oder wieder als PowerPoint-Datei speichern – die Animationen bleiben erhalten.
+- **Vertrautes Menüband.** Registerkarten Start, Einfügen, Zeichnen, Seiten, Bildschirmpräsentation und Ansicht wie in Office-Programmen. Menüband und Stiftleisten lassen sich an jeden Fensterrand andocken.
 - **Zwei Dokumente nebeneinander.** Folien links, Notizbuch oder eine zweite PDF rechts – mit einer gemeinsamen Werkzeugleiste.
 - **Präsentieren.** Referentenansicht für Beamer und Videokonferenz: Folie auf der Leinwand, nächste Folie, Stoppuhr und Sprechernotizen bei Ihnen.
 - **Deutsch und Englisch.** Umschalten unter Einstellungen → Sprache.

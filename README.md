@@ -19,6 +19,8 @@ Everything stays on your device. On Windows and Linux PDF-Stift needs no account
 - **Clean up scans.** Straighten skewed pages, remove blank pages and increase contrast.
 - **Fits into Windows.** Open PDFs from Explorer ("Open in PDF-Stift", "Send to"), drag Word, PowerPoint or Excel files in (converted with your installed Microsoft Office), print from any program to the "PDF-Stift" printer, watch a folder, and drag PDFs out into Explorer or an e-mail.
 - **Notebook.** Infinite-canvas pages for handwritten notes, organized in notebooks and sections. Copy slides (with your notes) onto a notebook page with one click or by dragging them across, use page templates (Cornell, meeting, lecture), search typed text and copied slides, link notes and PDFs both ways, restore earlier versions, and save or print a page as PDF (split onto A4 sheets).
+- **Presentations.** Build slides with text, shapes, pictures, tables and charts – or open PowerPoint files (`.pptx`, one at a time or a whole folder) as editable presentations, including SmartArt, formulas, gradients, animations and transitions. Present them, save them as PDF, or save them back as PowerPoint with the animations kept.
+- **Familiar ribbon.** Start, Insert, Drawing, Pages, Slide show and View tabs as in office programs. The ribbon and the pen bars can be docked to any edge of the window.
 - **Two documents side by side.** Slides on the left, notebook or a second PDF on the right – with one shared toolbar.
 - **Presenting.** Presenter view for a projector or video call: current slide on the big screen, next slide, timer and speaker notes on yours.
 - **English and German.** Switch under Settings → Language.
@@ -26,6 +28,8 @@ Everything stays on your device. On Windows and Linux PDF-Stift needs no account
 ![Slides copied into the notebook, with text snippets and slide markers](docs/screenshots/notebook.png)
 
 ![Slides on the left, your notebook page on the right – drag slides across](docs/screenshots/split.png)
+
+![A PowerPoint file opened as an editable presentation](docs/screenshots/presentation.png)
 
 ![All tools at a glance](docs/screenshots/tools.png)
 

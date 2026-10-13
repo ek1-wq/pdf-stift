@@ -432,7 +432,7 @@
     if (!hf || i < 0 || (hf.notFirst && i === 0)) return [];
     const out = [];
     const mk = (x, w, txt, al) => out.push({ id: 'hf' + x, t: 'text', x, y: H - 42, w, h: 32, fs: 14, c: '#868E96', pad: 4, va: 'm', html: `<div${al ? ` style="text-align: ${al};"` : ''}>${esc(txt)}</div>` });
-    if (hf.date) mk(40, 260, hf.dateText || new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }), '');
+    if (hf.date) mk(40, 260, hf.dateText || new Date().toLocaleDateString(NUM_LOC, { day: '2-digit', month: '2-digit', year: 'numeric' }), '');
     if (hf.foot) mk(300, 360, hf.foot, 'center');
     if (hf.num) mk(660, 260, String(i + 1), 'right');
     return out;
@@ -536,7 +536,8 @@
   // ================================================================== Diagramme (Säulen, Balken, Linien, Kreis)
   const CHART_TYPES = [['col', "Columns"], ['bar', "Bars"], ['line', "Lines"], ['pie', "Circle"]];
   const chartColors = (th) => [th.accent, '#E8590C', '#1B8A3A', '#D6409F', '#0091FF', '#B8E62E', '#7048E8', '#868E96', '#D6262B', '#1F4FD6'];
-  const fmtNum = (v) => (Math.abs(v) >= 1000 || Number.isInteger(v) ? Math.round(v).toLocaleString('de-DE') : (+v.toFixed(2)).toLocaleString('de-DE'));
+  const NUM_LOC = (document.documentElement.lang || 'de').slice(0, 2) === 'en' ? 'en-US' : 'de-DE';
+  const fmtNum = (v) => (Math.abs(v) >= 1000 || Number.isInteger(v) ? Math.round(v).toLocaleString(NUM_LOC) : (+v.toFixed(2)).toLocaleString(NUM_LOC));
   function niceTicks(min, max) {
     if (min === max) { max = min + 1; }
     const span = max - min, raw = span / 5, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
@@ -552,7 +553,7 @@
     // Farbe je Reihe (eigene aus PowerPoint, sonst die des Designs); beim Kreis je Stück
     const col = e.ct === 'pie' ? col0 : col0.map((c, i) => (ser[i] && ser[i].c) || c);
     while (e.ct !== 'pie' && col.length < ser.length) col.push((ser[col.length] && ser[col.length].c) || col0[col.length % col0.length]);
-    const fmtV = (v, axis) => (e.pct ? (+(v * 100).toFixed(axis ? 1 : e.dp != null ? Math.max(0, e.dp) : 1)).toLocaleString('de-DE') + ' %' : !axis && e.dp != null ? (+v).toLocaleString('de-DE', { minimumFractionDigits: e.dp, maximumFractionDigits: e.dp }) : fmtNum(v));
+    const fmtV = (v, axis) => (e.pct ? (+(v * 100).toFixed(axis ? 1 : e.dp != null ? Math.max(0, e.dp) : 1)).toLocaleString(NUM_LOC) + (NUM_LOC === 'en-US' ? '%' : ' %') : !axis && e.dp != null ? (+v).toLocaleString(NUM_LOC, { minimumFractionDigits: e.dp, maximumFractionDigits: e.dp }) : fmtNum(v));
     if (e.bg) P.push({ k: 'rect', x: 0, y: 0, w, h, fill: e.bg });
     const tw = (t, z = fs) => String(t).length * z * 0.55;
     let top = fs * 0.6, bottom = h - fs * 0.5;
@@ -604,7 +605,7 @@
     }
     const n = Math.max(1, labels.length), slot = (horiz ? ph : pw) / n;
     // zu viele Beschriftungen: nur jede k-te zeigen, damit nichts übereinanderliegt
-    const every = horiz ? Math.max(1, Math.ceil((fs * 1.1) / slot)) : Math.max(1, Math.ceil((Math.max(0, ...labels.map((t) => tw(t))) + fs * 0.4) / slot));
+    const every = horiz ? Math.max(1, Math.ceil((fs * 1.05) / slot)) : Math.max(1, Math.ceil((Math.max(0, ...labels.map((t) => tw(t))) * 0.85 + fs * 0.2) / slot));
     labels.forEach((t, i) => {
       if (i % every) return;
       if (horiz) P.push({ k: 'text', x: L - fs * 0.4, y: T + slot * (i + 0.5) + fs * 0.35, s: t, fs, a: 'end', c: fg });
@@ -643,7 +644,7 @@
       if (p.k === 'circle') return `<circle cx="${p.cx}" cy="${p.cy}" r="${p.r}" fill="${p.fill}"/>`;
       return `<text x="${p.x}" y="${p.y}" font-size="${p.fs}" text-anchor="${p.a}" fill="${p.c}"${p.b ? ' font-weight="700"' : ''}>${q(p.s)}</text>`;
     }).join('');
-    return `<svg viewBox="0 0 ${e.w} ${e.h}" width="${e.w}" height="${e.h}" style="width:${e.w}px;height:${e.h}px;max-width:none;overflow:visible">${body}</svg>`;
+    return `<svg viewBox="0 0 ${e.w} ${e.h}" width="${e.w}" height="${e.h}" style="width:${e.w}px;height:${e.h}px;max-width:none;overflow:visible;stroke:none;stroke-width:0">${body}</svg>`;
   }
   // kleines Fenster (eigene Dialoge der Präsentationen)
   function modal(title, html, okLabel) {
@@ -1099,7 +1100,7 @@
         return;
       }
       if (f === 'replace') { replaceDlg(); return; }
-      if (f === 'date') { insertChars(new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })); return; }
+      if (f === 'date') { insertChars(new Date().toLocaleDateString(NUM_LOC, { day: '2-digit', month: '2-digit', year: 'numeric' })); return; }
       if (f === 'link') { linkDlg(); return; }
       if (f === 'chartdata') { if (ids[0]) openChart(ids[0]); return; }
       if (f === 'legend') { each((x) => { x.legend = x.legend === 0 ? 1 : 0; }); return; }
@@ -2406,7 +2407,7 @@
       if (!presenter) return;
       const el = (P.pauseAt || Date.now()) - P.t0 - P.paused, sec = Math.floor(el / 1000);
       ov.querySelector('.pr-timer').textContent = `${sec >= 3600 ? Math.floor(sec / 3600) + ':' : ''}${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
-      ov.querySelector('.pr-clock').textContent = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      ov.querySelector('.pr-clock').textContent = new Date().toLocaleTimeString(NUM_LOC, { hour: '2-digit', minute: '2-digit' });
     }, 500);
     const onResize = () => { if (mounted) { mounted.wrap.remove(); mounted = null; draw(''); } };
     const end = () => {

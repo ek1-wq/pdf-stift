@@ -1528,3 +1528,6 @@ body.ob-placing .page { cursor: crosshair !important; }
 .pptx-report .dk-dlg-body { max-height: 60vh; }
 .pptx-report table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .pptx-report td { padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+/* Menüband: Beschriftungen immer mit großem Anfangsbuchstaben (auch wenn die Übersetzung klein beginnt) */
+.rb-big > span { display: inline-block; }
+.rb-big > span::first-letter, .rb-tab::first-letter, .rb-cap::first-letter { text-transform: uppercase; }
