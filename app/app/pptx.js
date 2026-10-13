@@ -759,7 +759,8 @@
     t.innerHTML = X().clean(html || '');
     const paras = [];
     let cur = null;
-    const np = (blk) => { cur = { al: blk.al || '', list: blk.list || null, lvl: blk.lvl || 0, runs: [] }; paras.push(cur); return cur; };
+    let U = 0; // Einheiten für „absatzweise“ (wie in PDF-Stift: oberste Absätze und Aufzählungspunkte)
+    const np = (blk) => { cur = { al: blk.al || '', list: blk.list || null, lvl: blk.lvl || 0, runs: [], unit: blk.unit || ++U }; paras.push(cur); return cur; };
     const walk = (n, st, blk) => {
       for (const k of [...n.childNodes]) {
         if (k.nodeType === 3) {
@@ -774,9 +775,10 @@
         if (tag === 'ul' || tag === 'ol') { cur = null; walk(k, st, { ...blk, list: tag, lvl: blk.list ? blk.lvl + 1 : 0 }); cur = null; continue; }
         if (tag === 'li' || tag === 'div' || tag === 'p') {
           const al = (k.style && k.style.textAlign) || blk.al || '';
-          if (tag === 'li') { np({ ...blk, al }); walk(k, st, { ...blk, al, inLi: 1 }); cur = null; continue; }
+          const unit = blk.unit || ++U;
+          if (tag === 'li') { np({ ...blk, al, unit }); walk(k, st, { ...blk, al, inLi: 1, unit }); cur = null; continue; }
           if (blk.inLi && cur && !cur.runs.length) { cur.al = al; walk(k, st, { ...blk, al }); continue; }
-          np({ ...blk, al }); walk(k, st, { ...blk, al }); cur = null; continue;
+          np({ ...blk, al, unit }); walk(k, st, { ...blk, al, unit }); cur = null; continue;
         }
         if (tag === 'br') { if (!cur) np(blk); else if (cur.runs.length) np(blk); else cur.br = 1; continue; }
         const s2 = { ...st };
@@ -788,7 +790,10 @@
       }
     };
     walk(t.content, {}, {});
-    if (!paras.length) return [{ text: '', options: {} }];
+    if (!paras.length) return Object.assign([{ text: '', options: {} }], { units: [] });
+    // Absatzbereiche je Einheit (nur Einheiten mit Text, wie beim Vortrag in PDF-Stift)
+    const unitR = new Map();
+    paras.forEach((p, i) => { const r = unitR.get(p.unit) || { st: i, en: i, txt: false }; r.en = i; if (p.runs.some((x) => x.t.trim())) r.txt = true; unitR.set(p.unit, r); });
     const AL = { center: 'center', right: 'right', justify: 'justify' };
     const out = [];
     paras.forEach((p, pi) => {
@@ -807,6 +812,7 @@
         out.push({ text: r.t, options: op });
       });
     });
+    out.units = [...unitR.values()].filter((r) => r.txt || paras[r.st].list).map((r) => [r.st, r.en]);
     return out;
   }
   const SHAPE_P = {
@@ -832,8 +838,14 @@
     const VA = { t: 'top', m: 'middle', b: 'bottom' };
     const LINE_K = ['line', 'arrow', 'arrow2'], OPEN_K = ['elbow', 'brackL', 'brackR', 'braceL', 'braceR', 'arc'];
     let skipped = 0;
+    // Animationen: Objekte bekommen einen Namen, über den sie danach in der Folien-XML gefunden werden
+    const AN = deck.slides.map(() => []);
+    let curAn = null;
+    const nm = (e) => (e.an ? { objectName: 'ps-' + e.id } : {});
+    const mark = (e, units) => { if (e.an && curAn) curAn.push({ e, units: units || null }); };
     for (let si = 0; si < deck.slides.length; si++) {
       const s = deck.slides[si];
+      curAn = AN[si];
       opt.progress && opt.progress(`Folie ${si + 1} von ${deck.slides.length} …`);
       const sl = pres.addSlide();
       if (s.hidden) sl.hidden = true;
@@ -858,11 +870,12 @@
             if (e.fill) o.fill = { color: noHash(e.fill), transparency: tr || undefined };
             if (e.line) o.line = { color: noHash(e.line), width: e.lw || 2 };
             if (e.lh) o.lineSpacingMultiple = Math.round((e.lh / 1.2) * 100) / 100;
-            sl.addText(runsOf(e.html, { color: noHash(e.c || th.fg), fs: e.fs || 24 }), o);
+            const rr = runsOf(e.html, { color: noHash(e.c || th.fg), fs: e.fs || 24 }); mark(e, rr.units);
+            sl.addText(rr, { ...o, ...nm(e) });
           } else if (e.t === 'shape') {
             const lineK = LINE_K.includes(e.k), openK = OPEN_K.includes(e.k);
             if (lineK) {
-              sl.addShape('line', { x: inch(e.x), y: inch(e.y + e.h / 2), w: inch(e.w), h: 0, rotate: e.r || 0, shadow, line: { color: noHash(e.line || th.fg), width: e.lw || 3, transparency: tr || undefined, endArrowType: e.k !== 'line' ? 'triangle' : undefined, beginArrowType: e.k === 'arrow2' ? 'triangle' : undefined } });
+              mark(e); sl.addShape('line', { ...nm(e), x: inch(e.x), y: inch(e.y + e.h / 2), w: inch(e.w), h: 0, rotate: e.r || 0, shadow, line: { color: noHash(e.line || th.fg), width: e.lw || 3, transparency: tr || undefined, endArrowType: e.k !== 'line' ? 'triangle' : undefined, beginArrowType: e.k === 'arrow2' ? 'triangle' : undefined } });
               continue;
             }
             const o = { ...boxO, shape: SHAPE_P[e.k] || 'rect', shadow, flipH: !!e.fx, flipV: !!e.fy };
@@ -873,12 +886,13 @@
             }
             if (e.html && !openK) {
               Object.assign(o, { fontFace: face, fontSize: e.fs || 20, color: noHash(e.c || (e.fill ? '#FFFFFF' : th.fg)), valign: VA[e.va || 'm'], margin: e.pad != null ? e.pad : 8, align: 'center' });
-              sl.addText(runsOf(e.html, { color: o.color, fs: e.fs || 20 }), o);
-            } else sl.addText('', o);
+              const rr = runsOf(e.html, { color: o.color, fs: e.fs || 20 }); mark(e, rr.units);
+              sl.addText(rr, { ...o, ...nm(e) });
+            } else { mark(e); sl.addText('', { ...o, ...nm(e) }); }
           } else if (e.t === 'img') {
             const o = { ...boxO, data: await imgData(e.src), flipH: !!e.fx, flipV: !!e.fy, shadow };
             if (tr) o.transparency = tr;
-            sl.addImage(o);
+            mark(e); sl.addImage({ ...o, ...nm(e) });
           } else if (e.t === 'table') {
             const n = e.rows[0] ? e.rows[0].length : 1;
             const cw = e.cw || e.rows[0].map(() => 1 / n);
@@ -892,7 +906,7 @@
               if (sp) { if (sp[0] > 1) options.rowspan = sp[0]; if (sp[1] > 1) options.colspan = sp[1]; }
               return { text: runsOf(cell, { color, fs: e.fs || 18 }), options };
             }).filter(Boolean));
-            sl.addTable(rows, { x: inch(e.x), y: inch(e.y), w: inch(e.w), colW: cw.map((f) => inch(f * e.w)), rowH: inch(e.h / Math.max(1, e.rows.length)), fontFace: face, fontSize: e.fs || 18, valign: 'middle', border: { type: 'solid', pt: 1, color: noHash(e.line || '#868E96') }, margin: Math.max(1, Math.round((e.fs || 18) / 3)) });
+            mark(e); sl.addTable(rows, { ...nm(e), x: inch(e.x), y: inch(e.y), w: inch(e.w), colW: cw.map((f) => inch(f * e.w)), rowH: inch(e.h / Math.max(1, e.rows.length)), fontFace: face, fontSize: e.fs || 18, valign: 'middle', border: { type: 'solid', pt: 1, color: noHash(e.line || '#868E96') }, margin: Math.max(1, Math.round((e.fs || 18) / 3)) });
           } else if (e.t === 'chart') {
             const T = { col: 'bar', bar: 'bar', line: 'line', pie: 'pie' }[e.ct] || 'bar';
             const ser = (e.series || []).filter((x) => x && Array.isArray(x.v));
@@ -902,7 +916,7 @@
             const o = { ...boxO, chartColors: P.chartColors(th).map(noHash), showLegend: e.legend !== 0 && (e.ct === 'pie' || data.length > 1), legendPos: 'b', legendFontSize: fs, catAxisLabelFontSize: fs, valAxisLabelFontSize: fs, showTitle: !!e.title, title: e.title || '', titleFontSize: Math.round(fs * 1.25) };
             if (T === 'bar') o.barDir = e.ct === 'bar' ? 'bar' : 'col';
             delete o.rotate;
-            sl.addChart(T, data, o);
+            mark(e); sl.addChart(T, data, { ...o, ...nm(e) });
           }
         } catch (err) { skipped++; }
       }
@@ -915,8 +929,62 @@
       }
       if (s.notes) sl.addNotes(s.notes);
     }
-    const blob = await pres.write({ outputType: 'blob' });
+    let bin = new Uint8Array(await pres.write({ outputType: 'arraybuffer' }));
+    // Übergänge und Animationen nachtragen (der PowerPoint-Baustein kann beides nicht selbst)
+    if (deck.slides.some((s) => s.tr) || AN.some((a) => a.length)) {
+      const z = window.fflate.unzipSync(bin);
+      deck.slides.forEach((s, i) => {
+        const pth = `ppt/slides/slide${i + 1}.xml`;
+        if (!z[pth]) return;
+        const x = window.fflate.strFromU8(z[pth]);
+        const add = transXml(s.tr) + timingXml(x, s, AN[i]);
+        if (add) z[pth] = window.fflate.strToU8(x.includes('</p:clrMapOvr>') ? x.replace('</p:clrMapOvr>', '</p:clrMapOvr>' + add) : x.replace('</p:sld>', add + '</p:sld>'));
+      });
+      bin = window.fflate.zipSync(z, { level: 6 });
+    }
+    const blob = new Blob([bin], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
     return { blob, skipped };
+  }
+
+  // ---- Übergang und Animationen einer Folie als PowerPoint-XML
+  const TRX = { fade: '<p:fade/>', push: '<p:push dir="u"/>', wipe: '<p:wipe/>', zoom: '<p:zoom/>', cover: '<p:cover/>' };
+  const transXml = (tr) => (TRX[tr] ? `<p:transition spd="med">${TRX[tr]}</p:transition>` : '');
+  function timingXml(xml, s, list) {
+    if (!list || !list.length) return '';
+    const idOf = (e) => { const m = xml.match(new RegExp(`<p:cNvPr id="(\\d+)" name="ps-${e.id}"`)); return m ? m[1] : null; };
+    const ord = X().animOrder(s);
+    const items = list.map((x) => ({ ...x, spid: idOf(x.e) })).filter((x) => x.spid).sort((a, b) => ord.indexOf(a.e) - ord.indexOf(b.e));
+    if (!items.length) return '';
+    let cid = 3;
+    const nid = () => cid++;
+    const tgt = (spid, rg) => `<p:tgtEl><p:spTgt spid="${spid}">${rg ? `<p:txEl><p:pRg st="${rg[0]}" end="${rg[1]}"/></p:txEl>` : ''}</p:spTgt></p:tgtEl>`;
+    const setVis = (T) => `<p:set><p:cBhvr><p:cTn id="${nid()}" dur="1" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn>${T}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="visible"/></p:to></p:set>`;
+    const anim = (T, attr, from, to) => `<p:anim calcmode="lin" valueType="num"><p:cBhvr additive="base"><p:cTn id="${nid()}" dur="500" fill="hold"/>${T}<p:attrNameLst><p:attrName>${attr}</p:attrName></p:attrNameLst></p:cBhvr><p:tavLst><p:tav tm="0"><p:val><p:strVal val="${from}"/></p:val></p:tav><p:tav tm="100000"><p:val><p:strVal val="${to}"/></p:val></p:tav></p:tavLst></p:anim>`;
+    const fade = (T) => `<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="${nid()}" dur="500"/>${T}</p:cBhvr></p:animEffect>`;
+    const effect = (k, spid, rg, node) => {
+      const [pid, sub] = { appear: [1, 0], fade: [10, 0], fly: [2, 4], zoom: [53, 16] }[k] || [10, 0];
+      const me = nid(), T = tgt(spid, rg);
+      const inner = k === 'appear' ? setVis(T) : k === 'fly' ? setVis(T) + anim(T, 'ppt_x', '#ppt_x', '#ppt_x') + anim(T, 'ppt_y', '1+#ppt_h/2', '#ppt_y')
+        : k === 'zoom' ? setVis(T) + anim(T, 'ppt_w', '0', '#ppt_w') + anim(T, 'ppt_h', '0', '#ppt_h') + fade(T) : setVis(T) + fade(T);
+      return `<p:par><p:cTn id="${me}" presetID="${pid}" presetClass="entr" presetSubtype="${sub}" grpId="0" fill="hold" nodeType="${node}"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>${inner}</p:childTnLst></p:cTn></p:par>`;
+    };
+    // Klicks wie beim Vortrag in PDF-Stift: gleiche Nummer = gemeinsam, absatzweise = je Absatz ein Klick
+    const clicks = [];
+    let prev = null;
+    for (const it of items) {
+      const e = it.e;
+      if (prev && !e.ap && !prev.e.ap && e.ao != null && e.ao === prev.e.ao) clicks[clicks.length - 1].push([e.an, it.spid, null]);
+      else if (e.ap && it.units && it.units.length) for (const rg of it.units) clicks.push([[e.an, it.spid, rg]]);
+      else clicks.push([[e.an, it.spid, null]]);
+      prev = it;
+    }
+    const body = clicks.map((c) => {
+      const a = nid(), b = nid();
+      const fx = c.map(([k, spid, rg], i) => effect(k, spid, rg, i ? 'withEffect' : 'clickEffect')).join('');
+      return `<p:par><p:cTn id="${a}" fill="hold"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst><p:childTnLst><p:par><p:cTn id="${b}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>${fx}</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>`;
+    }).join('');
+    const bld = items.filter((it) => it.units).map((it) => (it.e.ap ? `<p:bldP spid="${it.spid}" grpId="0" build="p"/>` : `<p:bldP spid="${it.spid}" grpId="0" animBg="1"/>`)).join('');
+    return `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst><p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>${body}</p:childTnLst></p:cTn><p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst><p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst></p:seq></p:childTnLst></p:cTn></p:par></p:tnLst>${bld ? `<p:bldLst>${bld}</p:bldLst>` : ''}</p:timing>`;
   }
 
   window.PDFSTIFT_PPTX = { importPptx, exportPptx };
