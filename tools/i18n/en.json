@@ -2599,5 +2599,11 @@
   "Layout": "Layout",
   "Hintergrund": "Background",
   "Design aller Folien": "Design of all slides",
-  "\n      </div>\n      <div class=\"dk-fmt rb-band\"></div>\n      <div class=\"dk-main\">\n        <aside class=\"dk-list\" aria-label=\"Folien\"></aside>\n        <div class=\"dk-stage\"><div class=\"dk-box\"></div></div>\n      </div>\n      <input type=\"file\" class=\"dk-file\" accept=\"image/*\" hidden>": "\n      </div>\n      <div class=\"dk-fmt rb-band\"></div>\n      <div class=\"dk-main\">\n        <aside class=\"dk-list\" aria-label=\"Slides\"></aside>\n        <div class=\"dk-stage\"><div class=\"dk-box\"></div></div>\n      </div>\n      <input type=\"file\" class=\"dk-file\" accept=\"image/*\" hidden>"
+  "\n      </div>\n      <div class=\"dk-fmt rb-band\"></div>\n      <div class=\"dk-main\">\n        <aside class=\"dk-list\" aria-label=\"Folien\"></aside>\n        <div class=\"dk-stage\"><div class=\"dk-box\"></div></div>\n      </div>\n      <input type=\"file\" class=\"dk-file\" accept=\"image/*\" hidden>": "\n      </div>\n      <div class=\"dk-fmt rb-band\"></div>\n      <div class=\"dk-main\">\n        <aside class=\"dk-list\" aria-label=\"Slides\"></aside>\n        <div class=\"dk-stage\"><div class=\"dk-box\"></div></div>\n      </div>\n      <input type=\"file\" class=\"dk-file\" accept=\"image/*\" hidden>",
+  "Menüband oben": "Ribbon at the top",
+  "Menüband unten": "Ribbon at the bottom",
+  "Menüband links": "Ribbon on the left",
+  "Menüband rechts": "Ribbon on the right",
+  "Menüband verschieben": "Move ribbon",
+  "Menüband verschieben: an den Rand ziehen – oder antippen": "Move ribbon: drag to an edge – or tap"
 }

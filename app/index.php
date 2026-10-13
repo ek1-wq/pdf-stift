@@ -312,7 +312,14 @@ header('Referrer-Policy: same-origin');
       <div id="widths" class="group" aria-label="Strichstärke"></div>
     </div>
   </div>
-  <div id="obRibbon" class="ob-ribbon rb-band" role="toolbar" aria-label="Einfügen und Formatieren" hidden></div>
+  <div id="obRibbon" class="ob-ribbon rb-band" role="toolbar" aria-label="Einfügen und Formatieren" hidden>
+    <div class="menu-wrap tb-grip-wrap rb-grip-wrap">
+      <button id="rbGrip" type="button" class="tb-grip" aria-label="Menüband verschieben" title="Menüband verschieben: an den Rand ziehen – oder antippen">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>
+      </button>
+    </div>
+    <div class="rb-fmt"></div>
+  </div>
   </div>
   <div id="dockL" class="dock dock-v"></div>
   <div id="dockR" class="dock dock-v"></div>

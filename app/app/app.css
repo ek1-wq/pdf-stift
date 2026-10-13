@@ -1363,3 +1363,17 @@ body.ob-placing .page { cursor: crosshair !important; }
 @font-face { font-family: 'PS Caveat'; src: url(../vendor/fonts/Caveat-Regular.ttf) format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: 'PS Caveat'; src: url(../vendor/fonts/Caveat-Bold.ttf) format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
 .rb-font { max-width: 150px; }
+/* Menüband verschiebbar wie die anderen Leisten */
+.rb-grip-wrap { display: flex; align-items: center; padding: 0 2px 14px 0; }
+.dock-line > .rb-band { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
+#dockT .dock-line > .rb-band { border-bottom: 1px solid var(--line); }
+#dockB .dock-line > .rb-band { border-top: 1px solid var(--line); }
+#dockL .rb-band, #dockR .rb-band { flex-direction: column; width: 248px; max-height: 100%; overflow-y: auto; overflow-x: hidden; padding: 4px 4px 8px; border-bottom: 0; }
+#dockL .rb-band { border-right: 1px solid var(--line); } #dockR .rb-band { border-left: 1px solid var(--line); }
+#dockL .rb-fmt, #dockR .rb-fmt { flex-direction: column; }
+#dockL .rb-grp, #dockR .rb-grp { flex-wrap: wrap; justify-content: flex-start; border-right: 0; border-bottom: 1px solid var(--line); padding: 4px 4px 18px; }
+#dockL .rb-grp:last-child, #dockR .rb-grp:last-child { border-bottom: 0; }
+#dockL .rb-row, #dockR .rb-row { flex-wrap: wrap; }
+#dockL .rb-grip-wrap, #dockR .rb-grip-wrap { padding: 0 0 4px; justify-content: center; }
+#dockL .rb-grip-wrap .tb-grip, #dockR .rb-grip-wrap .tb-grip { width: 32px; height: 16px; }
+#dockL .rb-grip-wrap .tb-grip::before, #dockR .rb-grip-wrap .tb-grip::before { width: 18px; height: 3px; }

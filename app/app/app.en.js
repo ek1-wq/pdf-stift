@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.70.0';
+  const VERSION = '1.70.1';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -4782,9 +4782,10 @@
     const show = !$('#toolbar').hidden && !!V.path && !V.board && !V.deck && !EMBED && !SHOW && !PROMPTER;
     if (rb.hidden === !show) return;
     rb.hidden = !show;
-    if (show && !rb.firstChild) ensureDeck().then((DK) => {
-      if (rb.firstChild) return;
-      rb.innerHTML = '<div class="rb-fmt"></div>';
+    lineSync(); tbMeasure();
+    if (show && !rb.dataset.ready) ensureDeck().then(() => {
+      if (rb.dataset.ready) return;
+      rb.dataset.ready = '1';
       if (OB.ed) OB.ed.renderFmt(); else obIdle().renderFmt();
     }).catch(() => {});
   }
@@ -6394,7 +6395,7 @@
   const TB_POS = ['top', 'bottom', 'left', 'right'];
   const DOCK = { top: 'dockT', bottom: 'dockB', left: 'dockL', right: 'dockR' };
   const EDGE_OF = { dockT: 'top', dockB: 'bottom', dockL: 'left', dockR: 'right' };
-  const BAR_EL = { vb: '#viewBar', tb: '#toolbar', tb2: '#toolbar2' };
+  const BAR_EL = { vb: '#viewBar', tb: '#toolbar', tb2: '#toolbar2', rb: '#obRibbon' };
   // Anordnung der Leisten: je Rand eine Liste von Zeilen (oben/unten) bzw. Spalten (links/rechts),
   // jede Zeile enthält eine oder mehrere Leisten nebeneinander – wie bei Office-Symbolleisten.
   // vb = Symbolleiste (nur wenn sie nicht in der Kopfzeile sitzt), tb = Stifte-Leiste, tb2 = Werkzeug-Leiste
@@ -6418,6 +6419,7 @@
     else if (!seen.has('vb')) L.top.unshift(['vb']);
     if (!seen.has('tb')) L.top.push(['tb']);
     if (!seen.has('tb2')) L.top.push(['tb2']);
+    if (!seen.has('rb')) L.top.push(['rb']); // Menüband (Objekte wie in PowerPoint)
     return L;
   }
   function laySet(L) { ls('dockLay', L); dockApply(); }
@@ -6572,6 +6574,7 @@
   });
   barGrip('tb', $('#tbGrip'), TB1_LABEL);
   barGrip('tb2', $('#tb2Grip'), TB2_LABEL);
+  barGrip('rb', $('#rbGrip'), { top: "Ribbon at the top", bottom: "Ribbon at the bottom", left: "Ribbon on the left", right: "Ribbon on the right" });
   dockGrip($('#vbGrip'), {
     bar: 'vb',
     get: () => (vbPos() === 'd' ? edgeOfBar('vb') : vbPos() === '2' ? 'top2' : vbPos()),
