@@ -5,7 +5,9 @@
 (() => {
   'use strict';
   const C = window.PDFSTIFT_CORE;
-  const W = 960, H = 540; // Folie in Bildpunkten (16:9); als PDF 720 × 405 pt
+  const W = 960; // Folie in Bildpunkten: 960 × 540 (16:9) oder 960 × 720 (4:3); als PDF 0,75 pt je Bildpunkt
+  let H = 540;
+  const slideH = (th) => (th && th.size === '43' ? 720 : 540);
   const $ = (q, el = document) => el.querySelector(q);
   const esc = C.esc;
   const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -126,7 +128,7 @@
   const plain = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
   // unberührter Platzhalter: in der Bearbeitung grau, beim Vortragen und im PDF unsichtbar
   const isPh = (e) => !!(e.ph && e.t === 'text' && PH_TEXT.includes(plain(e.html)));
-  const newSlide = (lay) => ({ id: uid(), els: (LAYOUTS[lay] || LAYOUTS.blank).els().map((e) => ({ id: uid(), r: 0, ...e })) });
+  const newSlide = (lay) => ({ id: uid(), els: (LAYOUTS[lay] || LAYOUTS.blank).els().map((e) => ({ id: uid(), r: 0, ...e, y: Math.round(e.y * H / 540), h: Math.round(e.h * H / 540) })) });
   const theme = () => D.deck.theme || (D.deck.theme = { ...DEF_TH });
   const slide = () => D.deck && D.deck.slides[D.cur];
   const LINE_K = ['line', 'arrow', 'arrow2'], OPEN_K = ['elbow', 'brackL', 'brackR', 'braceL', 'braceR', 'arc'];
@@ -299,11 +301,24 @@
     }
     return n;
   }
+  // Hintergrund: Folie vor Design; Bild vor Verlauf vor Farbe
+  function bgOf(s, th) {
+    const o = s && (s.bgImg || s.bgGrad || s.bg) ? s : th || DEF_TH;
+    return { img: o.bgImg || '', grad: o.bgGrad || null, color: o.bg || (th && th.bg) || '#FFFFFF' };
+  }
+  const GRAD_DIR = { v: '180deg', h: '90deg', d: '135deg' };
+  function bgCss(s, th) {
+    const b = bgOf(s, th);
+    if (b.img) return `${b.color} url("${imgUrl(b.img)}") center/cover no-repeat`;
+    if (b.grad) return `linear-gradient(${GRAD_DIR[b.grad.dir] || '180deg'}, ${b.grad.a}, ${b.grad.b})`;
+    return b.color;
+  }
   function slideNode(s, scale, live, th) {
     th = th || DEF_TH;
     const sl = document.createElement('div');
     sl.className = 'dk-slide';
-    sl.style.cssText = `width:${W}px;height:${H}px;background:${s.bg || th.bg};font-family:${fontCss(th.font)};transform:scale(${scale});transform-origin:0 0`;
+    sl.style.cssText = `width:${W}px;height:${H}px;font-family:${fontCss(th.font)};transform:scale(${scale});transform-origin:0 0`;
+    sl.style.background = bgCss(s, th);
     for (const e of s.els) if (live || !isPh(e)) sl.appendChild(elNode(e, th));
     for (const e of hfEls(D.deck ? D.deck.slides.indexOf(s) : -1)) { const n = elNode(e, th); n.classList.add('dk-hf'); sl.appendChild(n); }
     return sl;
@@ -376,6 +391,8 @@
     date: '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>', hf: '<rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M7 16.5h10M7 7h10" stroke-dasharray="2 1.5"/>',
     num: '<rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M14 17h3M15.5 14v3"/>', legend: '<rect x="4" y="5" width="4" height="4"/><path d="M11 7h9"/><rect x="4" y="11" width="4" height="4"/><path d="M11 13h9"/>',
     slidesPdf: '<path d="M7 3h7l4 4v6"/><path d="M14 3v4h4"/><rect x="3.5" y="13" width="13" height="8" rx="1"/><path d="M19 15v6M16 18h6"/>',
+    grid: '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M9 3.5v17M15 3.5v17M3.5 9h17M3.5 15h17" stroke-opacity=".55"/>', guides: '<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M12 3.5v17M3.5 12h17" stroke-dasharray="2 1.5"/>',
+    magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4z"/><path d="M6 8h4M14 8h4"/>', zoom: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20M8 10.5h5M10.5 8v5"/>', fitwin: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="8" y="8" width="8" height="8" rx="1"/>',
     painter: '<rect x="4" y="3.5" width="14" height="6" rx="1.5"/><path d="M18 6.5h2v5h-8.5v3"/><rect x="10" y="14.5" width="3" height="6.5" rx="1"/>',
     strike: '<path d="M16.5 7.5c-.8-1.6-2.4-2.5-4.5-2.5-2.6 0-4.5 1.4-4.5 3.4 0 1.5 1 2.4 3 3"/><path d="M4 12h16"/><path d="M8 16.5c.6 1.6 2.2 2.5 4.3 2.5 2.7 0 4.7-1.4 4.7-3.5 0-.8-.3-1.5-.9-2"/>',
     sup: '<path d="M4 8l8 11M12 8l-8 11"/><path d="M15.5 5.5c.4-1 1.2-1.5 2.2-1.5 1.2 0 2 .7 2 1.7 0 1.6-2.4 2.3-4.2 4.3h4.4"/>',
@@ -896,6 +913,7 @@
     }
     // Format anwenden: im Bearbeiten auf die Markierung, sonst aufs ganze Element
     function fmt(f, v, btn) {
+      if (host.fmtExt && host.fmtExt(f, v, btn)) return;
       const ids = ED.sel.slice();
       const each = (fn) => change(() => ids.forEach((id) => { const e = byId(id); if (e) fn(e); }), true);
       if (f.startsWith('x:')) { act(f.slice(2), btn); return; }
@@ -1216,14 +1234,27 @@
         if (!moved && host.dragStart) host.dragStart();
         moved = true;
         if (mode === 'move') {
-          // an der Mitte einrasten
-          const o0 = orig[0];
+          // einrasten: an Rändern und Mitten anderer Objekte und der Fläche (Alt = frei), sonst am Raster
+          const gx = [], gy = [];
           if (!m.altKey) {
-            const cx = o0.x + dx + o0.w / 2, cy = o0.y + dy + o0.h / 2, sn = 6 / (host.k() || 1);
-            if (Math.abs(cx - Wd / 2) < sn) dx = Wd / 2 - o0.w / 2 - o0.x;
-            if (Math.abs(cy - Ht / 2) < sn) dy = Ht / 2 - o0.h / 2 - o0.y;
+            const L0 = Math.min(...orig.map((o) => o.x)), T0 = Math.min(...orig.map((o) => o.y));
+            const bw = Math.max(...orig.map((o) => o.x + o.w)) - L0, bh = Math.max(...orig.map((o) => o.y + o.h)) - T0;
+            const sn = 7 / (host.k() || 1);
+            if (host.snapOn ? host.snapOn() : true) {
+              const others = els().filter((x) => !ED.sel.includes(x.id));
+              const tx = [0, Wd / 2, Wd, ...others.flatMap((x) => [x.x, x.x + x.w / 2, x.x + x.w])];
+              const ty = [0, Ht / 2, Ht, ...others.flatMap((x) => [x.y, x.y + x.h / 2, x.y + x.h])];
+              const best = (pts, ts) => { let b = null; for (const p0 of pts) for (const t of ts) { const d0 = t - p0; if (Math.abs(d0) < sn && (!b || Math.abs(d0) < Math.abs(b.d))) b = { d: d0, t }; } return b; };
+              const bx = best([L0 + dx, L0 + dx + bw / 2, L0 + dx + bw], tx), by = best([T0 + dy, T0 + dy + bh / 2, T0 + dy + bh], ty);
+              if (bx) { dx += bx.d; gx.push(bx.t); }
+              if (by) { dy += by.d; gy.push(by.t); }
+            }
+            const gs = host.gridSize ? host.gridSize() : 0;
+            if (gs && !gx.length) dx = Math.round((L0 + dx) / gs) * gs - L0;
+            if (gs && !gy.length) dy = Math.round((T0 + dy) / gs) * gs - T0;
           }
           list.forEach((e, i) => { e.x = r1(orig[i].x + dx); e.y = r1(orig[i].y + dy); });
+          snapLines(gx, gy);
         } else if (mode === 'rot') {
           const e = list[0], o = orig[0];
           const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
@@ -1256,12 +1287,22 @@
         if (uev.pointerId !== pid) return;
         uev.stopPropagation();
         tgt.removeEventListener('pointermove', mv, true); tgt.removeEventListener('pointerup', up, true); tgt.removeEventListener('pointercancel', up, true);
+        snapLines([], []);
         if (moved) { host.commit(before); render(); }
         else if (clickEdit && mode === 'move') startEdit(clickEdit, uev);
       };
       tgt.addEventListener('pointermove', mv, true); tgt.addEventListener('pointerup', up, true); tgt.addEventListener('pointercancel', up, true);
     }
 
+    // Hilfslinien beim Einrasten
+    function snapLines(gx, gy) {
+      const sl = host.box() && host.box().querySelector('.dk-slide');
+      if (!sl) return;
+      sl.querySelectorAll('.dk-snapline').forEach((x) => x.remove());
+      const k = 1 / (host.k() || 1);
+      for (const x of gx) { const d = document.createElement('div'); d.className = 'dk-snapline'; d.style.cssText = `left:${x}px;top:0;width:${k}px;height:${host.H()}px`; sl.appendChild(d); }
+      for (const y of gy) { const d = document.createElement('div'); d.className = 'dk-snapline'; d.style.cssText = `top:${y}px;left:0;height:${k}px;width:${host.W()}px`; sl.appendChild(d); }
+    }
     // ---------------------------------------------------------------- Einfügen
     function insertAt(kind, x, y, rect) {
       const base = { id: uid(), r: 0 };
@@ -1454,6 +1495,29 @@
   }
 
   // ================================================================== Präsentationen
+  // Designs: Hintergrund, Schriftfarbe, Akzent (Tabellenkopf, Formen) und Schrift
+  const THEMES = [
+    ["Clear", { bg: '#FFFFFF', fg: '#1A1A1A', accent: '#1E2F6E', font: 'sans' }],
+    ["Night blue", { bg: '#1E2F6E', fg: '#FFFFFF', accent: '#B8E62E', font: 'sans' }],
+    ["Slate", { bg: '#22262E', fg: '#F1F3F5', accent: '#0091FF', font: 'inter' }],
+    ["Paper", { bg: '#FBF6EA', fg: '#3B2F2F', accent: '#A0522D', font: 'ebgaramond' }],
+    ["Forest", { bg: '#0B3D2E', fg: '#F1F3F5', accent: '#B8E62E', font: 'lato' }],
+    ["Coral", { bg: '#FFFFFF', fg: '#2B2B2B', accent: '#E8590C', font: 'montserrat' }],
+    ["Purple", { bg: '#F4F1FB', fg: '#2A2140', accent: '#7048E8', font: 'worksans' }],
+    ["Chalkboard", { bg: '#25332B', fg: '#F8F9FA', accent: '#FFE066', font: 'patrickhand' }],
+    ["Ocean", { bgGrad: { a: '#1E2F6E', b: '#0091FF', dir: 'd' }, bg: '#1E2F6E', fg: '#FFFFFF', accent: '#B8E62E', font: 'sans' }],
+    ["Sun", { bgGrad: { a: '#FFF3BF', b: '#FFD8A8', dir: 'v' }, bg: '#FFF3BF', fg: '#2B2B2B', accent: '#E8590C', font: 'poppins' }],
+    ["Mint", { bgGrad: { a: '#FFFFFF', b: '#D3F9D8', dir: 'v' }, bg: '#FFFFFF', fg: '#1A1A1A', accent: '#1B8A3A', font: 'nunito' }],
+    ["Midnight", { bgGrad: { a: '#141824', b: '#2B3245', dir: 'd' }, bg: '#141824', fg: '#E9ECEF', accent: '#D6409F', font: 'roboto' }],
+  ];
+  const ACCENTS = ['#1E2F6E', '#1F4FD6', '#0091FF', '#1B8A3A', '#B8E62E', '#E8590C', '#D6262B', '#D6409F', '#7048E8', '#A0522D', '#FFE066', '#868E96'];
+  const VIEW = { grid: false, guides: false, snap: true, notes: false, zoom: 1, sorter: false };
+  try { Object.assign(VIEW, JSON.parse(localStorage.getItem('pdfstift.dkView') || '{}'), { sorter: false }); } catch (er) { /* */ }
+  const viewSave = () => { try { localStorage.setItem('pdfstift.dkView', JSON.stringify({ grid: VIEW.grid, guides: VIEW.guides, snap: VIEW.snap, notes: VIEW.notes, zoom: VIEW.zoom })); } catch (er) { /* */ } };
+  function themeTile(name, t) {
+    const bg = bgCss(null, t);
+    return `<button type="button" class="dk-theme" data-f="theme" data-v="${esc(name)}" title="${esc(name)}"><span class="tt" style="background:${bg};color:${t.fg};font-family:${esc(fontCss(t.font))}">Aa<i style="background:${t.accent}"></i></span><span class="tn">${esc(name)}</span></button>`;
+  }
   const ib = (id, ic, title, label) => `<button type="button" class="dk-b" data-a="${id}" title="${esc(title)}" aria-label="${esc(title)}"><svg viewBox="0 0 24 24">${ic}</svg>${label ? `<span>${esc(label)}</span>` : ''}</button>`;
 
   const deckHost = {
@@ -1467,7 +1531,13 @@
     snap: () => snap(),
     commit(b) { if (b !== snap()) { D.undo.push(b); if (D.undo.length > 150) D.undo.shift(); D.redo = []; } renderList(); save(); },
     typing() { save(); clearTimeout(D.thumbT); D.thumbT = setTimeout(renderList, 500); },
-    surface: () => (slide() ? slideNode(slide(), D.k || 1, true, theme()) : null),
+    surface: () => {
+      if (!slide()) return null;
+      const sl = slideNode(slide(), D.k || 1, true, theme());
+      if (VIEW.grid) { const g = document.createElement('div'); g.className = 'dk-gridov'; sl.appendChild(g); }
+      if (VIEW.guides) { const g = document.createElement('div'); g.className = 'dk-guideov'; sl.appendChild(g); }
+      return sl;
+    },
     rendered: () => fit(),
     placing: (on, kind) => { if (!D.root) return; D.root.classList.toggle('dk-placing', !!on); D.root.querySelectorAll('[data-ins]').forEach((b) => b.classList.toggle('on', !!on && b.dataset.ins === kind)); },
     pickImage: () => $('.dk-file', D.root).click(),
@@ -1475,6 +1545,29 @@
     ribbonPre: ({ grp, rows, big, mb }) => grp("slides", big('data-menu="newslide"', "New slide", RI.newslide, true, true) +
       rows(mb('layout', "Layout of this slide", RI.layout, true, 'Layout'), mb('bg', "Background", RI.bg, true, "Background"), mb('design', "Design of all slides", RI.design, true, 'Design'))),
     act: (a) => { if (a === 'hf') { hfDialog(); return true; } return false; },
+    tabs: () => [['design', "Design"], ['view', "View"]],
+    tabContent: (tab, { grp, rows, big, sb, mb }) => {
+      const th = theme();
+      if (tab === 'design') {
+        return grp("Themes", `<div class="dk-themes">${THEMES.map(([n, t]) => themeTile(n, t)).join('')}</div>`) +
+          grp("Customize", rows(mb('accent', "Accent colour (table header, new shapes)", RI.design, true, "Colours"), fontSelect(th.font || 'sans', true).replace('data-f="ff"', 'data-f="thfont"').replace('title="Schriftart"', "title=\"Font of all slides\""), mb('bgfmt', "Background", RI.bg, true, "Background"))) +
+          grp("slides", big('data-menu="size"', th.size === '43' ? "Slide size 4:3" : "Slide size 16:9", RI.layout, true, true) + big('data-menu="layout"', 'Layout', RI.layout, true, true));
+      }
+      if (tab === 'view') {
+        return grp("Views", big('data-f="vw:normal"', 'Normal', RI.layout) + big('data-f="vw:sorter"', "Slide sorter", ICON.slide) + big('data-f="vw:notes"', "Notes", RI.hf)) +
+          grp("Show", rows(sb('vw:grid', "Gridlines", RI.grid, { label: "Grid", on: VIEW.grid }), sb('vw:guides', "Guides (centre)", RI.guides, { label: "Guides", on: VIEW.guides }), sb('vw:snap', "Snap to other objects and the centre while moving", RI.magnet, { label: "Snap", on: VIEW.snap }))) +
+          grp('Zoom', big('data-menu="zoom"', 'Zoom ' + Math.round(VIEW.zoom * 100) + ' %', RI.zoom, true, true) + big('data-f="vw:fit"', "Fit to window", RI.fitwin));
+      }
+      return '';
+    },
+    fmtExt: (f, v) => {
+      if (f === 'theme') { const t = (THEMES.find((x) => x[0] === v) || [])[1]; if (t) change(() => { const sz = theme().size; D.deck.theme = { ...clone(t), ...(sz ? { size: sz } : {}) }; D.deck.slides.forEach((s0) => { delete s0.bg; delete s0.bgGrad; delete s0.bgImg; }); }); return true; }
+      if (f === 'thfont') { if (fontOk(v)) change(() => { theme().font = v; }); return true; }
+      if (f.startsWith('vw:')) { viewAct(f.slice(3)); return true; }
+      return false;
+    },
+    snapOn: () => VIEW.snap,
+    gridSize: () => (VIEW.grid ? 20 : 0),
     insertText: ({ sb }) => sb('x:hf', "Header and footer, Foliennummer, Date", RI.hf, { label: "Footer …" }),
     insertExtra: ({ grp, big }) => grp("slides", big('data-menu="pdfslides"', "Slides from PDF", RI.slidesPdf)),
     menu: (m, btn) => {
@@ -1487,8 +1580,11 @@
         slide().els = [...newSlide(k).els, ...keep];
         D.ed.sel = [];
       })]));
-      if (m === 'bg') bgMenu(x, y, false);
+      if (m === 'bg' || m === 'bgfmt') bgMenu(x, y);
       if (m === 'design') designMenu(x, y);
+      if (m === 'accent') popMenu(x, y, ACCENTS.map((c) => [c.slice(1), `<span class="dk-sw" style="--c:${c};display:inline-block;vertical-align:middle;margin-right:8px"></span>${c}${theme().accent === c ? ' ✓' : ''}`, () => change(() => { theme().accent = c; })]));
+      if (m === 'size') popMenu(x, y, [['169', "Widescreen 16:9" + (theme().size !== '43' ? ' ✓' : ''), () => setSize('169')], ['43', 'Standard 4:3' + (theme().size === '43' ? ' ✓' : ''), () => setSize('43')]]);
+      if (m === 'zoom') popMenu(x, y, [0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => ['z' + z * 100, Math.round(z * 100) + ' %' + (VIEW.zoom === z ? ' ✓' : ''), () => { VIEW.zoom = z; viewSave(); fit(true); D.ed.renderFmt(); }]));
     },
   };
 
@@ -1505,7 +1601,8 @@
       <div class="dk-fmt rb-band"></div>
       <div class="dk-main">
         <aside class="dk-list" aria-label="Slides"></aside>
-        <div class="dk-stage"><div class="dk-box"></div></div>
+        <div class="dk-center"><div class="dk-stage"><div class="dk-box"></div></div>
+        <div class="dk-notes" hidden><textarea placeholder="Notes for this slide – only for you (e.g. for the talk)" aria-label="Slide notes"></textarea></div></div>
       </div>
       <input type="file" class="dk-file" accept="image/*" hidden>`;
     root.querySelector('.dk-top').onclick = (ev) => { const n = ev.target.closest('[data-ins]'); if (n) { if (D.deck) D.ed.ins(n.dataset.ins); return; } const b = ev.target.closest('[data-a]'); if (b) act(b.dataset.a, b); };
@@ -1514,6 +1611,7 @@
     $('.dk-file', root).onchange = async (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) D.ed.addImage(f); };
     const stage = $('.dk-stage', root);
     new ResizeObserver(() => fit()).observe(stage);
+    $('.dk-notes textarea', root).oninput = (ev) => { const s0 = slide(); if (!s0) return; if (ev.target.value) s0.notes = ev.target.value; else delete s0.notes; save(); };
     stage.addEventListener('pointerdown', (ev) => { if (D.deck) D.ed.down(ev); });
     stage.addEventListener('dblclick', (e) => { const n = e.target.closest('.dk-el'); if (n) D.ed.startEdit(n.dataset.id, e); });
   }
@@ -1527,6 +1625,7 @@
     const r = await C.apiJson('deck', { params: { path } });
     if (D.path !== path) return;
     D.deck = r.deck;
+    H = slideH(D.deck.theme);
     D.rev = r.deck.rev || 0;
     if (!Array.isArray(D.deck.slides)) D.deck.slides = [];
     if (!D.deck.slides.length) { D.deck.slides.push(newSlide('title')); save(); }
@@ -1576,14 +1675,14 @@
   }
 
   // ------------------------------------------------------------------ Änderungen mit Rückgängig
-  function snap() { return JSON.stringify({ slides: D.deck.slides, theme: D.deck.theme, cur: D.cur }); }
+  function snap() { return JSON.stringify({ slides: D.deck.slides, theme: D.deck.theme, hf: D.deck.hf, cur: D.cur }); }
   const change = (fn) => D.ed.change(fn);
-  function restore(json) { const o = JSON.parse(json); D.deck.slides = o.slides; D.deck.theme = o.theme; D.cur = Math.min(o.cur, o.slides.length - 1); D.ed.sel = []; renderAll(); save(); }
+  function restore(json) { const o = JSON.parse(json); D.deck.slides = o.slides; D.deck.theme = o.theme; D.deck.hf = o.hf; H = slideH(o.theme); D.cur = Math.min(o.cur, o.slides.length - 1); D.ed.sel = []; renderAll(); save(); }
   function undo() { D.ed.endEdit(); if (!D.undo.length) return; D.redo.push(snap()); restore(D.undo.pop()); }
   function redo() { D.ed.endEdit(); if (!D.redo.length) return; D.undo.push(snap()); restore(D.redo.pop()); }
 
   // ------------------------------------------------------------------ Darstellung
-  function renderAll() { if (!D.root || !D.deck) return; renderList(); D.ed.render(); }
+  function renderAll() { if (!D.root || !D.deck) return; renderList(); D.ed.render(); renderNotes(); if (D.sorterDraw) D.sorterDraw(); }
   function renderList() {
     if (!D.root || !D.deck) return;
     const list = $('.dk-list', D.root);
@@ -1615,10 +1714,12 @@
     const cur = list.children[D.cur];
     if (cur) cur.scrollIntoView({ block: 'nearest' });
   }
-  function fit() {
+  function fit(force) {
     if (!D.root) return;
     const st = $('.dk-stage', D.root), box = $('.dk-box', D.root);
-    const k = Math.max(0.1, Math.min((st.clientWidth - 48) / W, (st.clientHeight - 48) / H));
+    const k = Math.max(0.1, Math.min((st.clientWidth - 48) / W, (st.clientHeight - 48) / H)) * (VIEW.zoom || 1);
+    st.classList.toggle('zoomed', (VIEW.zoom || 1) > 1);
+    if (force) D.k = 0;
     const changed = Math.abs(k - (D.k || 0)) > 0.001;
     D.k = k;
     box.style.width = W * k + 'px'; box.style.height = H * k + 'px';
@@ -1645,11 +1746,87 @@
       ['del', "Delete slide", () => { if (D.deck.slides.length < 2) { C.toast("The last slide stays."); return; } change(() => { D.deck.slides.splice(D.cur, 1); D.cur = Math.min(D.cur, D.deck.slides.length - 1); }); }],
     ]);
   }
-  function bgMenu(x, y, all) {
-    const cols = ['#FFFFFF', '#F4F6FA', '#FFF8E7', '#1E2F6E', '#1A1A1A', '#0B3D2E'];
-    popMenu(x, y, cols.map((c) => [c, `<span class="dk-sw" style="--c:${c};display:inline-block;vertical-align:middle;margin-right:8px"></span>${c}`, () => change(() => {
-      if (all) { theme().bg = c; theme().fg = ['#1E2F6E', '#1A1A1A', '#0B3D2E'].includes(c) ? '#FFFFFF' : '#1A1A1A'; D.deck.slides.forEach((s) => delete s.bg); } else slide().bg = c;
-    })]));
+  // Hintergrund dieser Folie: Farbe, Verlauf, Bild – oder für alle Folien übernehmen
+  function bgMenu(x, y) {
+    const cols = ['#FFFFFF', '#F4F6FA', '#FBF6EA', '#FFF3BF', '#D3F9D8', '#D0EBFF', '#1E2F6E', '#22262E', '#0B3D2E', '#1A1A1A'];
+    popMenu(x, y, [
+      ...cols.map((c) => [c.slice(1), `<span class="dk-sw" style="--c:${c};display:inline-block;vertical-align:middle;margin-right:8px"></span>Farbe ${c}`, () => change(() => { const s0 = slide(); delete s0.bgGrad; delete s0.bgImg; s0.bg = c; })]),
+      ['-', ''],
+      ['grad', "Gradient …", () => gradDlg()],
+      ['img', "Picture as background …", () => { const f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*'; f.onchange = async () => { const file = f.files[0]; if (!file) return; try { C.toast("Loading picture …", 20000); const res = await C.uploadImage(await C.prepareImage(file)); change(() => { const s0 = slide(); delete s0.bgGrad; s0.bgImg = res.src; }); C.toast("Background set.", 1500); } catch (err) { C.toast(err.message); } }; f.click(); }],
+      ['-', ''],
+      ['all', "Use this background for all slides", () => change(() => { const s0 = slide(), th = theme(); const b0 = bgOf(s0, th); th.bg = b0.color; if (b0.grad) th.bgGrad = b0.grad; else delete th.bgGrad; if (b0.img) th.bgImg = b0.img; else delete th.bgImg; D.deck.slides.forEach((x) => { delete x.bg; delete x.bgGrad; delete x.bgImg; }); })],
+      ['reset', "Reset this slide's background", () => change(() => { const s0 = slide(); delete s0.bg; delete s0.bgGrad; delete s0.bgImg; })],
+    ]);
+  }
+  async function gradDlg() {
+    const g = (slide().bgGrad || theme().bgGrad || { a: '#1E2F6E', b: '#0091FF', dir: 'v' });
+    const d = await modal("Gradient", `<label class="chk">From <input type="color" name="a" value="${g.a}"> to <input type="color" name="b" value="${g.b}"></label>
+      <label class="chk">Direction <select name="dir"><option value="v"${g.dir === 'v' ? ' selected' : ''}>top to bottom</option><option value="h"${g.dir === 'h' ? ' selected' : ''}>left to right</option><option value="d"${g.dir === 'd' ? ' selected' : ''}>diagonal</option></select></label>`, "Apply");
+    if (!d) return;
+    change(() => { const s0 = slide(); delete s0.bgImg; s0.bgGrad = { a: d.querySelector('[name=a]').value, b: d.querySelector('[name=b]').value, dir: d.querySelector('[name=dir]').value }; s0.bg = s0.bgGrad.a; });
+  }
+  // Foliengröße 16:9 ↔ 4:3: Inhalte senkrecht mitstrecken
+  function setSize(sz) {
+    const oldH = H, newH = sz === '43' ? 720 : 540;
+    if (oldH === newH) return;
+    change(() => {
+      const f = newH / oldH;
+      for (const s0 of D.deck.slides) for (const e of s0.els) { e.y = r1(e.y * f); if (e.t !== 'img' && e.t !== 'chart') e.h = r1(e.h * f); }
+      if (sz === '43') theme().size = '43'; else delete theme().size;
+      H = newH;
+    });
+  }
+  // Ansicht-Befehle
+  function viewAct(a) {
+    if (a === 'normal') { closeSorter(); return; }
+    if (a === 'sorter') { openSorter(); return; }
+    if (a === 'notes') { VIEW.notes = !VIEW.notes; viewSave(); renderNotes(); fit(true); return; }
+    if (a === 'grid' || a === 'guides' || a === 'snap') { VIEW[a] = !VIEW[a]; viewSave(); D.ed.render(); return; }
+    if (a === 'fit') { VIEW.zoom = 1; viewSave(); fit(true); D.ed.renderFmt(); }
+  }
+  function renderNotes() {
+    if (!D.root) return;
+    const n = $('.dk-notes', D.root);
+    n.hidden = !VIEW.notes;
+    const ta = $('textarea', n);
+    if (slide() && document.activeElement !== ta) ta.value = slide().notes || '';
+  }
+  // Foliensortierung: große Übersicht, ziehen zum Umsortieren, Doppelklick öffnet
+  function openSorter() {
+    closeSorter();
+    VIEW.sorter = true;
+    const ov = document.createElement('div');
+    ov.className = 'dk-sorter';
+    const draw = () => {
+      ov.innerHTML = "<div class=\"dk-sorter-head\"><b>Slide sorter</b><span class=\"muted small\">Drag to reorder · double-click opens the slide</span><button type=\"button\" class=\"btn small\" data-a=\"close\">Back to normal view</button></div><div class=\"dk-sorter-grid\"></div>";
+      const grid = ov.querySelector('.dk-sorter-grid');
+      const sc = 230 / W;
+      D.deck.slides.forEach((s0, i) => {
+        const it = document.createElement('div');
+        it.className = 'dk-sort-it' + (i === D.cur ? ' cur' : '') + (s0.hidden ? ' hid' : '');
+        it.draggable = true;
+        it.innerHTML = `<div class="dk-mini" style="width:${W * sc}px;height:${H * sc}px"></div><span class="num">${i + 1}${s0.hidden ? " · hidden" : ''}</span>`;
+        it.querySelector('.dk-mini').appendChild(slideNode(s0, sc, false, theme()));
+        it.onclick = () => { D.cur = i; draw(); };
+        it.ondblclick = () => { closeSorter(); go(i); };
+        it.ondragstart = (ev) => { ev.dataTransfer.setData('text/x-dk-slide', String(i)); };
+        it.ondragover = (ev) => { ev.preventDefault(); it.classList.add('drop'); };
+        it.ondragleave = () => it.classList.remove('drop');
+        it.ondrop = (ev) => { ev.preventDefault(); const from = +ev.dataTransfer.getData('text/x-dk-slide'); if (Number.isNaN(from) || from === i) return; change(() => { const [s1] = D.deck.slides.splice(from, 1); D.deck.slides.splice(i, 0, s1); D.cur = i; }); draw(); };
+        grid.appendChild(it);
+      });
+      ov.querySelector('[data-a=close]').onclick = () => closeSorter();
+    };
+    draw();
+    $('.dk-main', D.root).appendChild(ov);
+    D.sorterDraw = draw;
+  }
+  function closeSorter() {
+    VIEW.sorter = false;
+    D.sorterDraw = null;
+    if (D.root) D.root.querySelectorAll('.dk-sorter').forEach((x) => x.remove());
+    renderAll();
   }
   // Kopf- und Fußzeile für alle Folien
   async function hfDialog() {
@@ -1741,6 +1918,7 @@
     }
     if (inField) return;
     const k = ev.key;
+    if (VIEW.sorter) { if (k === 'Escape') { ev.preventDefault(); closeSorter(); } return; }
     if (k === 'F5') { ev.preventDefault(); present(); return; }
     if (mod && k.toLowerCase() === 'z') { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
     if (mod && k.toLowerCase() === 'y') { ev.preventDefault(); redo(); return; }
@@ -2090,6 +2268,35 @@
     }
     return { drawEl };
   }
+  // Hintergrund in die PDF: Farbe, Verlauf (feine Streifen) oder Bild (füllend)
+  async function drawBg(doc, pg, s, th, K) {
+    const b = bgOf(s, th);
+    pg.drawRectangle({ x: 0, y: -H * K, width: W * K, height: H * K, color: hexRgb(b.color) });
+    if (b.grad) {
+      const A = hexRgb(b.grad.a), B = hexRgb(b.grad.b), n = 180, dir = b.grad.dir || 'v';
+      const mix = (t) => PDFLib.rgb(A.red + (B.red - A.red) * t, A.green + (B.green - A.green) * t, A.blue + (B.blue - A.blue) * t);
+      if (dir === 'd') {
+        // schräg: Streifen senkrecht zur Diagonale, über die ganze Folie
+        const L = (W + H) * K;
+        for (let i = 0; i < n; i++) { const t0 = i / n; pg.drawSvgPath(`M${t0 * L} 0L${t0 * L + L / n + 1} 0L${t0 * L + L / n + 1 - H * K} ${H * K}L${t0 * L - H * K} ${H * K}Z`, { x: 0, y: 0, color: mix((i + 0.5) / n) }); }
+      } else for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n;
+        if (dir === 'h') pg.drawRectangle({ x: (i / n) * W * K, y: -H * K, width: W * K / n + 0.5, height: H * K, color: mix(t) });
+        else pg.drawRectangle({ x: 0, y: -((i + 1) / n) * H * K - 0.25, width: W * K, height: H * K / n + 0.5, color: mix(t) });
+      }
+    }
+    if (b.img) {
+      try {
+        const bin = new Uint8Array(await (await fetch(imgUrl(b.img), { credentials: 'same-origin' })).arrayBuffer());
+        const im = /\.png$/i.test(b.img) ? await doc.embedPng(bin) : await doc.embedJpg(bin);
+        const a = im.width / im.height, sa = W / H;
+        const w = a > sa ? H * a : W, h = a > sa ? H : W / a;
+        pg.pushOperators(PDFLib.pushGraphicsState(), PDFLib.rectangle(0, -H * K, W * K, H * K), PDFLib.clip(), PDFLib.endPath());
+        pg.drawImage(im, { x: (W - w) / 2 * K, y: -((H - h) / 2 + h) * K, width: w * K, height: h * K });
+        pg.pushOperators(PDFLib.popGraphicsState());
+      } catch (er) { /* Bild fehlt */ }
+    }
+  }
   async function exportPdf(where) {
     D.ed.endEdit(); await flush();
     C.toast("Creating PDF …", 60000);
@@ -2105,7 +2312,7 @@
         const pg = doc.addPage([W * K, H * K]);
         // Ursprung oben links, y nach unten negativ
         pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(1, 0, 0, 1, 0, H * K));
-        pg.drawRectangle({ x: 0, y: -H * K, width: W * K, height: H * K, color: hexRgb(s.bg || th.bg) });
+        await drawBg(doc, pg, s, th, K);
         for (const e of [...s.els, ...hfEls(D.deck.slides.indexOf(s))]) if (!isPh(e)) await P.drawEl(pg, e, K, [1, 0, 0, 1, 0, H * K]);
         pg.pushOperators(popGraphicsState());
       }
@@ -2119,10 +2326,12 @@
 
   // kleine Vorschau einer Folie (Bibliothek)
   function preview(s, th, width) {
-    const k = width / W;
+    const k = width / W, oldH = H;
+    H = slideH(th);
     const box = document.createElement('div');
     box.style.cssText = `width:${W * k}px;height:${H * k}px;overflow:hidden;position:relative`;
     box.appendChild(slideNode(s || { els: [] }, k, false, th || DEF_TH));
+    H = oldH;
     return box;
   }
 
