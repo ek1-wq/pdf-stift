@@ -30,12 +30,12 @@ du -sh desktop/php
 echo "== LibreOffice"
 # official Windows build, unpacked unmodified (administrative install of the MSI) into desktop/libreoffice
 rm -rf desktop/libreoffice lo lo.msi
-LOV="$(curl -sSfL https://download.documentfoundation.org/libreoffice/stable/ | grep -oE 'href="[0-9]+\.[0-9]+\.[0-9]+/"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)"
+LOV="$(curl -sSfL --retry 3 --max-time 120 https://download.documentfoundation.org/libreoffice/stable/ | grep -oE 'href="[0-9]+\.[0-9]+\.[0-9]+/"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)"
 echo "LibreOffice $LOV"
-curl -sSfL -o lo.msi "https://download.documentfoundation.org/libreoffice/stable/$LOV/win/x86_64/LibreOffice_${LOV}_Win_x86-64.msi"
+curl -sSfL --retry 3 --connect-timeout 30 --max-time 1200 -o lo.msi "https://download.documentfoundation.org/libreoffice/stable/$LOV/win/x86_64/LibreOffice_${LOV}_Win_x86-64.msi"
 mkdir -p lo
 # msiexec returns at once when started from bash – wait for it with PowerShell
-powershell -NoProfile -Command "\$p = Start-Process msiexec.exe -ArgumentList '/a $(cygpath -w "$ROOT/lo.msi") /qn TARGETDIR=$(cygpath -w "$ROOT/lo")' -Wait -PassThru; exit \$p.ExitCode"
+powershell -NoProfile -Command "\$p = Start-Process msiexec.exe -ArgumentList '/a $(cygpath -w "$ROOT/lo.msi") /qn TARGETDIR=$(cygpath -w "$ROOT/lo")' -PassThru; if (-not \$p.WaitForExit(1200000)) { \$p.Kill(); exit 1 }; exit \$p.ExitCode"
 SO="$(find lo -iname soffice.com -path '*program*' | head -1)"
 [ -n "$SO" ] || { echo "LibreOffice: soffice.com not found"; find lo -maxdepth 3 | head -30; exit 1; }
 mv "$(dirname "$(dirname "$SO")")" desktop/libreoffice
