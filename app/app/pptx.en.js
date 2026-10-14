@@ -1519,8 +1519,14 @@
         if (tag === 'li' || tag === 'div' || tag === 'p') {
           const al = (k.style && k.style.textAlign) || blk.al || '';
           const unit = blk.unit || ++U;
-          const spOf = (q) => { if (k.style && (k.style.paddingTop || k.style.paddingBottom)) { q.sb = parseFloat(k.style.paddingTop) || 0; q.sa = parseFloat(k.style.paddingBottom) || 0; } if (k.getAttribute && k.getAttribute('data-bi')) q.bi = parseFloat(k.getAttribute('data-bi')) || 0; return q; };
-          if (tag === 'li') { const q = spOf(np({ ...blk, al, unit })); if (k.getAttribute('data-bu')) { q.bu = k.getAttribute('data-bu'); q.bc = k.getAttribute('data-bc') || ''; } walk(k, st, { ...blk, al, inLi: 1, unit }); cur = null; continue; }
+          const spOf = (q) => {
+            if (k.style && (k.style.paddingTop || k.style.paddingBottom)) { q.sb = parseFloat(k.style.paddingTop) || 0; q.sa = parseFloat(k.style.paddingBottom) || 0; }
+            if (k.getAttribute && k.getAttribute('data-bi') != null && k.getAttribute('data-bi') !== '') { q.bi = parseFloat(k.getAttribute('data-bi')) || 0; q.ml = parseFloat(k.style.marginLeft) || 0; }
+            if (tag !== 'li' && k.style && (k.style.paddingLeft || k.style.textIndent)) { q.pl = parseFloat(k.style.paddingLeft) || 0; q.ti = parseFloat(k.style.textIndent) || 0; }
+            if (k.style && /^[\d.]+$/.test(k.style.lineHeight || '')) q.lh = parseFloat(k.style.lineHeight);
+            return q;
+          };
+          if (tag === 'li') { const q = spOf(np({ ...blk, al, unit })); if (k.getAttribute('data-bu')) q.bu = k.getAttribute('data-bu'); q.bc = k.getAttribute('data-bc') || ''; walk(k, st, { ...blk, al, inLi: 1, unit }); cur = null; continue; }
           if (blk.inLi && cur && !cur.runs.length) { cur.al = al; walk(k, st, { ...blk, al }); continue; }
           spOf(np({ ...blk, al, unit })); walk(k, st, { ...blk, al, unit }); cur = null; continue;
         }
@@ -1539,11 +1545,18 @@
     const unitR = new Map();
     paras.forEach((p, i) => { const r = unitR.get(p.unit) || { st: i, en: i, txt: false }; r.en = i; if (p.runs.some((x) => x.t.trim())) r.txt = true; unitR.set(p.unit, r); });
     const AL = { center: 'center', right: 'right', justify: 'justify' };
-    const out = [];
+    const out = [], fixes = [];
     paras.forEach((p, pi) => {
       const po = { align: AL[p.al] || 'left' };
-      if (p.list) { po.bullet = p.list === 'ol' ? { type: 'number' } : p.bu ? { characterCode: p.bu.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') } : true; if (p.lvl) po.indentLevel = p.lvl; if (p.bi && p.list === 'ul') po.bullet = { ...(po.bullet === true ? {} : po.bullet), indent: Math.round(-p.bi * ((o && o.fs) || 18) * 10) / 10 }; }
+      if (p.list) { po.bullet = p.list === 'ol' ? { type: 'number' } : p.bu ? { characterCode: p.bu.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') } : true; if (p.lvl) po.indentLevel = p.lvl; }
       const pfs = (o && o.fs) || 18;
+      if (p.lh) po.lineSpacingMultiple = Math.round((p.lh / 1.2) * 100) / 100;
+      // was der PowerPoint-Baustein nicht kann, wird danach in die Folien-XML geschrieben: Einzüge (pt) und Farbe des Zeichens
+      const fx = {};
+      if (p.bi != null && p.list === 'ul') { const m = (p.ml || 0) + 1.2 * ((p.lvl || 0) + 1); fx.marL = m * pfs; fx.ind = (p.bi || 0) * pfs; }
+      else if (!p.list && (p.pl || p.ti)) { fx.marL = (p.pl || 0) * pfs; fx.ind = (p.ti || 0) * pfs; }
+      if (p.list === 'ul' && p.bc) fx.bc = toHex(p.bc);
+      fixes[pi] = Object.keys(fx).length ? fx : null;
       if (p.sb) po.paraSpaceBefore = Math.round(p.sb * pfs * 10) / 10;
       if (p.sa) po.paraSpaceAfter = Math.round(p.sa * pfs * 10) / 10;
       const runs = p.runs.length ? p.runs : [{ t: '', st: {} }];
@@ -1560,7 +1573,31 @@
       });
     });
     out.units = [...unitR.values()].filter((r) => r.txt || paras[r.st].list).map((r) => [r.st, r.en]);
+    out.fix = fixes.some(Boolean) ? fixes : null;
     return out;
+  }
+  // Absätze im Text einer Form nachbessern: Einzüge (marL/indent) und Farbe des Aufzählungszeichens
+  function fixParas(xml, fixes) {
+    if (!fixes) return xml;
+    let j = -1;
+    return xml.replace(/<a:p>(<a:pPr\b[^>]*?(\/?)>)?/g, (m, pPr, selfClose) => {
+      j++;
+      const f = fixes[j];
+      if (!f) return m;
+      let tag = pPr || '<a:pPr>';
+      if (f.marL != null) {
+        const set = (t, n, v) => (new RegExp(`\\s${n}="[^"]*"`).test(t) ? t.replace(new RegExp(`\\s${n}="[^"]*"`), ` ${n}="${v}"`) : t.replace(/^<a:pPr/, `<a:pPr ${n}="${v}"`));
+        tag = set(tag, 'marL', Math.round(Math.max(0, f.marL) * 12700));
+        tag = set(tag, 'indent', Math.round(f.ind * 12700));
+      }
+      if (selfClose) tag = tag.replace(/\s*\/>$/, '></a:pPr>');
+      else if (!pPr) tag += '</a:pPr>';
+      return '<a:p>' + tag + (f.bc ? `<!--BC:${f.bc}-->` : '');
+    }).replace(/(<a:pPr\b[^>]*>)<!--BC:([0-9A-F]{6})-->((?:(?!<\/a:pPr>).)*?)<\/a:pPr>/g, (m, open, bc, inner) => {
+      // Farbe vor die übrigen Angaben zum Zeichen (Reihenfolge laut Schema)
+      const i = inner.search(/<a:bu(Sz|Font|Char|AutoNum|None|Blip)/);
+      return i < 0 ? open + inner + '</a:pPr>' : open + inner.slice(0, i) + `<a:buClr><a:srgbClr val="${bc}"/></a:buClr>` + inner.slice(i) + '</a:pPr>';
+    }).replace(/<!--BC:[0-9A-F]{6}-->/g, '');
   }
   const SHAPE_P = {
     rect: 'rect', round: 'roundRect', ellipse: 'ellipse', tri: 'triangle', rtri: 'rtTriangle', diamond: 'diamond', pent: 'pentagon', hex: 'hexagon', oct: 'octagon', para: 'parallelogram', trap: 'trapezoid',
@@ -1588,12 +1625,14 @@
     // Animationen: Objekte bekommen einen Namen, über den sie danach in der Folien-XML gefunden werden
     const AN = deck.slides.map(() => []);
     let curAn = null;
-    const nm = (e) => (e.an || e.gr ? { objectName: 'ps-' + e.id } : {});
+    const FX = deck.slides.map(() => []); // nachträgliche Korrekturen je Folie: { id, fix } bzw. { id, cells }
+    let curFx = null;
+    const nm = (e) => (e.an || e.gr || (e._fx && e._fx.length) ? { objectName: 'ps-' + e.id } : {});
     const GR = deck.slides.map((s0) => s0.els.filter((e) => e.gr && e.k === 'path' && e.fill));
     const mark = (e, units) => { if (e.an && curAn) curAn.push({ e, units: units || null }); };
     for (let si = 0; si < deck.slides.length; si++) {
       const s = deck.slides[si];
-      curAn = AN[si];
+      curAn = AN[si]; curFx = FX[si];
       opt.progress && opt.progress(`Slide ${si + 1} of ${deck.slides.length} …`);
       const sl = pres.addSlide();
       if (s.hidden) sl.hidden = true;
@@ -1606,7 +1645,7 @@
         } else sl.background = { color: toHex(bg.color) };
       } catch (e) { sl.background = { color: toHex(bg.color || '#FFFFFF') }; }
       const els = [...s.els.filter((e) => !P.isPh(e)), ...(opt.hf ? opt.hf(si) : [])];
-      for (const e of els) {
+      for (let e of els) {
         try {
           const boxO = { x: inch(e.x), y: inch(e.y), w: inch(e.w), h: inch(e.h) };
           if (e.r) boxO.rotate = e.r;
@@ -1619,6 +1658,7 @@
             if (e.line) o.line = { color: noHash(e.line), width: e.lw || 2 };
             if (e.lh) o.lineSpacingMultiple = Math.round((e.lh / 1.2) * 100) / 100;
             const rr = runsOf(e.html, { color: noHash(e.c || th.fg), fs: e.fs || 24 }); mark(e, rr.units);
+            if (rr.fix) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, fix: rr.fix }); }
             sl.addText(rr, { ...o, ...nm(e) });
           } else if (e.t === 'shape') {
             const lineK = LINE_K.includes(e.k), openK = OPEN_K.includes(e.k);
@@ -1650,6 +1690,7 @@
             if (e.html && !openK) {
               Object.assign(o, { fontFace: face, fontSize: e.fs || 20, color: noHash(e.c || (e.fill ? '#FFFFFF' : th.fg)), valign: VA[e.va || 'm'], margin: e.pad != null ? e.pad : 8, align: 'center' });
               const rr = runsOf(e.html, { color: o.color, fs: e.fs || 20 }); mark(e, rr.units);
+              if (rr.fix) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, fix: rr.fix }); }
               sl.addText(rr, { ...o, ...nm(e) });
             } else { mark(e); sl.addText('', { ...o, ...nm(e) }); }
           } else if (e.t === 'img') {
@@ -1664,7 +1705,7 @@
           } else if (e.t === 'table') {
             const n = e.rows[0] ? e.rows[0].length : 1;
             const cw = e.cw || e.rows[0].map(() => 1 / n);
-            const MG = P.mergeMap(e);
+            const MG = P.mergeMap(e), cellFx = {};
             const rows = e.rows.map((row, ri) => row.map((cell, ci) => {
               if (MG.hid.has(ri + ',' + ci)) return null;
               const sp = MG.span[ri + ',' + ci];
@@ -1674,8 +1715,11 @@
               const options = { color, fill: fillC ? { color: noHash(fillC) } : undefined, bold: head || cs.b ? true : undefined };
               if (sp) { if (sp[0] > 1) options.rowspan = sp[0]; if (sp[1] > 1) options.colspan = sp[1]; }
               const vv = cs.v || e.va; if (vv) options.valign = { t: 'top', m: 'middle', b: 'bottom' }[vv];
-              return { text: runsOf(cell, { color, fs: e.fs || 18 }), options };
+              const rr = runsOf(cell, { color, fs: e.fs || 18 });
+              if (rr.fix || cs.vt) cellFx[ri + ',' + ci] = { fix: rr.fix, vt: cs.vt };
+              return { text: rr, options };
             }).filter(Boolean));
+            if (Object.keys(cellFx).length) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, cells: cellFx, cols: n }); }
             mark(e); sl.addTable(rows, { ...nm(e), x: inch(e.x), y: inch(e.y), w: inch(e.w), colW: cw.map((f) => inch(f * e.w)), rowH: P.tblRows(e, true).map((f) => inch(f * e.h)), fontFace: face, fontSize: e.fs || 18, valign: 'middle', border: { type: 'solid', pt: 1, color: noHash(e.line || '#868E96') }, margin: e.cm ? [e.cm[0], e.cm[1], e.cm[0], e.cm[1]] : Math.max(1, Math.round((e.fs || 18) / 3)) });
           } else if (e.t === 'chart') {
             const T = { col: 'bar', bar: 'bar', line: 'line', pie: 'pie' }[e.ct] || 'bar';
@@ -1694,13 +1738,21 @@
             if (e.vmin != null) o.valAxisMinVal = e.vmin;
             if (e.vmax != null) o.valAxisMaxVal = e.vmax;
             const nf = e.pct ? '0' + (e.dp ? '.' + '0'.repeat(e.dp) : '') + '%' : e.dp != null ? '#,##0' + (e.dp ? '.' + '0'.repeat(e.dp) : '') : null;
-            if (e.pct) o.valAxisLabelFormatCode = '0%';
+            if (e.pct || e.st === 'p') o.valAxisLabelFormatCode = '0%';
             if (e.dl || ser.some((x) => x.dl)) { o.showValue = true; o.dataLabelFontSize = Math.round(fs * 0.85); if (nf) o.dataLabelFormatCode = nf; if ((e.ct === 'bar' || e.ct === 'col') && !e.st) o.dataLabelPosition = 'outEnd'; }
             if (e.mk === 0) o.lineDataSymbol = 'none';
             if (e.tc) { o.catAxisLabelColor = noHash(e.tc); o.valAxisLabelColor = noHash(e.tc); o.legendColor = noHash(e.tc); }
             if (e.bg) o.fill = noHash(e.bg);
             delete o.rotate;
-            mark(e); sl.addChart(T, data, { ...o, ...nm(e) });
+            const li = T === 'bar' ? ser.map((x, k) => (x.t === 'line' ? k : -1)).filter((k) => k >= 0) : [];
+            if (li.length && li.length < ser.length) {
+              // Säulen mit Linien/Punkten darüber: ein Diagramm aus zwei Arten
+              const bi = ser.map((_, k) => k).filter((k) => !li.includes(k));
+              const cc = o.chartColors;
+              const lineOpts = { chartColors: li.map((k) => cc[k % cc.length]), lineDataSymbol: 'circle', lineDataSymbolSize: 7 };
+              if (li.every((k) => ser[k].nl)) lineOpts.lineSize = 0;
+              mark(e); sl.addChart([{ type: 'bar', data: bi.map((k) => data[k]), options: { barDir: o.barDir, barGrouping: o.barGrouping, chartColors: bi.map((k) => cc[k % cc.length]) } }, { type: 'line', data: li.map((k) => data[k]), options: lineOpts }], { ...o, ...nm(e) });
+            } else { mark(e); sl.addChart(T, data, { ...o, ...nm(e) }); }
           }
         } catch (err) { skipped++; }
       }
@@ -1715,7 +1767,7 @@
     }
     let bin = new Uint8Array(await pres.write({ outputType: 'arraybuffer' }));
     // Übergänge und Animationen nachtragen (der PowerPoint-Baustein kann beides nicht selbst)
-    if (deck.slides.some((s) => s.tr) || AN.some((a) => a.length) || GR.some((a) => a.length)) {
+    if (deck.slides.some((s) => s.tr) || AN.some((a) => a.length) || GR.some((a) => a.length) || FX.some((a) => a.length)) {
       const z = window.fflate.unzipSync(bin);
       deck.slides.forEach((s, i) => {
         const pth = `ppt/slides/slide${i + 1}.xml`;
@@ -1733,6 +1785,29 @@
           const gs = e.gr.s.map(([p0, c0, a0]) => `<a:gs pos="${Math.round(p0 * 100000)}"><a:srgbClr val="${String(c0).replace('#', '').toUpperCase()}">${a0 != null && a0 < 1 ? `<a:alpha val="${Math.round(a0 * 100000)}"/>` : ''}</a:srgbClr></a:gs>`).join('');
           const gx = `<a:gradFill rotWithShape="1"><a:gsLst>${gs}</a:gsLst>${e.gr.rad ? '<a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path>' : `<a:lin ang="${Math.round((e.gr.ang || 0) * 60000)}" scaled="0"/>`}</a:gradFill>`;
           x = x.slice(0, sp0) + seg.slice(0, f0) + gx + seg.slice(f1 + '</a:solidFill>'.length) + x.slice(sp1);
+        }
+        // Absätze (Einzüge, Zeichenfarbe) und senkrechter Text in Tabellenzellen
+        for (const f of FX[i]) {
+          const at0 = x.indexOf(`name="ps-${f.id}"`);
+          if (at0 < 0) continue;
+          const endTag = f.cells ? '</p:graphicFrame>' : '</p:sp>';
+          const end = x.indexOf(endTag, at0);
+          if (end < 0) continue;
+          let seg = x.slice(at0, end);
+          if (f.fix) seg = fixParas(seg, f.fix);
+          else {
+            // Zellen in Rasterreihenfolge (auch die verbundenen Platzhalterzellen stehen im XML)
+            let k = -1;
+            seg = seg.replace(/<a:tc\b[^>]*>[\s\S]*?<\/a:tc>/g, (tc) => {
+              k++;
+              const c = f.cells[Math.floor(k / f.cols) + ',' + (k % f.cols)];
+              if (!c) return tc;
+              let t = c.fix ? fixParas(tc, c.fix) : tc;
+              if (c.vt) t = /<a:tcPr\b/.test(t) ? t.replace(/<a:tcPr\b/, `<a:tcPr vert="${c.vt === 'u' ? 'vert270' : 'vert'}"`) : t.replace('</a:tc>', `<a:tcPr vert="${c.vt === 'u' ? 'vert270' : 'vert'}"/></a:tc>`);
+              return t;
+            });
+          }
+          x = x.slice(0, at0) + seg + x.slice(end);
         }
         const add = transXml(s.tr) + timingXml(x, s, AN[i]);
         z[pth] = window.fflate.strToU8(!add ? x : x.includes('</p:clrMapOvr>') ? x.replace('</p:clrMapOvr>', '</p:clrMapOvr>' + add) : x.replace('</p:sld>', add + '</p:sld>'));

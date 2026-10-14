@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.90.0';
+const PDFSTIFT_VERSION = '1.91.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.

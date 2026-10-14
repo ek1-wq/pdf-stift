@@ -65,6 +65,7 @@ DE = {
             ('Bibliotheksordner: Ihre PDFs liegen als normale Dateien in <b>Dokumente\\PDF-Stift</b>. Öffnen: Hilfe → Bibliotheksordner öffnen; '
              'ändern: Hilfe → Bibliotheksordner ändern (oder Einstellungen → Bibliothek).', 'L'),
             'Hineinziehen aus dem Explorer – auch Word-, PowerPoint- und Excel-Dateien, die dabei zur PDF werden (PC).',
+            ('Word und PowerPoint werden mit dem mitgelieferten LibreOffice umgewandelt – ganz ohne Internet (Windows-App; unter Linux mit einem installierten LibreOffice).', 'L'),
             'Rechtsklick im Explorer → „In PDF-Stift öffnen“ (unter Windows 11 zuerst „Weitere Optionen anzeigen“) oder „Senden an → PDF-Stift“ (PC).',
             'Drucken aus Word, Chrome oder Outlook auf den Drucker „PDF-Stift“; einmal einrichten über Datei → Als Drucker einrichten (PC).',
             'Überwachter Ordner: Alles, was dort hineinkommt, wird automatisch übernommen (Datei → Einstellungen; PC).',
@@ -140,13 +141,16 @@ DE = {
             'Bibliothek → Präsentationen → <b>Neue Präsentation</b> oder <b>PowerPoint öffnen</b> (eine oder mehrere .pptx-Dateien).',
             'Einen ganzen Ordner übernehmen: Menü (drei Punkte) auf der Karte „PowerPoint öffnen“ → „Ganzen Ordner übernehmen“; in der Windows-App '
             'auch Datei → „Ordner mit PowerPoint-Dateien übernehmen“. Am Ende zeigt eine Liste, was übernommen wurde.',
-            'Übernommen werden Texte, Formen, Bilder, Tabellen, Diagramme, SmartArt-Grafiken, Formeln, Farbverläufe, Animationen, Übergänge sowie eingebettete Videos und Töne – ein Klick auf den Abspielknopf spielt sie ab.',
+            'Übernommen werden Texte (mit eigenen Aufzählungszeichen, Einzügen und Absatzabständen), Formen, Bilder, Tabellen, Diagramme (auch gestapelt und mit Linien über Säulen), '
+            'SmartArt-Grafiken, Formeln, Farbverläufe, Animationen, Übergänge sowie eingebettete Videos und Töne – ein Klick auf den Abspielknopf spielt sie ab.',
+            'Eine Folie sieht nicht ganz aus wie in PowerPoint? Rechtsklick auf die Folie in der Folienleiste → <b>Folie als Bild aus PowerPoint übernehmen</b>. '
+            'Sie erscheint dann genau wie im Original, ist aber nicht mehr bearbeitbar (Rückgängig: ' + keys('Strg+Z') + '). Geht bei Präsentationen, die ab Version 1.87 übernommen wurden.',
         ]),
         ('h2', 'Bearbeiten, vorführen und speichern'),
         ('ul', [
             'Bearbeiten wie in PowerPoint: Folien und Layouts, Design, Textfelder, Formen, Bilder, Tabellen und Diagramme; Animationen im Reiter „Animationen“.',
             'Vorführen: ' + keys('F5') + ' von Beginn an, ' + keys('Umschalt+F5') + ' ab der aktuellen Folie; dazu die Referentenansicht mit nächster Folie, Stoppuhr und Notizen.',
-            'Speichern: als PDF oder wieder als PowerPoint-Datei – die Animationen bleiben erhalten.',
+            'Speichern: als PDF oder wieder als PowerPoint-Datei – Animationen, Einzüge, Farben der Aufzählungszeichen und Diagramme bleiben erhalten.',
         ]),
         ('h2', 'PDFs präsentieren'),
         ('ul', [
@@ -202,6 +206,7 @@ DE = {
         ('ul', [
             'Diese Kurzanleitung: Hilfe → Kurzanleitung, ' + keys('F1') + ' oder der Knopf „?“ oben rechts. Sie erscheint als Spalte rechts neben dem Dokument, '
             'lässt sich durchsuchen und mit demselben Knopf wieder ausblenden. Englisch oder Deutsch: oben in der Spalte oder unter Einstellungen → Kurzanleitung.',
+            'Beim Start öffnet sich die Kurzanleitung als PDF im ersten Reiter (Ordner „Hilfe“ der Bibliothek). Abschalten: Einstellungen → „Kurzanleitung beim Start als erstes Dokument öffnen“.',
             'Versionsnummern: Hilfe → Über PDF-Stift.',
             ('Bericht für Verbesserungen (Hilfe-Menü oder Menü „Mehr“): kopieren und an die Betreuung des Servers schicken.', 'S'),
             ('Tablet: Menü (drei Punkte) → Fehler melden (mit Bildschirmfoto).', 'S'),
@@ -245,6 +250,7 @@ EN = {
             ('Library folder: your PDFs are ordinary files in <b>Documents\\PDF-Stift</b>. Open it with Help → Open library folder; '
              'change it with Help → Change library folder (or Settings → Library).', 'L'),
             'Drag files in from Explorer – Word, PowerPoint and Excel files too; they become PDFs (PC).',
+            ('Word and PowerPoint files are converted with the bundled LibreOffice – no internet needed (Windows app; on Linux with LibreOffice installed).', 'L'),
             'Right-click in Explorer → “Open in PDF-Stift” (on Windows 11 first “Show more options”) or “Send to → PDF-Stift” (PC).',
             'Print from Word, Chrome or Outlook to the “PDF-Stift” printer; set it up once with File → Set up as printer (PC).',
             'Watched folder: everything put there is added automatically (File → Settings; PC).',
@@ -320,13 +326,16 @@ EN = {
             'Library → Presentations → <b>New presentation</b> or <b>Open PowerPoint</b> (one or more .pptx files).',
             'Import a whole folder: the menu (three dots) on the “Open PowerPoint” card → “Import whole folder”; in the Windows app also '
             'File → “Import folder of PowerPoint files”. A list shows what was imported.',
-            'Text, shapes, pictures, tables, charts, SmartArt graphics, equations, gradients, animations, transitions and embedded videos and sounds are imported – click the play button to play them.',
+            'Text (with custom bullets, indents and paragraph spacing), shapes, pictures, tables, charts (also stacked and with lines over columns), '
+            'SmartArt graphics, equations, gradients, animations, transitions and embedded videos and sounds are imported – click the play button to play them.',
+            'A slide does not look quite like in PowerPoint? Right-click the slide in the slide list → <b>Take slide as picture from PowerPoint</b>. '
+            'It then looks exactly like the original but can no longer be edited (undo: ' + keys('Ctrl+Z') + '). Works for presentations imported with version 1.87 or later.',
         ]),
         ('h2', 'Editing, Presenting and Saving'),
         ('ul', [
             'Edit as in PowerPoint: slides and layouts, design, text boxes, shapes, pictures, tables and charts; animations on the “Animations” tab.',
             'Present: ' + keys('F5') + ' from the beginning, ' + keys('Shift+F5') + ' from the current slide; the presenter view shows the next slide, a timer and your notes.',
-            'Save as PDF or back as a PowerPoint file – the animations are kept.',
+            'Save as PDF or back as a PowerPoint file – animations, indents, bullet colours and charts are kept.',
         ]),
         ('h2', 'Presenting PDFs'),
         ('ul', [
@@ -382,6 +391,7 @@ EN = {
         ('ul', [
             'This quick guide: Help → Quick guide, ' + keys('F1') + ' or the “?” button at the top right. It appears as a column to the right of the document, '
             'can be searched, and is hidden again with the same button. English or German: at the top of the column or under Settings → Quick guide.',
+            'At start the quick guide opens as a PDF in the first tab (folder “Help” of the library). To switch this off: Settings → “Open the quick guide as the first document at start”.',
             'Version numbers: Help → About PDF-Stift.',
             ('Improvement report (Help menu or “More” menu): copy it and send it to whoever runs your server.', 'S'),
             ('Tablet: menu (three dots) → Report a problem (with screenshot).', 'S'),
