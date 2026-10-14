@@ -15,6 +15,7 @@ import re
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 BASE = os.path.join(ROOT, 'server' if os.path.isdir(os.path.join(ROOT, 'server')) else 'app')
 OUT = os.path.join(BASE, 'hilfe')
+FONTS = os.path.join(BASE, 'vendor', 'fonts')
 
 
 def keys(s):
@@ -469,5 +470,111 @@ def build_all():
             print(path)
 
 
+
+# ------------------------------------------------------------------------------------------------
+# Dieselbe Kurzanleitung als PDF (Karten in zwei Spalten) – wird beim ersten Start als Dokument geöffnet.
+# Braucht Playwright mit Chromium; ohne bleiben die vorhandenen PDFs unverändert.
+# ------------------------------------------------------------------------------------------------
+PDF_CSS = """
+@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Regular.ttf'); font-weight: 400; }
+@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Bold.ttf'); font-weight: 700; }
+@font-face { font-family: 'Inter'; src: url('file://{F}/Inter-Italic.ttf'); font-weight: 400; font-style: italic; }
+:root { --fg: #1B1F29; --muted: #5B6475; --line: #DADFE8; --card: #fff; --accent: #1F4FD6; --key: #EEF1F7; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font: 9.2pt/1.42 'Inter', sans-serif; color: var(--fg); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+header { border-bottom: 2px solid var(--accent); padding-bottom: 6px; margin-bottom: 4px; }
+h1 { font-size: 19pt; margin: 0; letter-spacing: -.01em; }
+.ver { display: block; color: var(--muted); font-size: 9.5pt; margin-top: 2px; }
+.sub { color: var(--muted); margin: 6px 0 12px; }
+.grid { columns: 2; column-gap: 12px; }
+section { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px 10px; margin: 0 0 12px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+li, tr, p { break-inside: avoid; }
+h2 { font-size: 11.5pt; margin: 0 0 5px; color: var(--accent); break-after: avoid; }
+h3 { font-size: 9.8pt; margin: 8px 0 3px; }
+p { margin: 0 0 5px; }
+ul { margin: 0; padding-left: 15px; }
+li { margin: 2px 0; }
+b { font-weight: 700; }
+kbd { font: 8.6pt 'Inter', sans-serif; background: var(--key); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+.tag { display: inline-block; font-size: 7.4pt; font-weight: 700; letter-spacing: .03em; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; margin-left: 2px; vertical-align: 1px; }
+table { border-collapse: collapse; width: 100%; margin: 2px 0 4px; }
+td { padding: 2px 0; vertical-align: top; border-bottom: 1px solid #EEF1F6; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { width: 47%; padding-right: 10px; }
+kbd { line-height: 1.6; }
+.note { color: var(--muted); font-size: 8.8pt; }
+"""
+
+
+def pdf_tags(t):
+    """„(PC)“, „(Tablet)“ … am Ende als kleine Kennzeichen wie früher"""
+    t = re.sub(r'\s*\((PC|Tablet|tablet)\)', lambda m: f' <span class="tag">{"Tablet" if m.group(1).lower() == "tablet" else "PC"}</span>', t)
+    t = re.sub(r'\s*\((PC|Tablet|tablet)\)\.', lambda m: f'. <span class="tag">{m.group(1)}</span>', t)
+    return t.replace('</span>.', '</span>')
+
+
+def pdf_html(lang, ed):
+    C = DE if lang == 'de' else EN
+    sub = C['titlepage'][ed][1]
+    out = [f'<!doctype html><html lang="{"en-US" if lang == "en" else "de"}"><head><meta charset="utf-8"><title>{C["title"]}</title>',
+           '<style>' + PDF_CSS.replace('{F}', FONTS) + '</style></head><body>',
+           f'<header><h1>{C["title"].replace(": ", " – ")}</h1><span class="ver">{sub} · {C["titlepage"][ed][2]}</span></header>']
+    intro, cards, cur = [], [], None
+    for b in C['blocks']:
+        kind = b[0]
+        if len(b) > 2 and isinstance(b[2], str) and b[2] in 'SL' and kind in ('p', 'h1', 'h2') and b[2] != ed:
+            continue
+        if kind == 'h1':
+            cur = [f'<h2>{b[1]}</h2>']
+            cards.append(cur)
+            continue
+        target = cur if cur is not None else intro
+        if kind == 'h2':
+            target.append(f'<h3>{b[1]}</h3>')
+        elif kind == 'p':
+            target.append(f'<p>{pdf_tags(b[1])}</p>')
+        elif kind == 'ul':
+            items = [x for x in (for_ed(e, ed) for e in b[1]) if x]
+            target.append('<ul>' + ''.join(f'<li>{pdf_tags(t)}</li>' for t in items) + '</ul>')
+        elif kind == 'table':
+            _, ttl, head, rows, note = b
+            target.append('<table>' + ''.join(f'<tr><td>{keys(r[0]) if len(r[0]) < 40 and " " not in r[0].replace(" / ", "") else r[0]}</td><td>{r[1]}</td></tr>' for r in rows) + '</table>')
+            if note:
+                target.append(f'<p class="note">{note}</p>')
+    out.append('<div class="sub">' + ''.join(re.sub(r'^<p>|</p>$', '', x) + ' ' for x in intro) + '</div>')
+    out.append('<div class="grid">' + ''.join('<section>' + ''.join(c) + '</section>' for c in cards) + '</div>')
+    out.append('</body></html>')
+    return '\n'.join(out)
+
+
+def build_pdfs():
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print('Playwright fehlt – PDFs nicht neu erzeugt')
+        return
+    import tempfile
+    with sync_playwright() as pw:
+        exe = os.environ.get('CHROMIUM')
+        br = pw.chromium.launch(**({'executable_path': exe} if exe else {}))
+        pg = br.new_page()
+        for lang in ('en', 'de'):
+            for ed in ('S', 'L'):
+                with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False, encoding='utf-8') as f:
+                    f.write(pdf_html(lang, ed))
+                pg.goto('file://' + f.name)
+                pg.wait_for_timeout(300)
+                path = os.path.join(OUT, f'kurzanleitung-{"server" if ed == "S" else "local"}.{lang}.pdf')
+                pg.pdf(path=path, format='Letter' if lang == 'en' else 'A4', print_background=True,
+                       margin={'top': '13mm', 'bottom': '13mm', 'left': '12mm', 'right': '12mm'},
+                       display_header_footer=True, header_template='<span></span>',
+                       footer_template='<div style="width:100%;text-align:center;font:8px sans-serif;color:#888"><span class="pageNumber"></span> / <span class="totalPages"></span></div>')
+                os.unlink(f.name)
+                print(path)
+        br.close()
+
+
 if __name__ == '__main__':
     build_all()
+    build_pdfs()

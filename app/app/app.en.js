@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.89.0';
+  const VERSION = '1.90.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -12269,6 +12269,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
     d.innerHTML = `<form method="dialog"><h2>Settings</h2>
       <div class="set-row"><span>Language / Sprache</span>${sel('stLang', [['de', 'Deutsch'], ['en', 'English']], LANG)}</div>
       <div class="set-row"><span>Quick guide (Help → Quick guide)</span>${sel('stHelpLang', [['en', 'English (US)'], ['de', 'Deutsch']], SET.helpLang === 'de' ? 'de' : 'en')}</div>
+      ${chk('stHelpStart', "Open the quick guide as the first document at start", SET.helpStart !== false, "As a PDF in the first tab; switch this off when you no longer need it.")}
       <div class="set-row"><span>Theme</span>${sel('stTheme', [['', "same as system"], ['light', "Light"], ['dark', "Dark"]], curTheme())}</div>
       <h3 class="dlg-sub">View (on this device)</h3>
       <div class="set-row"><span>Page layout</span>${sel('stView', [['single', "Single pages, one below the other"], ['two', "Two pages side by side"], ['cover', "Two pages, cover page separate"]], SET.viewMode)}</div>
@@ -12308,6 +12309,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
       Object.assign(SET, { viewMode: vm, startTool: $('#stTool').value, startView: $('#stStart').value, printDpi: +$('#stDpi').value,
         autoOcr: $('#stOcr').checked, redactPurge: $('#stPurge').checked, keepVersions: +$('#stKeep').value, usage: $('#stUsage') ? $('#stUsage').checked : SET.usage });
       SET.helpLang = $('#stHelpLang').value === 'de' ? 'de' : 'en'; HP.lang = null;
+      SET.helpStart = $('#stHelpStart').checked;
       if ($('#hpPanel') && !$('#hpPanel').hidden) helpFill();
       if ($('#stNext')) SET.pdfNextTo = $('#stNext').checked;
       if (hot && $('#stHot')) { await window.pdfstiftWin.hotSet({ on: $('#stHot').checked, dir: hot.dir }); if ($('#stHot').checked && !hot.on) toast("Now watching the folder: " + hot.dir, 5000); }
@@ -13647,6 +13649,25 @@ github.com/ek1-wq/pdf-stift`, "Quick guide")) toggleHelp(true);
     if (m[1] === 'last' && S.tabs.length) showDoc((S.tabs.find((t) => t.path === S.active) || S.tabs[S.tabs.length - 1]).path);
   }
   // Windows-App: „Öffnen mit PDF-Stift“ lädt die Datei hoch und öffnet sie dann über ?open=Pfad
+  // Kurzanleitung beim Start als erstes Dokument öffnen (abschaltbar unter Einstellungen)
+  async function helpStartup(hadParam) {
+    if (SET.helpStart === false || EMBED || SHOW) return;
+    try {
+      const r = await fetch(API + '?a=help&lang=' + helpLang(), { credentials: 'same-origin', headers: { 'X-PDFStift': '1' } });
+      if (!r.ok) return;
+      const path = (await r.json()).path;
+      if (!path) return;
+      if (!fileMeta(path)) await loadLibrary();
+      if (!fileMeta(path)) return;
+      // andere Sprache aus den Reitern nehmen, die Kurzanleitung als ersten Reiter
+      S.tabs = S.tabs.filter((t) => t.path === path || !/^(Help\/PDF-Stift – Quick guide|Hilfe\/PDF-Stift – Kurzanleitung)\.pdf$/.test(t.path));
+      const i = S.tabs.findIndex((t) => t.path === path);
+      if (i > 0) S.tabs.unshift(S.tabs.splice(i, 1)[0]); else if (i < 0) S.tabs.unshift({ path, zoom: 1, scroll: 0 });
+      saveTabs();
+      renderTabs();
+      if (!hadParam) openDoc(path);
+    } catch (e) { /* ohne Kurzanleitung weiter */ }
+  }
   async function openParam() {
     const m = /[?&]open=([^&]+)/.exec(location.search);
     if (!m) return;
@@ -13749,7 +13770,9 @@ github.com/ek1-wq/pdf-stift`, "Quick guide")) toggleHelp(true);
     if (SHOW) { showWinStart(); return; }
     liveResume();
     goShortcut();
-    openParam();
+    const hadParam = /[?&]open=/.test(location.search);
+    await openParam();
+    helpStartup(hadParam);
     loadServerSettings();
     setTimeout(autoOcrLibrary, 45000);
     if (ls('splitPath')) setTimeout(() => { if (V.path && !SPLIT.frame) splitOpen(ls('splitPath')); }, 1200);

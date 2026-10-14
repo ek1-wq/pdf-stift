@@ -3219,5 +3219,8 @@
   "Die Folie konnte nicht übernommen werden.": "The slide could not be taken over.",
   "Diese Folie fehlt in der umgewandelten Datei.": "This slide is missing in the converted file.",
   "Folie als Bild übernommen (Rückgängig: Strg+Z).": "Slide taken over as a picture (undo: Ctrl+Z).",
-  "Folie als Bild aus PowerPoint übernehmen": "Take slide as picture from PowerPoint"
+  "Folie als Bild aus PowerPoint übernehmen": "Take slide as picture from PowerPoint",
+  "\n      <div class=\"set-row\"><span>Design</span>": "\n      <div class=\"set-row\"><span>Theme</span>",
+  "Kurzanleitung beim Start als erstes Dokument öffnen": "Open the quick guide as the first document at start",
+  "Als PDF im ersten Reiter; abschalten, wenn Sie sie nicht mehr brauchen.": "As a PDF in the first tab; switch this off when you no longer need it."
 }
