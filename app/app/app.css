@@ -1581,3 +1581,9 @@ body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--hpr, 0px)); }
 /* Symbole für Aufzählungszeichen (➢ ✔ ❖ ➔ …): mitgelieferte DejaVu, nur für diese Zeichen */
 @font-face { font-family: "PS Sym"; src: url("../vendor/fonts/DejaVuSans.ttf") format("truetype"); unicode-range: U+2190-21FF, U+2500-27BF, U+2B00-2BFF; font-display: swap; }
 .dk-el li[data-bu]::marker { font-family: "PS Sym", sans-serif; }
+/* Einzug wie in PowerPoint: Zeichen an fester Stelle links vom Text (data-bi, in em) */
+.dk-el li[data-bi] { display: block; list-style: none; position: relative; }
+.dk-el li[data-bi]::before { content: "•"; position: absolute; left: var(--bi, -0.9em); font-family: "PS Sym", sans-serif; text-indent: 0; font-weight: normal; font-style: normal; }
+.dk-el li[data-bi][data-bu]::before { content: attr(data-bu); }
+.dk-el li[data-bi][data-bc]::before { color: var(--bc); }
+.dk-el li[data-bs]::before { transform: scale(var(--bs, 1)); transform-origin: 0 75%; } /* Größe wie in PowerPoint, auf der Grundlinie */

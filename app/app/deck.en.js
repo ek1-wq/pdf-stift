@@ -172,8 +172,10 @@
           if (tag !== 'ul' && tag !== 'ol') {
             const em = (v) => { const m = /^(\d*\.?\d+)em$/.exec(v || ''); return m && +m[1] <= 6 ? Math.round(+m[1] * 1000) / 1000 : null; };
             const pt = em(st.paddingTop), pb = em(st.paddingBottom);
-            if (pt != null || pb != null || st.margin === '0px') { el.style.margin = '0'; if (pt) el.style.paddingTop = pt + 'em'; if (pb) el.style.paddingBottom = pb + 'em'; }
+            if (pt != null || pb != null || st.margin === '0px' || (st.marginTop === '0px' && st.marginBottom === '0px')) { el.style.margin = '0'; if (pt) el.style.paddingTop = pt + 'em'; if (pb) el.style.paddingBottom = pb + 'em'; }
           }
+          // eigener Zeilenabstand eines Absatzes (ohne Einheit, wie das Feld)
+          if (tag !== 'ul' && tag !== 'ol' && /^\d*\.?\d+$/.test(st.lineHeight || '') && +st.lineHeight >= 0.5 && +st.lineHeight <= 4) el.style.lineHeight = String(Math.round(+st.lineHeight * 100) / 100);
           // Einzug eines Absatzes (links und hängend/erste Zeile, wie in PowerPoint) – nur in em
           if (tag === 'div' || tag === 'p') {
             const em2 = (v, lo) => { const m = /^(-?\d*\.?\d+)em$/.exec(v || ''); return m && +m[1] >= lo && +m[1] <= 20 ? Math.round(+m[1] * 1000) / 1000 : null; };
@@ -186,7 +188,10 @@
             const bu = n.getAttribute('data-bu');
             if (bu && [...bu].length <= 2 && !/[<>&"]/.test(bu)) el.setAttribute('data-bu', bu);
             const bc = n.getAttribute('data-bc');
-            if (bu && /^#[0-9a-f]{6}$/i.test(bc || '')) el.setAttribute('data-bc', bc);
+            if (/^#[0-9a-f]{6}$/i.test(bc || '')) el.setAttribute('data-bc', bc);
+            // Einzug wie in PowerPoint: Text um margin-left verschoben, Zeichen bei data-bi (em, links vom Text)
+            const bi = /^-\d*\.?\d+$/.exec(n.getAttribute('data-bi') || ''), ml = /^(-?\d*\.?\d+)em$/.exec(st.marginLeft || '');
+            if (bi && +bi[0] >= -20 && ml && Math.abs(+ml[1]) <= 20) { el.setAttribute('data-bi', String(Math.round(+bi[0] * 1000) / 1000)); el.style.marginLeft = Math.round(+ml[1] * 1000) / 1000 + 'em'; const bs = +n.getAttribute('data-bs'); if (bs >= 0.25 && bs <= 4) el.setAttribute('data-bs', String(bs)); }
           }
         } else if (tag === 'br') { dst.appendChild(document.createElement('br')); continue; }
         else if (tag === 'b' || tag === 'strong') el = document.createElement('b');
@@ -465,6 +470,7 @@
     }
     // Farbe eigener Aufzählungszeichen
     n.querySelectorAll('li[data-bc]').forEach((li) => li.style.setProperty('--bc', li.getAttribute('data-bc')));
+    n.querySelectorAll('li[data-bi]').forEach((li) => { li.style.setProperty('--bi', li.getAttribute('data-bi') + 'em'); if (li.getAttribute('data-bs')) li.style.setProperty('--bs', li.getAttribute('data-bs')); });
     return n;
   }
   // Hintergrund: Folie vor Design; Bild vor Verlauf vor Farbe
@@ -2572,7 +2578,8 @@
   // Absatzabstand vor/nach (in Schrifthöhen) aus dem Stil eines Absatzes
   function paraSp(p, el) {
     if (!p || !el || !el.style) return;
-    if (el.style.margin === '0px' || el.style.paddingTop || el.style.paddingBottom) { p.sb = parseFloat(el.style.paddingTop) || 0; p.sa = parseFloat(el.style.paddingBottom) || 0; }
+    if (el.style.margin === '0px' || el.style.marginBottom === '0px' || el.style.paddingTop || el.style.paddingBottom) { p.sb = parseFloat(el.style.paddingTop) || 0; p.sa = parseFloat(el.style.paddingBottom) || 0; }
+    const lh = parseFloat(el.style.lineHeight); if (lh >= 0.5 && lh <= 4 && /^[\d.]+$/.test(el.style.lineHeight)) p.lh = lh;
     if (el.style.paddingLeft || el.style.textIndent) { p.ml = parseFloat(el.style.paddingLeft) || 0; p.ti = parseFloat(el.style.textIndent) || 0; }
   }
   function paras(html, base) {
@@ -2589,7 +2596,7 @@
         if (tag === 'br') { newP(blk.al, null, blk.lvl, null); continue; }
         if (tag === 'ul' || tag === 'ol') {
           let k = 0;
-          for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k }; newP(b2.al, tag, b2.lvl, k); paraSp(curP, li); if (li.getAttribute('data-bu')) { curP.bu = li.getAttribute('data-bu'); curP.bc = li.getAttribute('data-bc') || ''; } walk(li, st, b2); curP = null; }
+          for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k }; newP(b2.al, tag, b2.lvl, k); paraSp(curP, li); if (li.getAttribute('data-bu')) curP.bu = li.getAttribute('data-bu'); curP.bc = li.getAttribute('data-bc') || ''; if (li.getAttribute('data-bi')) { curP.bi = parseFloat(li.getAttribute('data-bi')) || 0; curP.ml = parseFloat(li.style.marginLeft) || 0; curP.bs = parseFloat(li.getAttribute('data-bs')) || 0; } walk(li, st, b2); curP = null; }
           continue;
         }
         if (tag === 'div' || tag === 'li') { const b2 = { ...blk, al: c.style.textAlign || blk.al }; newP(b2.al, blk.list, blk.lvl, blk.num); paraSp(curP, c); walk(c, st, b2); curP = null; continue; }
@@ -2727,7 +2734,7 @@
         const toks = [];
         for (const r of p.runs) for (const part of r.t.split(/(\s+)/)) if (part) toks.push({ ...r, t: part });
         let line = [], lw = 0, first = true;
-        const push = (last) => { const m = line.length ? Math.max(...line.map((t) => t.z || 1)) : (p.runs[0] && p.runs[0].z) || 1; lines.push({ toks: line, w: lw, al: p.al, ind, bullet: first ? p : null, last, m, sb: first ? p.sb : undefined, sa: last ? p.sa : undefined }); first = false; line = []; lw = 0; ind = ind0; maxW = Math.max(fs, w - ind); };
+        const push = (last) => { const m = line.length ? Math.max(...line.map((t) => t.z || 1)) : (p.runs[0] && p.runs[0].z) || 1; lines.push({ toks: line, w: lw, al: p.al, ind, bullet: first ? p : null, last, m, sb: first ? p.sb : undefined, sa: last ? p.sa : undefined, lh: p.lh }); first = false; line = []; lw = 0; ind = ind0; maxW = Math.max(fs, w - ind); };
         for (const tk of toks) {
           const tw = width(tk);
           tk.w = tw;
@@ -2773,7 +2780,7 @@
     const gapBefore = (l, fs) => (l.sb ? fs * (l.m || 1) * l.sb : 0);
     const linesHeight = (lines, fs, lhm, G) => {
       let h = 0;
-      lines.forEach((l, i) => { h += gapBefore(l, fs) + fs * (l.m || 1) * lhm + (i < lines.length - 1 ? gapAfter(l, fs, G) : 0); });
+      lines.forEach((l, i) => { h += gapBefore(l, fs) + fs * (l.m || 1) * (l.lh || lhm) + (i < lines.length - 1 ? gapAfter(l, fs, G) : 0); });
       return h;
     };
     const textHeight = (html, fs, w, pad, lhm, color, pg0) => {
@@ -2785,7 +2792,8 @@
     const drawTextBox = (pg, html, x, y, w, h, fs, color, va, pad, K, lhm, pg0) => {
       lhm = lhm || 1.2; const G = pg0 == null ? 0.3 : pg0;
       const lines = layoutText(paras(html, color), fs, w - 2 * pad);
-      const lhOf = (l) => fs * (l.m || 1) * lhm;
+      const L = (l) => l.lh || lhm; // Zeilenabstand des Absatzes oder des Felds
+      const lhOf = (l) => fs * (l.m || 1) * L(l);
       const total = linesHeight(lines, fs, lhm, G);
       let yy = y + pad + (va === 'm' ? Math.max(0, (h - 2 * pad - total) / 2) : va === 'b' ? Math.max(0, h - 2 * pad - total) : 0);
       lines.forEach((l, i) => { l.i0 = i; });
@@ -2797,15 +2805,15 @@
           const mark = ln.bullet.list === 'ol' ? ln.bullet.num + '.' : ln.bullet.bu || '•';
           const mf = ln.bullet.bu ? (fontCh([...mark][0], {}) || (FF.custom ? FF.r : F.r)) : (FF.custom ? FF.r : F.r);
           let mk = mark; if (ln.bullet.bu && !fontCh([...mark][0], {})) mk = '•';
-          pg.drawText(mk, { x: (x + pad + ln.ind - fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8)) * K, y: -(yy + fs * (ln.m || 1) * (0.92 + (lhm - 1.2) / 2)) * K, size: fs * K, font: mf, color: col(ln.bullet.bc || color) });
+          pg.drawText(mk, { x: (x + pad + ln.ind + (ln.bullet.bi ? ln.bullet.bi * fs : -fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8))) * K, y: -(yy + fs * (ln.m || 1) * (0.92 + (L(ln) - 1.2) / 2)) * K, size: fs * (ln.bullet.bs || 1) * K, font: mf, color: col(ln.bullet.bc || color) });
         }
         // Blocksatz: Lücken gleichmäßig strecken (nicht in der letzten Zeile eines Absatzes)
         let gap = 0;
         if (ln.al === 'justify' && !ln.last) {
           const spaces = ln.toks.filter((t) => !t.t.trim()).length;
-          if (spaces) { const extra = (avail - ln.w) / spaces; ln.toks.forEach((t) => { if (!t.t.trim()) t.w += extra; }); gap = 0; drawJust(pg, ln, lx, yy, fs, color, K, lhm, extra); yy += lhOf(ln); continue; }
+          if (spaces) { const extra = (avail - ln.w) / spaces; ln.toks.forEach((t) => { if (!t.t.trim()) t.w += extra; }); gap = 0; drawJust(pg, ln, lx, yy, fs, color, K, L(ln), extra); yy += lhOf(ln); continue; }
         }
-        drawRuns(pg, ln, lx, yy, fs, color, K, lhm, gap);
+        drawRuns(pg, ln, lx, yy, fs, color, K, L(ln), gap);
         yy += lhOf(ln) + gapAfter(ln, fs, G);
       }
     };

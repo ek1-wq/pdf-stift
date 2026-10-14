@@ -3211,5 +3211,7 @@
   " padding-bottom: ": null,
   "text-align: ": null,
   " padding-left: ": null,
-  " text-indent: ": null
+  " text-indent: ": null,
+  "margin-left: ": null,
+  "line-height: ": null
 }

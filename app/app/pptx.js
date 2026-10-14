@@ -548,6 +548,7 @@
             break;
           }
         }
+        let buS = 0; if (list === 'ul') for (const e of pl) { const bs = kid(e, 'buSzPct'); if (bs) { buS = num(at(bs, 'val')) / 100000; break; } if (kid(e, 'buSzTx')) break; }
         if (list === 'ul') { for (const e of pl) { const bcl = kid(e, 'buClr'); if (bcl) { const cc = color(bcl, T); if (cc) buC = cc.c; break; } if (kid(e, 'buClrTx')) break; } }
         // Abstand vor/nach dem Absatz: in Punkt (spcPts) oder in Prozent der Zeile (spcPct); Autofit verkleinert nur Schrift und Zeilenabstand, nicht diese Abstände
         const spc = (n) => { for (const e of pl) { const sp = kid(e, n); if (!sp) continue; const pts = kid(sp, 'spcPts'), pct = kid(sp, 'spcPct'); if (pts) return { pt: num(at(pts, 'val')) / 100 }; if (pct) return { pct: num(at(pct, 'val')) / 100000 }; } return null; };
@@ -597,12 +598,18 @@
         // leere Absätze: Höhe nach der Schriftgröße am Absatzende; Zeilenabstand des Absatzes
         const eSz = num(at(kid(p, 'endParaRPr'), 'sz')) || num(firstAttr(defR, 'sz')) || (base.sz || 18) * 100;
         let lnPct = null;
-        for (const e of pl) { const ls = path(e, 'lnSpc', 'spcPct'); if (ls) { lnPct = num(at(ls, 'val')) / 100000; break; } }
+        for (const e of pl) {
+          const ls = kid(e, 'lnSpc'); if (!ls) continue;
+          const pc = kid(ls, 'spcPct'), pt = kid(ls, 'spcPts');
+          if (pc) lnPct = num(at(pc, 'val')) / 100000;
+          else if (pt) { const rs = (runs.find((r) => r.sz) || {}).sz || (eSz / 100) * scale * K; lnPct = Math.max(0.6, Math.min(3, (num(at(pt, 'val')) / 100) * K / (rs * 1.2))); } // feste Zeilenhöhe in Punkt
+          break;
+        }
         if (lnRed) lnPct = Math.max(0.75, (lnPct || 1) * (1 - lnRed)); // nicht enger als ¾ Zeile, sonst überlappen die Zeilen
         // Einzug ohne Aufzählungszeichen: marL (links) und indent (erste Zeile, negativ = hängend), in Punkt
         const mAt = (n) => { for (const e of pl) { const v = at(e, n); if (v != null) return num(v) / 12700; } return 0; };
-        const mlPt = list ? 0 : mAt('marL'), tiPt = list ? 0 : mAt('indent');
-        paras.push({ algn, list, lvl, runs, bu, buC, sB, sA, eSz: (eSz / 100) * scale * K, lnPct, mlPt, tiPt });
+        const mlPt = mAt('marL'), tiPt = mAt('indent'); // bei Aufzählungen: Text bei marL, Zeichen bei marL + indent
+        paras.push({ algn, list, lvl, runs, bu, buC, buS, sB, sA, eSz: (eSz / 100) * scale * K, lnPct, mlPt, tiPt });
       }
       const top = (m) => [...m.entries()].sort((a, b) => b[1] - a[1])[0];
       const fs = top(stats.sz) ? top(stats.sz)[0] : Math.round((base.sz || 18) * K);
@@ -651,6 +658,7 @@
         const toEm = (v) => (!v ? 0 : v.pt != null ? (v.pt * K) / fs : (v.pct * pfs * 1.2) / fs);
         const sb = Math.round((toEm(p.sB) + (p.extraPx || 0) / fs) * 1000) / 1000, sa = Math.round(toEm(p.sA) * 1000) / 1000;
         let spSt = anySp ? `margin: 0;${sb ? ` padding-top: ${Math.min(6, sb)}em;` : ''}${sa ? ` padding-bottom: ${Math.min(6, sa)}em;` : ''}` : '';
+        { const own = p.lnPct || 1, maj = lnPct ? lnPct[0] : 1; if (Math.abs(own - maj) > 0.05) spSt += `${spSt ? ' ' : ''}line-height: ${Math.round(own * 120) / 100};`; } // eigener Zeilenabstand
         if (!p.list && p.mlPt + Math.min(0, p.tiPt) >= -0.5 && (p.mlPt > 1 || Math.abs(p.tiPt) > 1)) {
           const r3 = (v) => Math.round(Math.max(-20, Math.min(20, v)) * 1000) / 1000;
           const ml = Math.max(0, r3((p.mlPt * K) / fs)), ti = r3((p.tiPt * K) / fs);
@@ -663,8 +671,18 @@
           if (stack.length === depth && stack[depth - 1].tag !== p.list) closeTo(depth - 1);
           if (stack.length === depth) html += '</li>';
           while (stack.length < depth) { html += `<${p.list}>`; stack.push({ tag: p.list }); if (stack.length < depth) html += '<li>'; }
-          const buA = p.bu && p.list === 'ul' ? ` data-bu="${esc(p.bu)}"${p.buC && p.buC !== c ? ` data-bc="${p.buC}"` : ''}` : '';
-          html += `<li${buA}${spSt ? ` style="${spSt}"` : ''}>${AL[p.algn] ? `<div style="text-align: ${AL[p.algn]};">${inner}</div>` : inner}`;
+          let buA = p.list === 'ul' ? `${p.bu ? ` data-bu="${esc(p.bu)}"` : ''}${p.buC && p.buC !== c ? ` data-bc="${p.buC}"` : ''}` : '';
+          // Einzug wie in PowerPoint: Text beginnt bei marL, das Zeichen bei marL + indent (indent meist negativ)
+          let liSt = spSt;
+          if (p.list === 'ul' && p.mlPt > 1) {
+            const r3 = (v) => Math.round(v * 1000) / 1000;
+            const m = (p.mlPt * K) / fs, bi = Math.max(-m, (p.tiPt * K) / fs);
+            if (bi <= -0.4 && m <= 20) {
+              liSt += `${liSt ? ' ' : ''}margin-left: ${r3(m - 1.2 * depth)}em;`; buA += ` data-bi="${r3(bi)}"`;
+              if (p.buS && Math.abs(p.buS - 1) > 0.05) buA += ` data-bs="${Math.round(Math.max(0.25, Math.min(4, p.buS)) * 100) / 100}"`; // Größe des Zeichens relativ zum Text
+            }
+          }
+          html += `<li${buA}${liSt ? ` style="${liSt}"` : ''}>${AL[p.algn] ? `<div style="text-align: ${AL[p.algn]};">${inner}</div>` : inner}`;
         } else {
           closeTo(0);
           html += `<div${al}>${inner}</div>`;
@@ -1392,7 +1410,7 @@
         if (tag === 'li' || tag === 'div' || tag === 'p') {
           const al = (k.style && k.style.textAlign) || blk.al || '';
           const unit = blk.unit || ++U;
-          const spOf = (q) => { if (k.style && (k.style.paddingTop || k.style.paddingBottom)) { q.sb = parseFloat(k.style.paddingTop) || 0; q.sa = parseFloat(k.style.paddingBottom) || 0; } return q; };
+          const spOf = (q) => { if (k.style && (k.style.paddingTop || k.style.paddingBottom)) { q.sb = parseFloat(k.style.paddingTop) || 0; q.sa = parseFloat(k.style.paddingBottom) || 0; } if (k.getAttribute && k.getAttribute('data-bi')) q.bi = parseFloat(k.getAttribute('data-bi')) || 0; return q; };
           if (tag === 'li') { const q = spOf(np({ ...blk, al, unit })); if (k.getAttribute('data-bu')) { q.bu = k.getAttribute('data-bu'); q.bc = k.getAttribute('data-bc') || ''; } walk(k, st, { ...blk, al, inLi: 1, unit }); cur = null; continue; }
           if (blk.inLi && cur && !cur.runs.length) { cur.al = al; walk(k, st, { ...blk, al }); continue; }
           spOf(np({ ...blk, al, unit })); walk(k, st, { ...blk, al, unit }); cur = null; continue;
@@ -1415,7 +1433,7 @@
     const out = [];
     paras.forEach((p, pi) => {
       const po = { align: AL[p.al] || 'left' };
-      if (p.list) { po.bullet = p.list === 'ol' ? { type: 'number' } : p.bu ? { characterCode: p.bu.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') } : true; if (p.lvl) po.indentLevel = p.lvl; }
+      if (p.list) { po.bullet = p.list === 'ol' ? { type: 'number' } : p.bu ? { characterCode: p.bu.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') } : true; if (p.lvl) po.indentLevel = p.lvl; if (p.bi && p.list === 'ul') po.bullet = { ...(po.bullet === true ? {} : po.bullet), indent: Math.round(-p.bi * ((o && o.fs) || 18) * 10) / 10 }; }
       const pfs = (o && o.fs) || 18;
       if (p.sb) po.paraSpaceBefore = Math.round(p.sb * pfs * 10) / 10;
       if (p.sa) po.paraSpaceAfter = Math.round(p.sa * pfs * 10) / 10;
