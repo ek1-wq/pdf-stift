@@ -464,7 +464,7 @@
       if (e.cm) tb.classList.add('pp0'); // Tabellen aus PowerPoint: kein zusätzlicher Absatzabstand in den Zellen
       const MG = mergeMap(e);
       tb.innerHTML = '<colgroup>' + cw.map((f) => `<col style="width:${f * 100}%">`).join('') + '</colgroup>' +
-        e.rows.map((row, ri) => `<tr style="height:${r1(rh[ri] * e.h)}px">` + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; const cs = (e.cs && e.cs[k]) || {}; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${cs.c || th.fg}`}${cs.f ? `;background:${cs.f}` : ''}${cs.b ? ';font-weight:700' : ''};vertical-align:${{ t: 'top', b: 'bottom' }[cs.v || e.va] || 'middle'}"><div class="dk-cell" style="padding:${cpad}">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
+        e.rows.map((row, ri) => `<tr style="height:${r1(rh[ri] * e.h)}px">` + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; const cs = (e.cs && e.cs[k]) || {}; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${cs.c || th.fg}`}${cs.f ? `;background:${cs.f}` : ''}${cs.b ? ';font-weight:700' : ''};vertical-align:${{ t: 'top', b: 'bottom' }[cs.v || e.va] || 'middle'}"><div class="dk-cell" style="padding:${cpad}${cs.vt ? ';writing-mode:vertical-rl' + (cs.vt === 'u' ? ';transform:rotate(180deg)' : '') : ''}">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
       n.appendChild(tb);
     }
     // Farbe eigener Aufzählungszeichen
@@ -618,28 +618,67 @@
   // Diagramm als einfache Zeichenbefehle (gleich für Bildschirm und PDF)
   function chartPrims(e, th) {
     const P = [], fs = e.fs || 14, w = e.w, h = e.h, col0 = chartColors(th), fg = e.tc || th.fg, grid = '#D5D9E0';
-    const labels = e.labels || [], ser = (e.series || []).filter((s0) => s0 && Array.isArray(s0.v));
+    // Lücken in den Werten (leere Zellen) als null, nicht als „Loch“ im Feld
+    const labels = e.labels || [], ser = (e.series || []).filter((s0) => s0 && Array.isArray(s0.v)).map((s0) => ({ ...s0, v: Array.from(s0.v, (x) => (x == null || x === '' ? null : x)) }));
     // Farbe je Reihe (eigene aus PowerPoint, sonst die des Designs); beim Kreis je Stück
-    const col = e.ct === 'pie' ? col0 : col0.map((c, i) => (ser[i] && ser[i].c) || c);
+    const col = e.ct === 'pie' ? (Array.isArray(e.pc) && e.pc.length ? e.pc : col0) : col0.map((c, i) => (ser[i] && ser[i].c) || c);
     while (e.ct !== 'pie' && col.length < ser.length) col.push((ser[col.length] && ser[col.length].c) || col0[col.length % col0.length]);
-    const fmtV = (v, axis) => (e.pct ? (+(v * 100).toFixed(axis ? 1 : e.dp != null ? Math.max(0, e.dp) : 1)).toLocaleString(NUM_LOC) + (NUM_LOC === 'en-US' ? '%' : ' %') : !axis && e.dp != null ? (+v).toLocaleString(NUM_LOC, { minimumFractionDigits: e.dp, maximumFractionDigits: e.dp }) : fmtNum(v));
+    const pctAx = e.st === 'p'; // gestapelt auf 100 %: Achse in Prozent
+    const pctFmt = (v, d) => (+(v * 100).toFixed(d)).toLocaleString(NUM_LOC) + (NUM_LOC === 'en-US' ? '%' : ' %');
+    const fmtV = (v, axis) => (e.pct || (axis && pctAx) ? pctFmt(v, axis ? (pctAx ? 0 : 1) : e.dp != null ? Math.max(0, e.dp) : 1) : !axis && e.dp != null ? (+v).toLocaleString(NUM_LOC, { minimumFractionDigits: e.dp, maximumFractionDigits: e.dp }) : fmtNum(v));
     if (e.bg) P.push({ k: 'rect', x: 0, y: 0, w, h, fill: e.bg });
     const tw = (t, z = fs) => String(t).length * z * 0.55;
-    let top = fs * 0.6, bottom = h - fs * 0.5;
-    if (e.title) { P.push({ k: 'text', x: w / 2, y: fs * 1.45, s: e.title, fs: fs * 1.25, a: 'middle', c: fg, b: 1 }); top = fs * 2.4; }
+    // Text auf mehrere Zeilen umbrechen (höchstens n Zeilen)
+    const wrap = (t, z, maxW, n = 4) => {
+      const words = String(t).split(/\s+/).filter(Boolean), out = [];
+      let cur = '';
+      for (const wd of words) { const nx = cur ? cur + ' ' + wd : wd; if (cur && tw(nx, z) > maxW) { out.push(cur); cur = wd; } else cur = nx; }
+      if (cur) out.push(cur);
+      if (out.length > n) { out.length = n; out[n - 1] += ' …'; }
+      return out.length ? out : [''];
+    };
+    let top = fs * 0.6, bottom = h - fs * 0.5, left = fs * 0.2, right = w - fs * 0.6;
+    if (e.title) {
+      const tz = fs * 1.25, lines = wrap(e.title, tz, w - fs, 3);
+      lines.forEach((ln, i) => P.push({ k: 'text', x: w / 2, y: fs * 0.45 + tz * (1 + i * 1.15), s: ln, fs: tz, a: 'middle', c: fg, b: 1 }));
+      top = fs * 0.9 + tz * (lines.length * 1.15) + fs * 0.3;
+    }
     const legendItems = e.ct === 'pie' ? labels : ser.map((s0) => s0.n || '');
     if (e.legend !== 0 && legendItems.length && (e.ct === 'pie' || ser.length > 1)) {
-      const items = legendItems.map((t, i) => ({ t: String(t), c: col[i % col.length], wd: fs * 1.6 + tw(t) }));
-      const total = items.reduce((a, it) => a + it.wd, 0);
-      let x = Math.max(fs * 0.5, (w - total) / 2);
-      const y = h - fs * 0.9;
-      for (const it of items) { P.push({ k: 'rect', x, y: y - fs * 0.75, w: fs * 0.8, h: fs * 0.8, fill: it.c }); P.push({ k: 'text', x: x + fs * 1.1, y, s: it.t, fs, a: 'start', c: fg }); x += it.wd; }
-      bottom = h - fs * 2.2;
+      const items = legendItems.map((t, i) => ({ t: String(t).trim(), c: col[i % col.length], wd: fs * 1.6 + tw(String(t).trim()) }));
+      const box = e.lg ? { x: e.lg[0] * w, y: e.lg[1] * h, w: e.lg[2] * w, h: e.lg[3] * h } : null;
+      // von Hand gesetzte Legende: nebeneinander, wenn alles in eine Zeile des Rahmens passt
+      const vert = (e.lp === 'r' || e.lp === 'l') && !(box && items.reduce((a, it) => a + it.wd, 0) <= box.w && box.h < items.length * fs * 1.2);
+      const item = (it, x, y) => { P.push({ k: 'rect', x, y: y - fs * 0.75, w: fs * 0.8, h: fs * 0.8, fill: it.c }); P.push({ k: 'text', x: x + fs * 1.1, y, s: it.t, fs, a: 'start', c: fg }); };
+      if (vert) {
+        const lw = Math.min(w * 0.45, Math.max(...items.map((it) => it.wd)) + fs * 0.4), lh = items.length * fs * 1.35;
+        const x0 = box ? box.x : e.lp === 'l' ? fs * 0.4 : w - lw;
+        let y = (box ? box.y + Math.max(0, (box.h - lh) / 2) : top + Math.max(0, (bottom - top - lh) / 2)) + fs;
+        for (const it of items) { item(it, x0, y); y += fs * 1.35; }
+        if (!box) { if (e.lp === 'l') left = lw + fs * 0.6; else right = w - lw - fs * 0.4; }
+      } else {
+        // waagrecht, bei Bedarf in mehreren Zeilen
+        const maxW = box ? box.w : w - fs, rowsL = [[]];
+        let acc = 0;
+        for (const it of items) { if (acc + it.wd > maxW && rowsL[rowsL.length - 1].length) { rowsL.push([]); acc = 0; } rowsL[rowsL.length - 1].push(it); acc += it.wd; }
+        const rowH = fs * 1.35, totalH = rowsL.length * rowH;
+        let y = box ? box.y + fs : e.lp === 't' ? top + fs * 0.9 : h - totalH + fs * 0.45;
+        for (const row of rowsL) {
+          const rw = row.reduce((a, it) => a + it.wd, 0);
+          let x = box ? box.x + Math.max(0, (box.w - rw) / 2) : Math.max(fs * 0.5, (w - rw) / 2);
+          for (const it of row) { item(it, x, y); x += it.wd; }
+          y += rowH;
+        }
+        if (!box) { if (e.lp === 't') top += totalH + fs * 0.3; else bottom = h - totalH - fs * 0.7; }
+      }
     }
+    // Zeichenfläche: von Hand gesetzt (aus PowerPoint) oder aus dem freien Platz
+    const PL = e.pl ? { x: e.pl[0] * w, y: e.pl[1] * h, w: e.pl[2] * w, h: e.pl[3] * h } : null;
     if (e.ct === 'pie') {
       const vals = (ser[0] ? ser[0].v : []).map((v) => Math.max(0, +v || 0));
       const sum = vals.reduce((a, b) => a + b, 0) || 1;
-      const cx = w / 2, cy = (top + bottom) / 2, r = Math.max(4, Math.min(w * 0.45, (bottom - top) / 2));
+      const cx = PL ? PL.x + PL.w / 2 : (left + right) / 2, cy = PL ? PL.y + PL.h / 2 : (top + bottom) / 2;
+      const r = Math.max(4, PL ? Math.min(PL.w, PL.h) / 2 : Math.min((right - left) * 0.45, (bottom - top) / 2));
       let a0 = -Math.PI / 2;
       vals.forEach((v, i) => {
         const a1 = a0 + (v / sum) * Math.PI * 2;
@@ -655,52 +694,85 @@
       });
       return P;
     }
-    const all = ser.flatMap((s0) => s0.v.map((v) => +v || 0));
-    let ticks = niceTicks(e.vmin != null ? e.vmin : Math.min(0, ...all), e.vmax != null ? e.vmax : Math.max(0, ...all));
-    if (e.vmin != null) ticks = ticks.filter((t) => t >= e.vmin - 1e-9);
-    if (e.vmax != null) ticks = ticks.filter((t) => t <= e.vmax + 1e-9);
+    const n = Math.max(1, labels.length);
+    const lineSer = ser.map((s0, si) => [s0, si]).filter(([s0]) => e.ct === 'line' || s0.t === 'line');
+    const barSer = e.ct === 'line' ? [] : ser.map((s0, si) => [s0, si]).filter(([s0]) => s0.t !== 'line');
+    const stack = !!e.st && barSer.length > 1;
+    // Werte gestapelt: Summen je Rubrik (positiv/negativ getrennt); bei 100 % je Rubrik geteilt durch die Summe
+    const tot = Array.from({ length: n }, (_, i) => barSer.reduce((a, [s0]) => a + Math.abs(+s0.v[i] || 0), 0) || 1);
+    const val = (s0, i) => { const v = +s0.v[i] || 0; return pctAx && s0.t !== 'line' ? v / tot[i] : v; };
+    const pos = Array(n).fill(0), neg = Array(n).fill(0);
+    let all = [];
+    if (stack) { for (const [s0] of barSer) for (let i = 0; i < n; i++) { const v = val(s0, i); if (v >= 0) pos[i] += v; else neg[i] += v; } all = [...pos, ...neg]; } else all = barSer.flatMap(([s0]) => s0.v.slice(0, n).map((_, i) => val(s0, i)));
+    all = all.concat(lineSer.flatMap(([s0]) => s0.v.slice(0, n).map((v) => +v || 0)));
+    if (!all.length) all = [0, 1];
+    let ticks = pctAx ? [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1] : niceTicks(e.vmin != null ? e.vmin : Math.min(0, ...all), e.vmax != null ? e.vmax : Math.max(0, ...all));
+    if (!pctAx && e.vmin != null) ticks = ticks.filter((t) => t >= e.vmin - 1e-9);
+    if (!pctAx && e.vmax != null) ticks = ticks.filter((t) => t <= e.vmax + 1e-9);
     if (ticks.length < 2) ticks = niceTicks(Math.min(0, ...all), Math.max(1, ...all));
-    const lo = e.vmin != null ? Math.min(e.vmin, ticks[0]) : ticks[0], hi = e.vmax != null ? Math.max(e.vmax, ticks[ticks.length - 1]) : ticks[ticks.length - 1];
+    const lo = !pctAx && e.vmin != null ? Math.min(e.vmin, ticks[0]) : ticks[0], hi = !pctAx && e.vmax != null ? Math.max(e.vmax, ticks[ticks.length - 1]) : ticks[ticks.length - 1];
     const horiz = e.ct === 'bar';
-    const valW = Math.max(...ticks.map((t) => tw(fmtV(t, 1)))) + fs * 0.6;
-    const catW = Math.max(0, ...labels.map((t) => tw(t))) + fs * 0.6;
-    const L = horiz ? Math.min(w * 0.35, catW) : valW, B = bottom - (horiz ? fs * 1.5 : fs * 1.6), R = w - fs * 0.6, T = top;
+    const rot = horiz ? 0 : e.lr || 0;
+    const valW = e.nv ? fs * 0.3 : Math.max(...ticks.map((t) => tw(fmtV(t, 1), fs * 0.9))) + fs * 0.6;
+    const catW = e.nc ? fs * 0.3 : Math.max(0, ...labels.map((t) => tw(t))) + fs * 0.6;
+    // Platz für die Rubriken unter den Säulen: gedreht (Länge des längsten Texts) oder umgebrochen (bis 3 Zeilen)
+    const pw0 = Math.max(10, right - (horiz ? Math.min(w * 0.35, catW) : valW) - left), slot0 = pw0 / n;
+    const catLines = horiz || rot ? null : labels.map((t) => wrap(t, fs, Math.max(fs * 2, slot0 * 0.95), 3));
+    const catH = e.nc ? fs * 0.4 : horiz ? fs * 1.5 : rot ? Math.min(h * 0.4, Math.abs(Math.sin((rot * Math.PI) / 180)) * Math.max(0, ...labels.map((t) => tw(t))) + fs * 1.2) : fs * (0.6 + 1.1 * Math.max(1, ...catLines.map((l) => l.length)));
+    let L, B, R, T;
+    if (PL) { L = PL.x; T = PL.y; R = PL.x + PL.w; B = PL.y + PL.h; }
+    else { L = left + (horiz ? Math.min(w * 0.35, catW) : valW); B = bottom - catH; R = right; T = top; }
     const pw = Math.max(10, R - L), ph = Math.max(10, B - T);
     const vpos = (v0) => { const v = Math.max(lo, Math.min(hi, v0)); return horiz ? L + ((v - lo) / (hi - lo)) * pw : B - ((v - lo) / (hi - lo)) * ph; };
     // Gitter und Werte-Achse
     for (const t of ticks) {
-      if (horiz) { const x = vpos(t); P.push({ k: 'line', x1: x, y1: T, x2: x, y2: B, c: grid, sw: 0.8 }); P.push({ k: 'text', x, y: B + fs * 1.2, s: fmtV(t, 1), fs: fs * 0.9, a: 'middle', c: fg }); }
-      else { const y = vpos(t); P.push({ k: 'line', x1: L, y1: y, x2: R, y2: y, c: grid, sw: 0.8 }); P.push({ k: 'text', x: L - fs * 0.4, y: y + fs * 0.32, s: fmtV(t, 1), fs: fs * 0.9, a: 'end', c: fg }); }
+      if (horiz) { const x = vpos(t); if (!e.ng) P.push({ k: 'line', x1: x, y1: T, x2: x, y2: B, c: grid, sw: 0.8 }); if (!e.nv) P.push({ k: 'text', x, y: B + fs * 1.2, s: fmtV(t, 1), fs: fs * 0.9, a: 'middle', c: fg }); }
+      else { const y = vpos(t); if (!e.ng) P.push({ k: 'line', x1: L, y1: y, x2: R, y2: y, c: grid, sw: 0.8 }); if (!e.nv) P.push({ k: 'text', x: L - fs * 0.4, y: y + fs * 0.32, s: fmtV(t, 1), fs: fs * 0.9, a: 'end', c: fg }); }
     }
-    const n = Math.max(1, labels.length), slot = (horiz ? ph : pw) / n;
+    const slot = (horiz ? ph : pw) / n;
     // zu viele Beschriftungen: nur jede k-te zeigen, damit nichts übereinanderliegt
-    const every = horiz ? Math.max(1, Math.ceil((fs * 1.05) / slot)) : Math.max(1, Math.ceil((Math.max(0, ...labels.map((t) => tw(t))) * 0.85 + fs * 0.2) / slot));
-    labels.forEach((t, i) => {
+    const every = horiz || rot ? Math.max(1, Math.ceil((fs * 1.05) / slot)) : Math.max(1, Math.ceil((Math.max(0, ...catLines.map((l) => Math.max(...l.map((x) => tw(x))))) * 0.85 + fs * 0.2) / slot));
+    if (!e.nc) labels.forEach((t, i) => {
       if (i % every) return;
       if (horiz) P.push({ k: 'text', x: L - fs * 0.4, y: T + slot * (i + 0.5) + fs * 0.35, s: t, fs, a: 'end', c: fg });
-      else P.push({ k: 'text', x: L + slot * (i + 0.5), y: B + fs * 1.25, s: t, fs, a: 'middle', c: fg });
+      else if (rot) P.push({ k: 'text', x: L + slot * (i + 0.5) + fs * 0.3, y: B + fs * 0.5, s: t, fs, a: 'end', c: fg, r: rot });
+      else catLines[i].forEach((ln, j) => P.push({ k: 'text', x: L + slot * (i + 0.5), y: B + fs * (1.25 + 1.1 * j), s: ln, fs, a: 'middle', c: fg }));
     });
     const zero = vpos(Math.max(lo, Math.min(hi, 0)));
-    if (e.ct === 'line') {
-      ser.forEach((s0, si) => {
-        const pts = s0.v.slice(0, n).map((v, i) => [L + slot * (i + 0.5), vpos(+v || 0)]);
-        if (pts.length > 1) P.push({ k: 'path', d: 'M' + pts.map((q) => q.map((z) => +z.toFixed(2)).join(' ')).join('L'), stroke: col[si % col.length], sw: Math.max(1.5, fs * 0.16) });
-        if (e.mk !== 0) for (const [x, y] of pts) P.push({ k: 'circle', cx: x, cy: y, r: Math.max(2, fs * 0.22), fill: col[si % col.length] });
-        if (e.dl) s0.v.slice(0, n).forEach((v, i) => { if (i % every === 0 || n <= 12) P.push({ k: 'text', x: pts[i][0], y: pts[i][1] - fs * 0.5, s: fmtV(+v || 0), fs: fs * 0.8, a: 'middle', c: fg }); });
-      });
-    } else {
-      const m = Math.max(1, ser.length), gap = slot * 0.2, bw = (slot - 2 * gap) / m;
-      ser.forEach((s0, si) => s0.v.slice(0, n).forEach((v, i) => {
-        const p0 = vpos(+v || 0), off = slot * i + gap + bw * si;
-        if (horiz) P.push({ k: 'rect', x: Math.min(zero, p0), y: T + off, w: Math.abs(p0 - zero), h: bw * 0.92, fill: col[si % col.length] });
-        else P.push({ k: 'rect', x: L + off, y: Math.min(zero, p0), w: bw * 0.92, h: Math.abs(p0 - zero), fill: col[si % col.length] });
-        if (e.dl) {
-          const neg = (+v || 0) < 0, s1 = fmtV(+v || 0);
-          if (horiz) P.push({ k: 'text', x: p0 + (neg ? -fs * 0.3 : fs * 0.3), y: T + off + bw * 0.46 + fs * 0.3, s: s1, fs: fs * 0.85, a: neg ? 'end' : 'start', c: fg });
-          else P.push({ k: 'text', x: L + off + bw * 0.46, y: neg ? p0 + fs : p0 - fs * 0.3, s: s1, fs: fs * 0.85, a: 'middle', c: fg });
+    const dark = (c) => { const m = /^#?([0-9a-f]{6})$/i.exec(c || ''); if (!m) return false; const v = parseInt(m[1], 16); return 0.3 * (v >> 16) + 0.59 * ((v >> 8) & 255) + 0.11 * (v & 255) < 140; };
+    if (barSer.length) {
+      const m = stack ? 1 : barSer.length, gw = (e.gw != null ? e.gw : 150) / 100;
+      const bw = slot / (m + gw), gap = (slot - bw * m) / 2;
+      const base = { p: Array(n).fill(0), n: Array(n).fill(0) };
+      barSer.forEach(([s0, si], k) => s0.v.slice(0, n).forEach((_, i) => {
+        const v = val(s0, i);
+        let a0 = 0, a1 = v;
+        if (stack) { const key = v >= 0 ? 'p' : 'n'; a0 = base[key][i]; a1 = a0 + v; base[key][i] = a1; }
+        const p0 = vpos(a0), p1 = vpos(a1), off = slot * i + gap + (stack ? 0 : bw * k);
+        const c = col[si % col.length];
+        if (horiz) P.push({ k: 'rect', x: Math.min(p0, p1), y: T + off, w: Math.abs(p1 - p0), h: bw * (stack ? 1 : 0.92), fill: c });
+        else P.push({ k: 'rect', x: L + off, y: Math.min(p0, p1), w: bw * (stack ? 1 : 0.92), h: Math.abs(p1 - p0), fill: c });
+        if (e.dl || s0.dl) {
+          const s1 = e.pct || !pctAx ? fmtV(+s0.v[i] || 0) : fmtNum(+s0.v[i] || 0);
+          if (stack) { if (Math.abs(p1 - p0) > fs * 0.9) P.push(horiz ? { k: 'text', x: (p0 + p1) / 2, y: T + off + bw / 2 + fs * 0.3, s: s1, fs: fs * 0.85, a: 'middle', c: dark(c) ? '#FFFFFF' : fg } : { k: 'text', x: L + off + bw / 2, y: (p0 + p1) / 2 + fs * 0.3, s: s1, fs: fs * 0.85, a: 'middle', c: dark(c) ? '#FFFFFF' : fg }); }
+          else {
+            const ng = v < 0;
+            if (horiz) P.push({ k: 'text', x: p1 + (ng ? -fs * 0.3 : fs * 0.3), y: T + off + bw * 0.46 + fs * 0.3, s: s1, fs: fs * 0.85, a: ng ? 'end' : 'start', c: fg });
+            else P.push({ k: 'text', x: L + off + bw * 0.46, y: ng ? p1 + fs : p1 - fs * 0.3, s: s1, fs: fs * 0.85, a: 'middle', c: fg });
+          }
         }
       }));
     }
+    // Linien (auch über Säulen); „nur Punkte“, wenn die Linie ausgeblendet ist
+    lineSer.forEach(([s0, si]) => {
+      const c = col[si % col.length];
+      const pts = s0.v.slice(0, n).map((v, i) => (v == null ? null : horiz ? [vpos(+v || 0), T + slot * (i + 0.5)] : [L + slot * (i + 0.5), vpos(+v || 0)]));
+      // Linie mit Lücken: neu ansetzen nach einem leeren Wert
+      const d = pts.map((q, i) => (q ? (i && pts[i - 1] ? 'L' : 'M') + q.map((z) => +z.toFixed(2)).join(' ') : '')).join('');
+      if (pts.filter(Boolean).length > 1 && !s0.nl) P.push({ k: 'path', d, stroke: c, sw: Math.max(1.5, fs * 0.16) });
+      if ((e.ct === 'line' ? e.mk !== 0 : true) && !s0.nm) for (const q of pts) if (q) P.push({ k: 'circle', cx: q[0], cy: q[1], r: Math.max(2, fs * (s0.nl ? 0.28 : 0.22)), fill: c });
+      if (e.dl || s0.dl) s0.v.slice(0, n).forEach((v, i) => { if (pts[i] && (i % every === 0 || n <= 12)) P.push({ k: 'text', x: pts[i][0], y: pts[i][1] - fs * 0.5, s: fmtV(+v || 0), fs: fs * 0.8, a: 'middle', c: fg }); });
+    });
     P.push(horiz ? { k: 'line', x1: zero, y1: T, x2: zero, y2: B, c: '#868E96', sw: 1 } : { k: 'line', x1: L, y1: zero, x2: R, y2: zero, c: '#868E96', sw: 1 });
     return P;
   }
@@ -711,7 +783,7 @@
       if (p.k === 'line') return `<line x1="${p.x1}" y1="${p.y1}" x2="${p.x2}" y2="${p.y2}" stroke="${p.c}" stroke-width="${p.sw}"/>`;
       if (p.k === 'path') return `<path d="${p.d}" fill="${p.fill || 'none'}" stroke="${p.stroke || 'none'}" stroke-width="${p.sw || 0}" stroke-linejoin="round" stroke-linecap="round"/>`;
       if (p.k === 'circle') return `<circle cx="${p.cx}" cy="${p.cy}" r="${p.r}" fill="${p.fill}"/>`;
-      return `<text x="${p.x}" y="${p.y}" font-size="${p.fs}" text-anchor="${p.a}" fill="${p.c}"${p.b ? ' font-weight="700"' : ''}>${q(p.s)}</text>`;
+      return `<text x="${p.x}" y="${p.y}" font-size="${p.fs}" text-anchor="${p.a}" fill="${p.c}"${p.b ? ' font-weight="700"' : ''}${p.r ? ` transform="rotate(${p.r} ${p.x} ${p.y})"` : ''}>${q(p.s)}</text>`;
     }).join('');
     return `<svg viewBox="0 0 ${e.w} ${e.h}" width="${e.w}" height="${e.h}" style="width:${e.w}px;height:${e.h}px;max-width:none;overflow:visible;stroke:none;stroke-width:0">${body}</svg>`;
   }
@@ -2953,8 +3025,10 @@
             const f = p.b ? FF.b : FF.r;
             const str = [...String(p.s)].filter((ch) => (FF.custom ? FF.set.has(ch.codePointAt(0)) : winOk(ch))).join('');
             let tw0 = 0; try { tw0 = f.widthOfTextAtSize(str, p.fs); } catch (er) { tw0 = str.length * p.fs * 0.5; }
-            const x = p.a === 'middle' ? p.x - tw0 / 2 : p.a === 'end' ? p.x - tw0 : p.x;
-            if (str) pg.drawText(str, { x: x * K, y: -p.y * K, size: p.fs * K, font: f, color: hexRgb(p.c) });
+            // gedreht: Anfangspunkt entlang der Schreibrichtung verschieben (Bildschirm: y nach unten)
+            const off = p.a === 'middle' ? tw0 / 2 : p.a === 'end' ? tw0 : 0, ra = ((p.r || 0) * Math.PI) / 180;
+            const x = p.x - off * Math.cos(ra), y = p.y - off * Math.sin(ra);
+            if (str) pg.drawText(str, { x: x * K, y: -y * K, size: p.fs * K, font: f, color: hexRgb(p.c), ...(p.r ? { rotate: PDFLib.degrees(-p.r) } : {}) });
           }
         }
       } else if (e.t === 'table') {
@@ -2971,7 +3045,9 @@
               const k = ri + ',' + ci; if (MG.hid.has(k) || (MG.span[k] && MG.span[k][0] > 1)) continue;
               const csp = (MG.span[k] || [1, 1])[1]; let w = 0; for (let j = 0; j < csp; j++) w += e.w * cw[ci + j];
               const html = e.rows[ri][ci] || ''; if (!html.replace(/<[^>]+>/g, '').trim()) continue;
-              try { need = Math.max(need, textHeight(html, e.fs || 18, w, cp, e.lh, th.fg, 0)); } catch (er) { /* */ }
+              const vt0 = e.cs && e.cs[k] && e.cs[k].vt;
+              // senkrechter Text: die Zeile muss so hoch sein wie der Text lang ist
+              try { need = Math.max(need, vt0 ? Math.max(0, ...layoutText(paras(html, th.fg), e.fs || 18, 1e5).map((l) => l.w)) + 2 * cp + 2 : textHeight(html, e.fs || 18, w, cp, e.lh, th.fg, 0)); } catch (er) { /* */ }
             }
             return need;
           });
@@ -2989,7 +3065,14 @@
             const cf = cst.f || (head ? th.accent : null);
             pg.drawRectangle({ x: xx * K, y: -(yy + hh) * K, width: w * K, height: hh * K, color: cf ? col(cf) : (SH ? col('#000000') : undefined), borderColor: col(e.line || '#868E96'), borderWidth: 0.75, ...opa() });
             const bold = head || cst.b;
-            if (!SH) drawTextBox(pg, (bold ? '<b>' : '') + (e.rows[ri][ci] || '') + (bold ? '</b>' : ''), xx, yy, w, hh, e.fs || 18, cst.c || (head ? '#FFFFFF' : th.fg), cst.v || e.va || 'm', cp, K, e.lh, e.cm ? 0 : undefined);
+            const cellHtml = (bold ? '<b>' : '') + (e.rows[ri][ci] || '') + (bold ? '</b>' : ''), cc = cst.c || (head ? '#FFFFFF' : th.fg);
+            if (!SH && cst.vt) {
+              // senkrecht: Textfeld gedreht zeichnen (Breite = Zellenhöhe)
+              const M = cst.vt === 'u' ? [0, 1, -1, 0, xx * K, -(yy + hh) * K] : [0, -1, 1, 0, (xx + w) * K, -yy * K];
+              pg.pushOperators(PDFLib.pushGraphicsState(), PDFLib.concatTransformationMatrix(...M));
+              drawTextBox(pg, cellHtml, 0, 0, hh, w, e.fs || 18, cc, cst.v || e.va || 'm', cp, K, e.lh, e.cm ? 0 : undefined);
+              pg.pushOperators(PDFLib.popGraphicsState());
+            } else if (!SH) drawTextBox(pg, cellHtml, xx, yy, w, hh, e.fs || 18, cc, cst.v || e.va || 'm', cp, K, e.lh, e.cm ? 0 : undefined);
             xx += w0;
           }
           yy += RH[ri];

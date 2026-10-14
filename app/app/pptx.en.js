@@ -918,12 +918,14 @@
             const tcp = kid(tc, 'tcPr');
             const anc = at(tcp, 'anchor') || 't';
             if (anc !== 't') f.v = anc === 'ctr' ? 'm' : anc === 'b' ? 'b' : 't';
+            const vt = at(tcp, 'vert'); if (vt === 'vert' || vt === 'eaVert') f.vt = 'd'; else if (vt === 'vert270') f.vt = 'u'; // senkrechter Text
             if (tcp) { if (kid(tcp, 'noFill')) f.f = 'none'; else { const fc = kid(tcp, 'solidFill') && color(kid(tcp, 'solidFill'), T); if (fc) f.f = fc.c; } }
             const o = {};
             if (f.f && f.f !== 'none') o.f = f.f;
             if (f.c) o.c = f.c;
             if (f.b) o.b = 1;
             if (f.v) o.v = f.v;
+            if (f.vt) o.vt = f.vt;
             if (Object.keys(o).length) cs[r + ',' + c] = o;
           }));
           e.va = 't'; // PowerPoint: Zellen oben ausgerichtet, sofern nicht anders angegeben
@@ -942,12 +944,15 @@
           const cd = cr && xml(cr.target);
           if (!cd) return;
           const pa = all(cd, 'plotArea')[0];
-          const ch = pa && [...pa.children].find((n) => /(bar|bar3D|line|line3D|pie|pie3D|doughnut|area|area3D)Chart$/.test(n.localName));
+          const CH_RE = /(bar|bar3D|line|line3D|pie|pie3D|doughnut|area|area3D|scatter)Chart$/;
+          const chs = pa ? [...pa.children].filter((n) => CH_RE.test(n.localName)) : [];
+          // Hauptart: Säulen/Balken, sonst die erste; weitere Arten (z. B. Linie über Säulen) werden als eigene Reihen dazugezeichnet
+          const ch = chs.find((n) => /^bar/.test(n.localName)) || chs.find((n) => !/^scatter/.test(n.localName)) || chs[0];
           if (!ch) return;
           const kind = ch.localName.replace(/3D/, '');
           const ct = kind === 'barChart' ? (at(kid(ch, 'barDir'), 'val') === 'bar' ? 'bar' : 'col') : kind === 'pieChart' || kind === 'doughnutChart' ? 'pie' : 'line';
           const pts = (el) => { const ml = el && all(el, 'multiLvlStrCache')[0]; const cache = el && (all(el, 'strCache')[0] || all(el, 'numCache')[0] || (ml && kids(ml, 'lvl')[0])); const o = []; if (cache) for (const p of kids(cache, 'pt')) o[num(at(p, 'idx'))] = (kid(p, 'v') || {}).textContent || ''; return o; };
-          const sers = kids(ch, 'ser');
+          const sers = [ch, ...chs.filter((n) => n !== ch)].flatMap((c) => kids(c, 'ser').map((x) => { x._ct = c; return x; }));
           let labels = [];
           const series = sers.map((s) => {
             const cat = pts(kid(s, 'cat')); if (cat.length > labels.length) labels = cat;
@@ -955,9 +960,38 @@
             // eigene Farbe der Reihe (Füllung bei Balken, Linie bei Linien)
             const sp = kid(s, 'spPr');
             const fc = sp && (ct === 'line' ? color(path(sp, 'ln', 'solidFill'), T) || color(kid(sp, 'solidFill'), T) : color(kid(sp, 'solidFill'), T) || color(path(sp, 'ln', 'solidFill'), T));
-            return { n: nm, v: pts(kid(s, 'val')).map((v) => num(v)), c: fc && fc.c, mk: at(path(s, 'marker', 'symbol'), 'val') };
+            const o = { n: nm, v: pts(kid(s, 'val') || kid(s, 'yVal')).map((v) => num(v)), c: fc && fc.c, mk: at(path(s, 'marker', 'symbol'), 'val') };
+            // Reihe einer anderen Art als die Hauptart (Linie/Punkte über Säulen)
+            if (s._ct !== ch && ct !== 'pie' && /^(line|scatter)/.test(s._ct.localName) && /^bar/.test(ch.localName)) {
+              o.t = 'line';
+              if (sp && kid(sp, 'ln') && kid(kid(sp, 'ln'), 'noFill')) o.nl = 1; // nur Punkte, keine Linie
+              const mc = color(path(s, 'marker', 'spPr', 'solidFill'), T); if (mc) o.c = mc.c;
+              if (o.mk === 'none') o.nm = 1;
+            }
+            if (kid(s, 'dLbls') && all(kid(s, 'dLbls'), 'showVal').some((x) => at(x, 'val') === '1')) o.dl = 1;
+            return o;
           }).filter((s) => s.v.length);
           if (!series.length) return;
+          let pieC = null;
+          // Reihen ohne eigene Farbe: Farben der Diagrammformatvorlage (c:style 1–48: Spalte 1 grau, 2 bunt, 3–8 Abstufungen einer Akzentfarbe)
+          {
+            const sty = num(at(all(cd, 'style').find((n) => n.parentNode === cd.documentElement || n.parentNode.localName === 'Fallback'), 'val'), 2);
+            const colN = ((Math.max(1, Math.min(48, sty)) - 1) % 8) + 1;
+            const acc = (k) => '#' + (T.scheme['accent' + k] || '4472C4');
+            const mixC = (hex, f) => '#' + [1, 3, 5].map((i) => { const v = parseInt(hex.slice(i, i + 2), 16); return hex2(f < 0 ? v * (1 + f) : v + (255 - v) * f); }).join('').toUpperCase();
+            const n = series.length;
+            series.forEach((sr, i) => {
+              if (ct === 'pie' && i === 0) {
+                // Kreis: Farbe je Stück (eigene Farben der Datenpunkte, sonst die Akzentfarben)
+                const dp = {}; for (const d of kids(sers[0], 'dPt')) { const c = color(path(d, 'spPr', 'solidFill'), T); if (c) dp[num(at(kid(d, 'idx'), 'val'))] = c.c; }
+                const vary = at(kid(ch, 'varyColors'), 'val') !== '0';
+                pieC = sr.v.map((_, k) => dp[k] || (vary ? (colN === 2 || colN === 1 ? acc((k % 6) + 1) : mixC(acc(colN - 2), sr.v.length > 1 ? -0.5 + k / (sr.v.length - 1) : 0)) : sr.c || acc(1)));
+              }
+              if (sr.c || ct === 'pie') return;
+              const f = n > 1 ? -0.5 + i / (n - 1) : 0; // von dunkel nach hell
+              sr.c = colN === 1 ? mixC('#808080', f * 0.9) : colN === 2 ? acc((i % 6) + 1) : mixC(acc(colN - 2), f);
+            });
+          }
           labels = labels.map((l) => (l == null ? '' : String(l)));
           while (labels.length < series[0].v.length) labels.push(String(labels.length + 1));
           const title = all(path(cd.documentElement, 'chart', 'title'), 't').map((t) => t.textContent).join('') || '';
@@ -965,7 +999,8 @@
           const axR = (ax) => ax && all(kid(ax, 'txPr'), 'defRPr')[0];
           const rp = axR(catAx) || axR(valAx) || all(kid(cd.documentElement, 'txPr'), 'defRPr')[0];
           const csz = num(at(rp, 'sz')) || num(at(all(kid(cd.documentElement, 'txPr'), 'defRPr')[0], 'sz')) || 1000;
-          const e = { ...base, t: 'chart', ct, labels: labels.slice(0, 60), series: series.slice(0, 10).map((s) => ({ n: s.n, v: s.v.slice(0, 60), ...(s.c ? { c: s.c } : {}) })), fs: Math.max(6, Math.round((csz / 100) * K)), legend: path(cd.documentElement, 'chart', 'legend') ? 1 : 0 };
+          const e = { ...base, t: 'chart', ct, labels: labels.slice(0, 60), series: series.slice(0, 10).map((s) => ({ n: s.n, v: s.v.slice(0, 60), ...(s.c ? { c: s.c } : {}), ...(s.t ? { t: s.t } : {}), ...(s.nl ? { nl: 1 } : {}), ...(s.nm ? { nm: 1 } : {}), ...(s.dl ? { dl: 1 } : {}) })), fs: Math.max(6, Math.round((csz / 100) * K)), legend: path(cd.documentElement, 'chart', 'legend') ? 1 : 0 };
+          if (pieC && pieC.length) e.pc = pieC.slice(0, 60);
           if (title && path(cd.documentElement, 'chart', 'autoTitleDeleted') && at(path(cd.documentElement, 'chart', 'autoTitleDeleted'), 'val') === '1') { /* kein Titel */ } else if (title) e.title = title;
           // Aussehen: Hintergrund, Schriftfarbe, Achsenbereich, Zahlenformat, Werte an den Balken, Punkte
           const csp = kid(cd.documentElement, 'spPr');
@@ -984,6 +1019,21 @@
           if (dec) e.dp = dec[1].length;
           if (all(ch, 'showVal').some((x) => at(x, 'val') === '1')) e.dl = 1;
           if (ct === 'line' && series.every((s) => s.mk === 'none')) e.mk = 0;
+          // gestapelt bzw. gestapelt auf 100 %
+          const grp = at(kid(ch, 'grouping'), 'val');
+          if (grp === 'stacked') e.st = 's'; else if (grp === 'percentStacked') e.st = 'p';
+          const gw = kid(ch, 'gapWidth'); if (gw) e.gw = Math.max(0, Math.min(500, num(at(gw, 'val'), 150)));
+          // Lage von Zeichenfläche und Legende (von Hand gesetzt), Legende rechts/oben/links
+          const ml = (n) => { const m = n && all(n, 'manualLayout')[0]; if (!m || !kid(m, 'x')) return null; const g = (k) => Math.round(num(at(kid(m, k), 'val')) * 1000) / 1000; return [g('x'), g('y'), g('w'), g('h')]; };
+          const plm = ml(kid(pa, 'layout')); if (plm && plm[2] > 0.05 && plm[3] > 0.05) e.pl = plm;
+          const lgd = path(cd.documentElement, 'chart', 'legend');
+          if (lgd) { const lp = at(kid(lgd, 'legendPos'), 'val') || 'r'; if (/^(r|t|l)$/.test(lp)) e.lp = lp; const lgm = ml(kid(lgd, 'layout')); if (lgm && lgm[2] > 0.02) e.lg = lgm; }
+          // Beschriftung der Rubrikenachse gedreht; ausgeblendete Achsen; Gitternetz
+          const lr = at(all(kid(catAx, 'txPr'), 'bodyPr')[0], 'rot');
+          if (lr != null && Math.abs(num(lr)) >= 60000 && Math.abs(num(lr)) <= 5400000) e.lr = Math.round(num(lr) / 60000); // −60000000 = „automatisch“
+          if (catAx && at(kid(catAx, 'delete'), 'val') === '1') e.nc = 1;
+          if (valAx && at(kid(valAx, 'delete'), 'val') === '1') e.nv = 1;
+          if (valAx && !kid(valAx, 'majorGridlines')) e.ng = 1;
           // Bild als Diagrammhintergrund (gestreckt oder gekachelt) und Rahmen des Diagramms
           const cbf = csp && kid(csp, 'blipFill');
           if (cbf) {
@@ -1636,12 +1686,16 @@
             const o = { ...boxO, chartColors: P.chartColors(th).map(noHash), showLegend: e.legend !== 0 && (e.ct === 'pie' || data.length > 1), legendPos: 'b', legendFontSize: fs, catAxisLabelFontSize: fs, valAxisLabelFontSize: fs, showTitle: !!e.title, title: e.title || '', titleFontSize: Math.round(fs * 1.25) };
             if (T === 'bar') o.barDir = e.ct === 'bar' ? 'bar' : 'col';
             if (e.ct === 'bar') o.catAxisOrientation = 'maxMin'; // erste Kategorie oben, wie in der Vorschau
+            if (T === 'bar' && e.st) { o.barGrouping = e.st === 'p' ? 'percentStacked' : 'stacked'; o.barGapWidthPct = e.gw != null ? e.gw : 150; }
+            if (e.lp) o.legendPos = e.lp;
+            if (e.lr) o.catAxisLabelRotate = e.lr;
             if (e.ct !== 'pie') o.chartColors = o.chartColors.map((c, i) => (ser[i] && ser[i].c ? noHash(ser[i].c) : c));
+            else if (Array.isArray(e.pc) && e.pc.length) o.chartColors = e.pc.map(noHash);
             if (e.vmin != null) o.valAxisMinVal = e.vmin;
             if (e.vmax != null) o.valAxisMaxVal = e.vmax;
             const nf = e.pct ? '0' + (e.dp ? '.' + '0'.repeat(e.dp) : '') + '%' : e.dp != null ? '#,##0' + (e.dp ? '.' + '0'.repeat(e.dp) : '') : null;
             if (e.pct) o.valAxisLabelFormatCode = '0%';
-            if (e.dl) { o.showValue = true; o.dataLabelFontSize = Math.round(fs * 0.85); if (nf) o.dataLabelFormatCode = nf; if (e.ct === 'bar' || e.ct === 'col') o.dataLabelPosition = 'outEnd'; }
+            if (e.dl || ser.some((x) => x.dl)) { o.showValue = true; o.dataLabelFontSize = Math.round(fs * 0.85); if (nf) o.dataLabelFormatCode = nf; if ((e.ct === 'bar' || e.ct === 'col') && !e.st) o.dataLabelPosition = 'outEnd'; }
             if (e.mk === 0) o.lineDataSymbol = 'none';
             if (e.tc) { o.catAxisLabelColor = noHash(e.tc); o.valAxisLabelColor = noHash(e.tc); o.legendColor = noHash(e.tc); }
             if (e.bg) o.fill = noHash(e.bg);

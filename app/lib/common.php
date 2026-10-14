@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.88.0';
+const PDFSTIFT_VERSION = '1.89.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -288,6 +288,8 @@ function stroke_obj($e): ?array
         foreach (array_slice((array) ($e['series'] ?? []), 0, 12) as $sr) {
             $so = ['n' => mb_substr((string) ($sr['n'] ?? ''), 0, 200), 'v' => array_map(static fn ($v) => is_numeric($v) ? round((float) $v, 6) : 0, array_slice(array_values((array) ($sr['v'] ?? [])), 0, 60))];
             if (preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($sr['c'] ?? ''))) $so['c'] = (string) $sr['c'];
+            if (($sr['t'] ?? '') === 'line') $so['t'] = 'line';
+            foreach (['nl', 'nm', 'dl'] as $k) if (!empty($sr[$k])) $so[$k] = 1;
             $o['series'][] = $so;
         }
         // Darstellung aus PowerPoint: Hintergrund, Schriftfarbe, Achsenbereich, Prozent, Werte anzeigen, Punkte
@@ -296,6 +298,14 @@ function stroke_obj($e): ?array
         foreach (['pct', 'dl'] as $k) if (!empty($e[$k])) $o[$k] = 1;
         if (isset($e['mk']) && (int) $e['mk'] === 0) $o['mk'] = 0;
         if (isset($e['dp']) && is_numeric($e['dp'])) $o['dp'] = max(0, min(4, (int) $e['dp']));
+        // gestapelt, Lücke, Lage von Zeichenfläche und Legende, gedrehte Beschriftung, ausgeblendete Achsen/Gitter
+        if (in_array($e['st'] ?? '', ['s', 'p'], true)) $o['st'] = $e['st'];
+        if (is_array($e['pc'] ?? null)) $o['pc'] = array_values(array_filter(array_slice(array_values($e['pc']), 0, 60), static fn ($c) => is_string($c) && preg_match('/^#[0-9a-fA-F]{6}$/', $c)));
+        if (isset($e['gw']) && is_numeric($e['gw'])) $o['gw'] = max(0, min(500, (int) $e['gw']));
+        if (in_array($e['lp'] ?? '', ['r', 't', 'l'], true)) $o['lp'] = $e['lp'];
+        foreach (['pl', 'lg'] as $k) if (is_array($e[$k] ?? null) && count($e[$k]) === 4) $o[$k] = array_map(static fn ($v) => is_numeric($v) ? max(-1, min(2, round((float) $v, 3))) : 0, array_values($e[$k]));
+        if (isset($e['lr']) && is_numeric($e['lr'])) $o['lr'] = max(-90, min(90, (int) $e['lr']));
+        foreach (['nc', 'nv', 'ng'] as $k) if (!empty($e[$k])) $o[$k] = 1;
         $o['title'] = mb_substr((string) ($e['title'] ?? ''), 0, 300);
         $o['legend'] = empty($e['legend']) ? 0 : 1;
     }
@@ -362,6 +372,9 @@ function stroke_obj($e): ?array
                 }
                 if (in_array($v['v'] ?? '', ['t', 'm', 'b'], true)) {
                     $c['v'] = $v['v'];
+                }
+                if (in_array($v['vt'] ?? '', ['d', 'u'], true)) {
+                    $c['vt'] = $v['vt'];
                 }
                 if ($c) {
                     $cs[$k] = $c;
