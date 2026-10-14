@@ -190,7 +190,7 @@
             const bc = n.getAttribute('data-bc');
             if (/^#[0-9a-f]{6}$/i.test(bc || '')) el.setAttribute('data-bc', bc);
             // Einzug wie in PowerPoint: Text um margin-left verschoben, Zeichen bei data-bi (em, links vom Text)
-            const bi = /^-\d*\.?\d+$/.exec(n.getAttribute('data-bi') || ''), ml = /^(-?\d*\.?\d+)em$/.exec(st.marginLeft || '');
+            const bi = /^(-\d*\.?\d+|0)$/.exec(n.getAttribute('data-bi') || ''), ml = /^(-?\d*\.?\d+)em$/.exec(st.marginLeft || '');
             if (bi && +bi[0] >= -20 && ml && Math.abs(+ml[1]) <= 20) { el.setAttribute('data-bi', String(Math.round(+bi[0] * 1000) / 1000)); el.style.marginLeft = Math.round(+ml[1] * 1000) / 1000 + 'em'; const bs = +n.getAttribute('data-bs'); if (bs >= 0.25 && bs <= 4) el.setAttribute('data-bs', String(bs)); }
           }
         } else if (tag === 'br') { dst.appendChild(document.createElement('br')); continue; }
@@ -2625,7 +2625,7 @@
         if (tag === 'br') { newP(blk.al, null, blk.lvl, null); continue; }
         if (tag === 'ul' || tag === 'ol') {
           let k = 0;
-          for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k }; newP(b2.al, tag, b2.lvl, k); paraSp(curP, li); if (li.getAttribute('data-bu')) curP.bu = li.getAttribute('data-bu'); curP.bc = li.getAttribute('data-bc') || ''; if (li.getAttribute('data-bi')) { curP.bi = parseFloat(li.getAttribute('data-bi')) || 0; curP.ml = parseFloat(li.style.marginLeft) || 0; curP.bs = parseFloat(li.getAttribute('data-bs')) || 0; } walk(li, st, b2); curP = null; }
+          for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k }; newP(b2.al, tag, b2.lvl, k); paraSp(curP, li); if (li.getAttribute('data-bu')) curP.bu = li.getAttribute('data-bu'); curP.bc = li.getAttribute('data-bc') || ''; if (li.getAttribute('data-bi')) { curP.bi = parseFloat(li.getAttribute('data-bi')) || 0; curP.bin = li.getAttribute('data-bi') === '0'; curP.ml = parseFloat(li.style.marginLeft) || 0; curP.bs = parseFloat(li.getAttribute('data-bs')) || 0; } walk(li, st, b2); curP = null; }
           continue;
         }
         if (tag === 'div' || tag === 'li') { const b2 = { ...blk, al: c.style.textAlign || blk.al }; newP(b2.al, blk.list, blk.lvl, blk.num); paraSp(curP, c); walk(c, st, b2); curP = null; continue; }
@@ -2759,7 +2759,7 @@
       const width = (tok) => { let s0 = 0; const z = tsz(tok, fs); for (const ch of tok.t) { const f = fontCh(ch, tok) || fontOf(tok); try { s0 += f.widthOfTextAtSize(ch, z); } catch (e) { s0 += z * 0.5; } } return s0; };
       for (const p of ps) {
         const ind0 = (p.list ? fs * 1.2 * p.lvl : 0) + (p.ml || 0) * fs; // Einzug links; erste Zeile zusätzlich um ti verschoben
-        let ind = ind0 + (p.ti || 0) * fs, maxW = Math.max(fs, w - ind);
+        let ind = ind0 + (p.ti || 0) * fs + (p.bin ? fs * 0.75 : 0), maxW = Math.max(fs, w - ind); // Zeichen direkt vor dem Text
         const toks = [];
         for (const r of p.runs) for (const part of r.t.split(/(\s+)/)) if (part) toks.push({ ...r, t: part });
         let line = [], lw = 0, first = true;
@@ -2834,7 +2834,7 @@
           const mark = ln.bullet.list === 'ol' ? ln.bullet.num + '.' : ln.bullet.bu || '•';
           const mf = ln.bullet.bu ? (fontCh([...mark][0], {}) || (FF.custom ? FF.r : F.r)) : (FF.custom ? FF.r : F.r);
           let mk = mark; if (ln.bullet.bu && !fontCh([...mark][0], {})) mk = '•';
-          pg.drawText(mk, { x: (x + pad + ln.ind + (ln.bullet.bi ? ln.bullet.bi * fs : -fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8))) * K, y: -(yy + fs * (ln.m || 1) * (0.92 + (L(ln) - 1.2) / 2)) * K, size: fs * (ln.bullet.bs || 1) * K, font: mf, color: col(ln.bullet.bc || color) });
+          pg.drawText(mk, { x: (ln.bullet.bin ? lx - fs * 0.75 : x + pad + ln.ind + (ln.bullet.bi ? ln.bullet.bi * fs : -fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8))) * K, y: -(yy + fs * (ln.m || 1) * (0.92 + (L(ln) - 1.2) / 2)) * K, size: fs * (ln.bullet.bs || 1) * K, font: mf, color: col(ln.bullet.bc || color) });
         }
         // Blocksatz: Lücken gleichmäßig strecken (nicht in der letzten Zeile eines Absatzes)
         let gap = 0;

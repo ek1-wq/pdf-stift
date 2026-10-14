@@ -608,7 +608,8 @@
           const hl0 = rPr && kid(rPr, 'hlinkClick');
           if (hl0 && !pick([rPr].filter(Boolean)) && T.scheme.hlink) col = { c: '#' + T.scheme.hlink, a: 1 };
           let face = null;
-          for (const e of rl) { const l = kid(e, 'latin'); if (l && at(l, 'typeface')) { face = at(l, 'typeface'); break; } }
+          // in Tabellen gilt die Schrift der Tabellenformatvorlage (Designschrift), nicht die Standardschrift der Präsentation
+          for (const e of ctx.tbl ? [rPr, ...ownDef].filter(Boolean) : rl) { const l = kid(e, 'latin'); if (l && at(l, 'typeface')) { face = at(l, 'typeface'); break; } }
           if (face === '+mj-lt') face = T.major; else if (face === '+mn-lt') face = T.minor;
           if (!face) face = base.major ? T.major : T.minor;
           // Zeichen aus Symbolschriften (Wingdings …, im privaten Bereich U+F0xx) in Unicode übersetzen
@@ -709,7 +710,11 @@
           let buA = p.list === 'ul' ? `${p.bu ? ` data-bu="${esc(p.bu)}"` : ''}${p.buC && p.buC !== c ? ` data-bc="${p.buC}"` : ''}` : '';
           // Einzug wie in PowerPoint: Text beginnt bei marL, das Zeichen bei marL + indent (indent meist negativ)
           let liSt = spSt;
-          if (p.list === 'ul' && p.mlPt > 1) {
+          if (p.list === 'ul' && Math.abs(p.tiPt) <= 1 && p.mlPt * K / fs <= 20) {
+            // ohne hängenden Einzug: Zeichen direkt vor dem Text (bei marL), Folgezeilen beginnen bei marL
+            liSt += `${liSt ? ' ' : ''}margin-left: ${Math.round(((p.mlPt * K) / fs - 1.2 * depth) * 1000) / 1000}em;`; buA += ' data-bi="0"';
+            if (AL[p.algn]) { liSt = `text-align: ${AL[p.algn]}; ` + liSt; p.alOnLi = 1; } // Zeichen und Text gemeinsam ausrichten
+          } else if (p.list === 'ul' && p.mlPt > 1) {
             const r3 = (v) => Math.round(v * 1000) / 1000;
             const m = (p.mlPt * K) / fs, bi = Math.max(-m, (p.tiPt * K) / fs);
             if (bi <= -0.4 && m <= 20) {
@@ -717,7 +722,7 @@
               if (p.buS && Math.abs(p.buS - 1) > 0.05) buA += ` data-bs="${Math.round(Math.max(0.25, Math.min(4, p.buS)) * 100) / 100}"`; // Größe des Zeichens relativ zum Text
             }
           }
-          html += `<li${buA}${liSt ? ` style="${liSt}"` : ''}>${AL[p.algn] ? `<div style="text-align: ${AL[p.algn]};">${inner}</div>` : inner}`;
+          html += `<li${buA}${liSt ? ` style="${liSt}"` : ''}>${AL[p.algn] && !p.alOnLi ? `<div style="text-align: ${AL[p.algn]};">${inner}</div>` : inner}`;
         } else {
           closeTo(0);
           html += `<div${al}>${inner}</div>`;
@@ -846,7 +851,7 @@
           const def = all(pres, 'defaultTextStyle')[0]; if (def) chain.push(def);
           const tx = T.master && all(T.master, 'txStyles')[0]; if (tx && kid(tx, 'otherStyle')) chain.push(kid(tx, 'otherStyle'));
           let fs = null, lineC = null, headFill = 0;
-          const fsCount = new Map();
+          const fsCount = new Map(), ffCount = new Map();
           const mg = [];
           const rows = [];
           for (const tr of kids(tbl, 'tr')) {
@@ -856,8 +861,8 @@
               if (gs > 1 || rsp > 1) mg.push([rows.length, row.length, Math.max(1, rsp), Math.max(1, gs)]);
               if (at(tc, 'hMerge') === '1' || at(tc, 'vMerge') === '1') { row.push(''); continue; }
               if (!rows.length && path(tc, 'tcPr', 'solidFill')) headFill++;
-              const t = textOf(kid(tc, 'txBody'), chain, ctx, { sz: 18 });
-              if (t && t.hasText) fsCount.set(t.fs, (fsCount.get(t.fs) || 0) + 1);
+              const t = textOf(kid(tc, 'txBody'), chain, { ...ctx, tbl: 1 }, { sz: 18 });
+              if (t && t.hasText) { fsCount.set(t.fs, (fsCount.get(t.fs) || 0) + 1); if (t.ff) ffCount.set(t.ff, (ffCount.get(t.ff) || 0) + 1); }
               row.push(t ? t : '');
               if (!lineC) { const lb = path(tc, 'tcPr', 'lnB') || path(tc, 'tcPr', 'lnL'); const c = lb && !kid(lb, 'noFill') && color(kid(lb, 'solidFill'), T); if (c) lineC = c.c; }
             }
@@ -874,6 +879,10 @@
             row[i] = t.hasText && Math.abs(t.fs - fs) / fs > 0.04 ? scaleHtml(t.html, t.fs / fs) : t.html;
           }
           const e = { ...base, t: 'table', rows, cw: grid.map((g) => Math.round((g / tot) * 1000) / 1000), fs: Math.round(fs || 18) };
+          // Schrift der Tabelle: die häufigste in den Zellen (sonst gälte die Schrift der Präsentation)
+          const ff0 = [...ffCount.entries()].sort((a, b2) => b2[1] - a[1])[0];
+          const fk = ff0 && X().fontKey(ff0[0]);
+          if (fk && fk !== ctx.deckFont) e.ff = fk;
           // Zeilenhöhen wie in PowerPoint (Mindesthöhen je Zeile) und Zellränder (Standard 0,1″ links/rechts, 0,05″ oben/unten)
           const trH = kids(tbl, 'tr').slice(0, rows.length).map((tr) => num(at(tr, 'h')));
           const sumH = trH.reduce((a, v) => a + v, 0);
