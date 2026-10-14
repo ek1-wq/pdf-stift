@@ -3,8 +3,9 @@
 #   tools/build-windows.sh <version> [publish]
 # 1. checks the English translation is up to date
 # 2. bundles the official PHP build for Windows (NTS x64) with the needed extensions
-# 3. smoke-tests the local server (library listing, search)
-# 4. builds desktop/dist/PDF-Stift-Setup-<version>.exe  (with "publish": uploads it to GitHub Releases, needs GH_TOKEN)
+# 3. bundles LibreOffice (official Windows build, unmodified) and tests a conversion
+# 4. smoke-tests the local server (library listing, search)
+# 5. builds desktop/dist/PDF-Stift-Setup-<version>.exe  (with "publish": uploads it to GitHub Releases, needs GH_TOKEN)
 set -euo pipefail
 V="${1:?version}"; PUB="${2:-never}"; [ "$PUB" = publish ] && PUB=always
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
@@ -25,6 +26,30 @@ cp desktop/php.ini desktop/php/php.ini
 EXT="$(cygpath -w "$ROOT/desktop/php/ext" 2>/dev/null || echo "$ROOT/desktop/php/ext")"
 desktop/php/php.exe -c desktop/php/php.ini -d extension_dir="$EXT" -m | tr '\n' ' '; echo
 du -sh desktop/php
+
+echo "== LibreOffice"
+# official Windows build, unpacked unmodified (administrative install of the MSI) into desktop/libreoffice
+rm -rf desktop/libreoffice lo lo.msi
+LOV="$(curl -sSfL https://download.documentfoundation.org/libreoffice/stable/ | grep -oE 'href="[0-9]+\.[0-9]+\.[0-9]+/"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)"
+echo "LibreOffice $LOV"
+curl -sSfL -o lo.msi "https://download.documentfoundation.org/libreoffice/stable/$LOV/win/x86_64/LibreOffice_${LOV}_Win_x86-64.msi"
+mkdir -p lo
+# msiexec returns at once when started from bash – wait for it with PowerShell
+powershell -NoProfile -Command "\$p = Start-Process msiexec.exe -ArgumentList '/a $(cygpath -w "$ROOT/lo.msi") /qn TARGETDIR=$(cygpath -w "$ROOT/lo")' -Wait -PassThru; exit \$p.ExitCode"
+SO="$(find lo -iname soffice.com -path '*program*' | head -1)"
+[ -n "$SO" ] || { echo "LibreOffice: soffice.com not found"; find lo -maxdepth 3 | head -30; exit 1; }
+mv "$(dirname "$(dirname "$SO")")" desktop/libreoffice
+rm -rf lo lo.msi
+# not needed for converting files in the background: help, dictionaries, gallery, templates, other UI languages
+( cd desktop/libreoffice
+  rm -rf help readmes share/gallery share/template share/wizards share/extensions/dict-* share/extensions/wiki-publisher share/extensions/nlpsolver
+  for d in program/resource/*/; do case "$(basename "$d")" in de|en_GB|en_US) ;; *) rm -rf "$d" ;; esac; done
+  du -sh program share 2>/dev/null; du -sh share/* 2>/dev/null | sort -h | tail -6 )
+du -sh desktop/libreoffice
+# short test: plain text → PDF
+T0="$(mktemp -d)"; printf 'PDF-Stift LibreOffice test\n' > "$T0/t.txt"
+MSYS_NO_PATHCONV=1 timeout 300 desktop/libreoffice/program/soffice.com --headless --norestore --nologo "-env:UserInstallation=file:///$(cygpath -m "$T0")/profil" --convert-to pdf --outdir "$(cygpath -w "$T0")" "$(cygpath -w "$T0/t.txt")" || true
+[ -s "$T0/t.pdf" ] && echo "LibreOffice test: ok" || { echo "LibreOffice test FAILED"; exit 1; }
 
 echo "== smoke test"
 T="$(mktemp -d)"; mkdir -p "$T/lib/Test" "$T/data"

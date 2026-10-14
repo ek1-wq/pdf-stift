@@ -72,9 +72,11 @@ async function start(lang, log) {
   const ini = res('php', 'php.ini');
   const args = ['-S', `127.0.0.1:${port}`, '-t', webRoot()];
   if (fs.existsSync(ini)) args.unshift('-c', ini, '-d', 'extension_dir=' + path.join(path.dirname(phpExe()), 'ext'));
+  // mitgeliefertes LibreOffice (Word/PowerPoint → PDF, Windows-Grafiken, Folien als Bild)
+  const so = ['soffice.com', 'soffice.exe', 'soffice'].map((n) => res('libreoffice', 'program', n)).find((f) => fs.existsSync(f)) || '';
   proc = spawn(phpExe(), args, {
     cwd: webRoot(), windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'],
-    env: { ...process.env, PDFSTIFT_LOCAL_KEY: KEY, PDFSTIFT_DATA: dataDir(), PDFSTIFT_LIBRARY: lib, PDFSTIFT_LANG: lang || 'en' },
+    env: { ...process.env, PDFSTIFT_LOCAL_KEY: KEY, PDFSTIFT_DATA: dataDir(), PDFSTIFT_LIBRARY: lib, PDFSTIFT_LANG: lang || 'en', ...(so ? { PDFSTIFT_SOFFICE: so } : {}) },
   });
   let err = '';
   proc.stderr.on('data', (d) => { err = (err + d).slice(-4000); });

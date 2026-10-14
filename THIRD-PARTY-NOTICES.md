@@ -19,6 +19,7 @@ compatible with distribution alongside GPL-3.0 software.
 | [electron-updater](https://github.com/electron-userland/electron-builder) | App updates from GitHub Releases | MIT |
 | [PHP](https://www.php.net/) for Windows (official build, bundled unmodified in `resources/php`) | Built-in local server that runs the app's backend on 127.0.0.1 only | PHP License v3.01 (see `resources/php/license.txt`) |
 | [PHP](https://www.php.net/) for Linux ([static build](https://static-php.dev/) with its extensions, bundled unmodified in `resources/php`) | Same, in the Linux packages | PHP License v3.01; built-in libraries under their own permissive licenses (OpenSSL Apache-2.0, libcurl curl license, SQLite public domain, zlib, libzip BSD, Oniguruma BSD) |
+| [LibreOffice](https://www.libreoffice.org/) (The Document Foundation; official Windows build, bundled unmodified in `resources/libreoffice`) | Windows app: opening Word and PowerPoint files as PDF, converting Windows graphics (EMF/WMF) in imported presentations, "slide as picture" | Mozilla Public License 2.0; some parts under other free licenses (see `resources/libreoffice/license.txt` and `LICENSE.html`). Source code: https://www.libreoffice.org/download/source-code/ |
 | [AndroidX](https://developer.android.com/jetpack/androidx), [Kotlin coroutines](https://github.com/Kotlin/kotlinx.coroutines) | Android app | Apache-2.0 |
 | [OkHttp](https://square.github.io/okhttp/) | Android app: connection to your own server | Apache-2.0 |
 | [PdfBox-Android](https://github.com/TomRoush/PdfBox-Android) | Android app: writing notes into PDFs | Apache-2.0 |
@@ -27,6 +28,9 @@ compatible with distribution alongside GPL-3.0 software.
 
 The PHP runtime is shipped as a separate, unmodified program that executes PDF-Stift's own PHP files;
 it is not linked into PDF-Stift.
+
+LibreOffice is likewise shipped as a separate, unmodified program that PDF-Stift starts in the background
+(`soffice --headless --convert-to …`); it is not linked into PDF-Stift. "LibreOffice" is a trademark of The Document Foundation.
 
 The text recognition of the Windows app uses the OCR engine built into Windows (`Windows.Media.Ocr`),
 which is part of the operating system and not distributed with PDF-Stift.

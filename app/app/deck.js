@@ -2079,6 +2079,34 @@
     renderAll();
   }
 
+  // „Folie als Bild übernehmen“: die Folie aus der ursprünglichen PowerPoint-Datei (mit LibreOffice umgewandelt) –
+  // für Folien, die beim Übernehmen nicht ganz gelingen. Danach nicht mehr bearbeitbar; Rückgängig geht.
+  const srcPdf = {};
+  async function slideAsImage() {
+    const s0 = slide(), src = D.deck.src;
+    if (!src || s0.sn == null) return;
+    C.toast('Folie wird aus der PowerPoint-Datei übernommen …', 180000);
+    try {
+      if (!srcPdf[src]) {
+        srcPdf[src] = (async () => {
+          const r = await fetch(C.API + '?a=pptxpdf&src=' + encodeURIComponent(src), { credentials: 'same-origin', headers: { 'X-PDFStift': '1' } });
+          if (!r.ok) { let m = ''; try { m = (await r.json()).error; } catch (e) { /* */ } throw new Error(m || 'Die Folie konnte nicht übernommen werden.'); }
+          return window.pdfjsLib.getDocument({ data: new Uint8Array(await r.arrayBuffer()), isEvalSupported: false }).promise;
+        })();
+      }
+      let pdf;
+      try { pdf = await srcPdf[src]; } catch (e) { delete srcPdf[src]; throw e; }
+      if (s0.sn + 1 > pdf.numPages) throw new Error('Diese Folie fehlt in der umgewandelten Datei.');
+      const cv = await renderPage(pdf, s0.sn + 1, 1920);
+      const res = await C.uploadImage(await canvasFile(cv, 'image/jpeg', 'folie-' + (s0.sn + 1) + '.jpg'));
+      change(() => {
+        const s = D.deck.slides.find((x) => x.id === s0.id) || s0;
+        s.els = [{ id: uid(), r: 0, t: 'img', src: res.src, iw: cv.width, ih: cv.height, x: 0, y: 0, w: W, h: H }];
+        D.ed.sel = [];
+      });
+      C.toast('Folie als Bild übernommen (Rückgängig: Strg+Z).', 3000);
+    } catch (err) { C.toast(err.message || String(err), 6000); }
+  }
   function layoutMenu(x, y) {
     popMenu(x, y, Object.entries(LAYOUTS).map(([k, l]) => [k, esc(l.name), () => change(() => { D.deck.slides.splice(D.cur + 1, 0, newSlide(k)); D.cur++; D.ed.sel = []; })]));
   }
@@ -2087,6 +2115,7 @@
       ['new', 'Neue Folie danach …', () => layoutMenu(x, y)],
       ['dup', 'Folie duplizieren', () => change(() => { const s = clone(slide()); s.id = uid(); s.els.forEach((e) => { e.id = uid(); }); D.deck.slides.splice(D.cur + 1, 0, s); D.cur++; })],
       ['bg', 'Hintergrund dieser Folie …', () => bgMenu(x, y, false)],
+      ...(D.deck.src && slide().sn != null ? [['img', 'Folie als Bild aus PowerPoint übernehmen', () => slideAsImage()]] : []),
       ['-', ''],
       ['del', 'Folie löschen', () => { if (D.deck.slides.length < 2) { C.toast('Die letzte Folie bleibt.'); return; } change(() => { D.deck.slides.splice(D.cur, 1); D.cur = Math.min(D.cur, D.deck.slides.length - 1); }); }],
     ]);

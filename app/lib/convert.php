@@ -24,6 +24,11 @@ function soffice_path(): string
     if (!exec_ok()) {
         return $p;
     }
+    // mitgeliefertes LibreOffice (Windows-App der freien Ausgabe) oder eigener Pfad
+    $env = (string) getenv('PDFSTIFT_SOFFICE');
+    if ($env !== '' && is_file($env)) {
+        return $p = $env;
+    }
     foreach (['/usr/bin/soffice', '/usr/local/bin/soffice', '/usr/lib/libreoffice/program/soffice', '/opt/libreoffice/program/soffice', '/usr/bin/libreoffice'] as $c) {
         if (@is_executable($c)) {
             return $p = $c;
@@ -38,8 +43,31 @@ function convert_caps(): array
     return ['soffice' => soffice_path() !== '', 'onedrive' => $od, 'office' => soffice_path() !== '' || $od];
 }
 
+/** Startet LibreOffice ohne Fenster mit eigenem Profil in $dir und wartet höchstens $max Sekunden. */
+function soffice_run(array $args, string $dir, int $max): void
+{
+    $win = PHP_OS_FAMILY === 'Windows';
+    $prof = $win ? 'file:///' . str_replace('\\', '/', $dir) . '/profil' : 'file://' . $dir . '/profil';
+    $cmd = array_merge([soffice_path(), '--headless', '--norestore', '--nolockcheck', '--nologo', '-env:UserInstallation=' . $prof], $args);
+    // unter Windows die Umgebung erben (LibreOffice braucht SystemRoot, TEMP …)
+    $env = $win ? null : ['HOME' => $dir, 'PATH' => '/usr/bin:/bin:/usr/local/bin'];
+    $nul = $win ? 'NUL' : '/dev/null';
+    $p = proc_open($cmd, [0 => ['file', $nul, 'r'], 1 => ['file', $nul, 'w'], 2 => ['file', $nul, 'w']], $pipes, $dir, $env, $win ? ['bypass_shell' => true] : null);
+    if (!is_resource($p)) {
+        return;
+    }
+    $start = time();
+    while (proc_get_status($p)['running'] && time() - $start < $max) {
+        usleep(200000);
+    }
+    if (proc_get_status($p)['running']) {
+        proc_terminate($p);
+    }
+    proc_close($p);
+}
+
 /** Wandelt $src (Endung $ext) in eine PDF unter $out um. Leer = ok, sonst Fehlermeldung. */
-function office_to_pdf(string $src, string $ext, string $out): string
+function office_to_pdf(string $src, string $ext, string $out, string $filter = 'pdf'): string
 {
     $so = soffice_path();
     if ($so !== '') {
@@ -47,21 +75,7 @@ function office_to_pdf(string $src, string $ext, string $out): string
         mkdir($dir, 0775, true);
         $in = $dir . '/datei.' . $ext;
         copy($src, $in);
-        $cmd = [$so, '--headless', '--norestore', '--nolockcheck', '-env:UserInstallation=file://' . $dir . '/profil', '--convert-to', 'pdf', '--outdir', $dir, $in];
-        $p = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $dir, ['HOME' => $dir, 'PATH' => '/usr/bin:/bin:/usr/local/bin']);
-        if (is_resource($p)) {
-            $start = time();
-            while (proc_get_status($p)['running'] && time() - $start < 180) {
-                usleep(200000);
-            }
-            if (proc_get_status($p)['running']) {
-                proc_terminate($p);
-            }
-            foreach ($pipes as $pp) {
-                fclose($pp);
-            }
-            proc_close($p);
-        }
+        soffice_run(['--convert-to', $filter, '--outdir', $dir, $in], $dir, 300);
         $pdf = $dir . '/datei.pdf';
         $ok = is_file($pdf) && (string) file_get_contents($pdf, false, null, 0, 5) === '%PDF-';
         if ($ok) {
@@ -121,21 +135,7 @@ function vector_to_svg(array $f): array
     }
     $out = array_fill(0, count($names), null);
     if ($ins) {
-        $cmd = array_merge([$so, '--headless', '--norestore', '--nolockcheck', '-env:UserInstallation=file://' . $dir . '/profil', '--convert-to', 'svg', '--outdir', $dir . '/svg'], array_values($ins));
-        $p = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $dir, ['HOME' => $dir, 'PATH' => '/usr/bin:/bin:/usr/local/bin']);
-        if (is_resource($p)) {
-            $start = time();
-            while (proc_get_status($p)['running'] && time() - $start < 240) {
-                usleep(200000);
-            }
-            if (proc_get_status($p)['running']) {
-                proc_terminate($p);
-            }
-            foreach ($pipes as $pp) {
-                fclose($pp);
-            }
-            proc_close($p);
-        }
+        soffice_run(array_merge(['--convert-to', 'svg', '--outdir', $dir . '/svg'], array_values($ins)), $dir, 240);
         foreach ($ins as $i => $in) {
             $svg = $dir . '/svg/' . pathinfo($in, PATHINFO_FILENAME) . '.svg';
             if (is_file($svg) && filesize($svg) < 15 * 1024 * 1024) {
@@ -147,3 +147,34 @@ function vector_to_svg(array $f): array
     return $out;
 }
 
+
+/** PowerPoint-Datei aus einem Import ablegen (gleiche Dateien nur einmal). Rückgabe: 'sha1.pptx' oder null. */
+function pptx_store(string $tmp): ?string
+{
+    $size = (int) @filesize($tmp);
+    if ($size < 100 || $size > 150 * 1024 * 1024 || (string) @file_get_contents($tmp, false, null, 0, 4) !== "PK\x03\x04") {
+        return null;
+    }
+    $src = sha1_file($tmp) . '.pptx';
+    $f = img_dir() . '/' . $src;
+    return is_file($f) || @copy($tmp, $f) ? $src : null;
+}
+
+/** Alle Folien (auch ausgeblendete) als PDF – einmal umgewandelt, danach aus dem Zwischenspeicher. Leer = Fehler. */
+function pptx_pdf(string $src): string
+{
+    if (!preg_match('/^[a-f0-9]{40}\.pptx$/', $src) || !is_file(img_dir() . '/' . $src)) {
+        return '';
+    }
+    $pdf = img_dir() . '/' . substr($src, 0, 40) . '.folien.pdf';
+    if (!is_file($pdf)) {
+        if (soffice_path() === '') {
+            return '';
+        }
+        $err = office_to_pdf(img_dir() . '/' . $src, 'pptx', $pdf, 'pdf:impress_pdf_Export:{"ExportHiddenSlides":{"type":"boolean","value":"true"}}');
+        if ($err !== '' || !is_file($pdf)) {
+            return '';
+        }
+    }
+    return $pdf;
+}

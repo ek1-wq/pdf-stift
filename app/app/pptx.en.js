@@ -300,6 +300,7 @@
       }
       let [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0);
       let alpha = 1;
+      const gam = [...n.children].some((m) => m.localName === 'gamma');
       for (const m of n.children) {
         const v = num(at(m, 'val')) / 100000;
         if (m.localName === 'alpha') alpha = v;
@@ -313,8 +314,15 @@
           [r, g, b] = hsl2rgb(hh, ss, ll);
         } else if (m.localName === 'gray') { const y = 0.3 * r + 0.59 * g + 0.11 * b; r = g = b = y; }
         else if (m.localName === 'inv') { r = 255 - r; g = 255 - g; b = 255 - b; }
-        else if (m.localName === 'tint') { r = r * v + 255 * (1 - v); g = g * v + 255 * (1 - v); b = b * v + 255 * (1 - v); }
-        else if (m.localName === 'shade') { r *= v; g *= v; b *= v; }
+        else if (m.localName === 'tint' || m.localName === 'shade') {
+          // Aufhellen/Abdunkeln wie in PowerPoint: im linearen Farbraum (nicht in sRGB)
+          const lin = (x) => { x /= 255; return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+          const srgb = (x) => 255 * (x <= 0.0031308 ? x * 12.92 : 1.055 * Math.pow(x, 1 / 2.4) - 0.055);
+          const f = m.localName === 'tint' ? (x) => x * v + (1 - v) : (x) => x * v;
+          // ältere Dateien klammern mit <gamma/> … <invGamma/>: dann wie bisher direkt in sRGB rechnen
+          if (gam) [r, g, b] = [r, g, b].map((x) => 255 * Math.max(0, Math.min(1, f(x / 255))));
+          else [r, g, b] = [r, g, b].map((x) => srgb(Math.max(0, Math.min(1, f(lin(x))))));
+        }
       }
       return { c: '#' + (hex2(r) + hex2(g) + hex2(b)).toUpperCase(), a: alpha };
     }
@@ -383,6 +391,32 @@
           return (await r.json()).vid || null;
         } catch (e) { return null; }
       })());
+    }
+    // Bildfüllung einer Form als PNG: auf die Form zugeschnitten, gekachelt, mit Deckkraft
+    async function shapePic(mediaPath, w, h, pathD, tile, alpha) {
+      const ext = (mediaPath.split('.').pop() || '').toLowerCase(), cv0 = conv[mediaPath];
+      const blob = cv0 && cv0.png ? new Blob([cv0.png], { type: 'image/png' }) : /^(png|jpe?g|gif|webp|bmp)$/.test(ext) && z[mediaPath] ? new Blob([z[mediaPath]], { type: 'image/' + (ext === 'jpg' ? 'jpeg' : ext) }) : null;
+      if (!blob) return upload(mediaPath);
+      const url = URL.createObjectURL(blob);
+      try {
+        const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+        const f = Math.min(3, 1800 / Math.max(w, h, 1)), cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(w * f)); cv.height = Math.max(1, Math.round(h * f));
+        const g = cv.getContext('2d');
+        g.scale(f, f);
+        if (pathD) { try { g.clip(new Path2D(pathD)); } catch (e) { /* ohne Zuschnitt */ } }
+        g.globalAlpha = Math.max(0, Math.min(1, alpha));
+        if (tile) {
+          const k = K * 0.75; // Bildpunkt (96 dpi) → pt → Folieneinheit
+          const tw = Math.max(1, (im.naturalWidth || 64) * k * (num(at(tile, 'sx'), 100000) / 100000)), th = Math.max(1, (im.naturalHeight || 64) * k * (num(at(tile, 'sy'), 100000) / 100000));
+          const tc = document.createElement('canvas'); tc.width = Math.max(1, Math.round(tw * f)); tc.height = Math.max(1, Math.round(th * f));
+          tc.getContext('2d').drawImage(im, 0, 0, tc.width, tc.height);
+          g.save(); g.scale(1 / f, 1 / f); g.translate((num(at(tile, 'tx')) / EMU) * K * f, (num(at(tile, 'ty')) / EMU) * K * f);
+          g.fillStyle = g.createPattern(tc, 'repeat'); g.fillRect(-tc.width, -tc.height, cv.width + 2 * tc.width, cv.height + 2 * tc.height); g.restore();
+        } else g.drawImage(im, 0, 0, w, h);
+        const out = await new Promise((res) => cv.toBlob(res, 'image/png'));
+        return out ? await C.uploadImage(new File([out], 'form.png', { type: 'image/png' })) : null;
+      } catch (e) { return upload(mediaPath); } finally { URL.revokeObjectURL(url); }
     }
     async function upload(mediaPath, crop, fx) {
       const key = mediaPath + (crop ? JSON.stringify(crop) : '') + (fx ? JSON.stringify(fx) : '');
@@ -1027,7 +1061,10 @@
         const svgB = blip && all(blip, 'svgBlip')[0];
         let target = blip && ctx.rels[rid(blip, 'embed')];
         if ((!target || /\.(emf|wmf)$/i.test(target.target)) && svgB) target = ctx.rels[rid(svgB, 'embed')] || target;
-        const res = target && !target.ext ? await upload(target.target) : null;
+        // Form mit Bildfüllung: nicht rechteckig, gekachelt oder halb durchsichtig → in Form der Fläche vorzeichnen
+        const tile = kid(bfill, 'tile'), amf = blip && kid(blip, 'alphaModFix');
+        const pd = prst && prst !== 'rect' ? (cg && cg.d) || (prst !== 'custom' && PRESETS && PRESETS[prst] ? (geomPath(PRESETS[prst], b.w, b.h, adj) || {}).d : null) : null;
+        const res = target && !target.ext ? (pd || tile || amf ? await shapePic(target.target, b.w, b.h, pd, tile, amf ? num(at(amf, 'amt'), 100000) / 100000 : 1) : await upload(target.target)) : null;
         if (res) { const e = { ...base, t: 'img', src: res.src, iw: res.w, ih: res.h }; if (b.fx) e.fx = 1; if (b.fy) e.fy = 1; out.push(e); return; }
       }
       let fill = fillOf(spPr, style, T, ctx.grpFill);
@@ -1189,7 +1226,7 @@
             const fr = kid(pth, 'fillToRect');
             const l = num(at(fr, 'l')) / 100000, t = num(at(fr, 't')) / 100000, r = num(at(fr, 'r')) / 100000, bb = num(at(fr, 'b')) / 100000;
             const fx = ((l + (1 - r)) / 2) * CW, fy = ((t + (1 - bb)) / 2) * CH;
-            const R = Math.max(...[[0, 0], [CW, 0], [0, CH], [CW, CH]].map(([x, y]) => Math.hypot(x - fx, y - fy)));
+            const R = Math.hypot(CW, CH) / 2; // Radius: halbe Diagonale, auch wenn der Mittelpunkt verschoben ist
             gr = g2.createRadialGradient(fx, fy, 0, fx, fy, R);
           } else {
             const ang = ((num(at(kid(f, 'lin'), 'ang')) / 60000) * Math.PI) / 180;
@@ -1254,7 +1291,7 @@
       key = (key || '') + ':' + JSON.stringify(T.map);
       const pr = kid(bg, 'bgPr');
       if (pr) {
-        const sf = kid(pr, 'solidFill'); if (sf) { const c = color(sf, T); if (!c || c.a < 0.05) return null; return { bg: c.a < 1 ? mixW(c.c, c.a) : c.c }; } // durchsichtig: Hintergrund darunter bzw. Weiß
+        const sf = kid(pr, 'solidFill'); if (sf) { const c = color(sf, T); if (!c) return null; return { bg: c.a < 1 ? mixW(c.c, c.a) : c.c }; } // durchsichtig: Weiß scheint durch (wie in PowerPoint)
         const gf = kid(pr, 'gradFill');
         if (gf) return simpleGrad(gf, T) || (await fillImage(gf, T, rels, null, key + ':pr'));
         const bf = kid(pr, 'blipFill');
@@ -1300,6 +1337,15 @@
       return (decoCache[ck] = out);
     }
     const TR = { fade: 'fade', dissolve: 'fade', push: 'push', wipe: 'wipe', split: 'wipe', zoom: 'zoom', cover: 'cover', pull: 'cover', randomBar: 'wipe', morph: 'fade' };
+    // Original-Datei auf dem Server ablegen (nebenher), damit Folien später als Bild übernommen werden können
+    const srcUp = (async () => {
+      if (!file || !file.size || file.size > 150 * 1024 * 1024) return null;
+      try {
+        const fd = new FormData(); fd.append('file', file, 'praesentation.pptx');
+        const r = await fetch(C.API + '?a=pptxput', { method: 'POST', credentials: 'same-origin', headers: { 'X-PDFStift': '1' }, body: fd });
+        return r.ok ? (await r.json()).src || null : null;
+      } catch (e) { return null; }
+    })();
     const slides = [];
     for (let i = 0; i < slideIds.length; i++) {
       progress && progress(`Slide ${i + 1} of ${slideIds.length} is being imported …`);
@@ -1319,7 +1365,7 @@
       const els = [];
       const showMaster = at(d.documentElement, 'showMasterSp') !== '0' && (!layout || at(layout.documentElement, 'showMasterSp') !== '0');
       if (mR && showMaster) for (const e of await deco(mR.target, { T, layout: null, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid() });
-      if (layR) for (const e of await deco(layR.target, { T, layout, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid() });
+      if (layR && at(d.documentElement, 'showMasterSp') !== '0') for (const e of await deco(layR.target, { T, layout, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid() });
       const tree = all(d, 'spTree')[0];
       const nDeco = els.length;
       if (tree) for (const c of tree.children) await convert(c, { ...ctx, anim: true }, ID, els);
@@ -1350,6 +1396,7 @@
         const txt = body ? kids(kid(body, 'txBody'), 'p').map((p) => [...p.children].map((r) => (r.localName === 'br' ? '\n' : r.localName === 'r' || r.localName === 'fld' ? (kid(r, 't') || {}).textContent || '' : '')).join('')).join('\n').trim() : '';
         if (txt) s.notes = txt.slice(0, 20000);
       }
+      s.sn = i; // Nummer in der PowerPoint-Datei (für „Folie als Bild übernehmen“)
       slides.push(s);
     }
     if (!slides.length) throw new Error("No slides were found in this PowerPoint file.");
@@ -1359,7 +1406,9 @@
     // Name: der Dateiname (eindeutiger als der oft gleiche Titel aus der Vorlage), sonst der eingetragene Titel
     const stem0 = String(file.name || '').replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim();
     title = (stem0 && stem0 !== 'x' ? stem0 : title || "Presentation").trim().slice(0, 200);
-    return { deck: { v: 1, w: W, h: H, title, theme, slides }, warn };
+    const deck = { v: 1, w: W, h: H, title, theme, slides };
+    const src = await srcUp; if (src) deck.src = src;
+    return { deck, warn };
   }
 
   // ================================================================== Speichern als .pptx

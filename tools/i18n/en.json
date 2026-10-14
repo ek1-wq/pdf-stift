@@ -3213,5 +3213,11 @@
   " padding-left: ": null,
   " text-indent: ": null,
   "margin-left: ": null,
-  "line-height: ": null
+  "line-height: ": null,
+  "mit LibreOffice": "with LibreOffice",
+  "Folie wird aus der PowerPoint-Datei übernommen …": "Taking the slide from the PowerPoint file …",
+  "Die Folie konnte nicht übernommen werden.": "The slide could not be taken over.",
+  "Diese Folie fehlt in der umgewandelten Datei.": "This slide is missing in the converted file.",
+  "Folie als Bild übernommen (Rückgängig: Strg+Z).": "Slide taken over as a picture (undo: Ctrl+Z).",
+  "Folie als Bild aus PowerPoint übernehmen": "Take slide as picture from PowerPoint"
 }

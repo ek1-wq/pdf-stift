@@ -864,6 +864,32 @@ switch ($a) {
         }
         json_out($r);
 
+    case 'pptxput':
+        // Original einer importierten PowerPoint-Datei (für „Folie als Bild übernehmen“)
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        $f = $_FILES['file'] ?? null;
+        $src = $f && $f['error'] === UPLOAD_ERR_OK ? pptx_store($f['tmp_name']) : null;
+        if (!$src) {
+            fail('Die PowerPoint-Datei konnte nicht abgelegt werden.');
+        }
+        json_out(['src' => $src]);
+
+    case 'pptxpdf':
+        if (soffice_path() === '') {
+            fail('Dafür wird LibreOffice gebraucht – es ist hier nicht installiert.', 501);
+        }
+        $pdf = pptx_pdf((string) ($_GET['src'] ?? ''));
+        if ($pdf === '') {
+            fail('Die Folien konnten nicht umgewandelt werden.');
+        }
+        header('Content-Type: application/pdf');
+        header('Cache-Control: private, max-age=86400');
+        header('Content-Length: ' . filesize($pdf));
+        readfile($pdf);
+        exit;
+
     case 'media':
         // mit Teilabrufen (Range), damit man im Video springen kann
         $f = media_file((string) ($_GET['src'] ?? ''));

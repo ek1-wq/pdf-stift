@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.86.0';
+  const VERSION = '1.87.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -1597,7 +1597,7 @@
     $('#upHint').textContent = S.upTo === 'od'
       ? 'PDF, Word oder PowerPoint. Office-Dateien bleiben in OneDrive unverändert; beim Öffnen macht Microsoft eine PDF daraus.'
       : S.upTo === 'nc' ? 'Nur PDF-Dateien.'
-        : office ? `PDF, Word oder PowerPoint – Word und PowerPoint werden automatisch in PDF umgewandelt (${caps.soffice ? 'mit LibreOffice auf dem Server' : 'über OneDrive'}).`
+        : office ? `PDF, Word oder PowerPoint – Word und PowerPoint werden automatisch in PDF umgewandelt (${caps.soffice ? 'mit LibreOffice' : 'über OneDrive'}).`
           : 'Nur PDF-Dateien. Für Word und PowerPoint: OneDrive verbinden (dann wandelt Microsoft um) oder LibreOffice auf dem Server installieren.';
     $('#upMsg').textContent = '';
     $('#uploadDlg').showModal();
