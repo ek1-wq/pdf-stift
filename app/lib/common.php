@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.83.3';
+const PDFSTIFT_VERSION = '1.84.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -316,6 +316,10 @@ function stroke_obj($e): ?array
             return null;
         }
         $o['src'] = (string) $e['src'];
+        // Video bzw. Ton (Vorschaubild = src)
+        if (isset($e['vid']) && preg_match('/^[a-f0-9]{40}\.(mp4|m4a|mov|webm|mp3|wav)$/', (string) $e['vid'])) {
+            $o['vid'] = (string) $e['vid'];
+        }
     }
     if ($t === 'table') {
         $rows = [];
@@ -334,6 +338,15 @@ function stroke_obj($e): ?array
         $cw = array_values(array_filter((array) ($e['cw'] ?? []), 'is_numeric'));
         if (count($cw) === $cols) {
             $o['cw'] = array_map(static fn ($v) => max(0.01, min(1, round((float) $v, 4))), $cw);
+        }
+        // Zeilenhöhen (Anteile) und Zellränder [oben/unten, links/rechts] aus PowerPoint
+        $rh = array_values(array_filter((array) ($e['rh'] ?? []), 'is_numeric'));
+        if (count($rh) === count($o['rows'] ?? [])) {
+            $o['rh'] = array_map(static fn ($v) => max(0.001, min(1, round((float) $v, 4))), $rh);
+        }
+        $cm = array_values(array_filter((array) ($e['cm'] ?? []), 'is_numeric'));
+        if (count($cm) === 2) {
+            $o['cm'] = array_map(static fn ($v) => max(0, min(60, round((float) $v, 1))), $cm);
         }
         $cs = [];
         foreach (array_slice((array) ($e['cs'] ?? []), 0, 2000, true) as $k => $v) {

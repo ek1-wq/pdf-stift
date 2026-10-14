@@ -14,6 +14,7 @@ compatible with distribution alongside GPL-3.0 software.
 | [QR Code Generator](https://github.com/kazuhikoarase/qrcode-generator) (Kazuhiko Arase) | QR codes | MIT |
 | [Tesseract.js](https://github.com/naptha/tesseract.js) and language data (`eng`, `deu`) | Text recognition (OCR) in the browser part | Apache-2.0 |
 | [DejaVu fonts](https://dejavu-fonts.github.io/) | Fonts for text you add to PDFs | Bitstream Vera / DejaVu license (free), see `app/vendor/fonts/LICENSE-DejaVu.txt` |
+| [Wine Tahoma](https://www.winehq.org/) | Tahoma-compatible substitute for imported PowerPoint files | GNU LGPL 2.1 or later, see `app/vendor/fonts/LICENSE-WineTahoma.txt` |
 | [Electron](https://www.electronjs.org/) | Windows and Linux application shell (includes Chromium) | MIT (Chromium: BSD-style, see `LICENSES.chromium.html` in the install folder) |
 | [electron-updater](https://github.com/electron-userland/electron-builder) | App updates from GitHub Releases | MIT |
 | [PHP](https://www.php.net/) for Windows (official build, bundled unmodified in `resources/php`) | Built-in local server that runs the app's backend on 127.0.0.1 only | PHP License v3.01 (see `resources/php/license.txt`) |

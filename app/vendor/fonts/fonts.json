@@ -12,6 +12,16 @@
 ]
 },
 {
+"k": "winetahoma",
+"n": "Wine Tahoma (≈ Tahoma)",
+"c": "sans",
+"f": "WineTahoma",
+"s": [
+"Regular",
+"Bold"
+]
+},
+{
 "k": "arimo",
 "n": "Arimo (≈ Arial)",
 "c": "sans",

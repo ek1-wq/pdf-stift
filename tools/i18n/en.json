@@ -3196,5 +3196,11 @@
   "Nothing found.": null,
   "Die Kurzanleitung lässt sich gerade nicht laden.": "The quick guide cannot be loaded right now.",
   "The quick guide cannot be loaded right now.": null,
-  "Kurzanleitung ein-/ausblenden (F1)": "Show/hide the quick guide (F1)"
+  "Kurzanleitung ein-/ausblenden (F1)": "Show/hide the quick guide (F1)",
+  "\"Tahoma\", \"PS WineTahoma\", sans-serif": null,
+  "Tahoma": null,
+  "<button type=\"button\" class=\"dk-play\" title=\"Abspielen\" aria-label=\"Abspielen\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"11\"/><path d=\"M10 8l6 4-6 4z\"/></svg></button>": "<button type=\"button\" class=\"dk-play\" title=\"Play\" aria-label=\"Play\"><svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"11\"/><path d=\"M10 8l6 4-6 4z\"/></svg></button>",
+  "Kein Video empfangen. Ist die Datei größer als upload_max_filesize?": "No video received. Is the file larger than upload_max_filesize?",
+  "Das ist kein unterstütztes Video bzw. kein Ton (MP4, WebM, MOV, MP3, M4A, WAV) oder die Datei ist zu groß.": "This is not a supported video or sound (MP4, WebM, MOV, MP3, M4A, WAV), or the file is too large.",
+  "Video nicht gefunden.": "Video not found."
 }

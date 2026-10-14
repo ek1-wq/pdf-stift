@@ -47,7 +47,11 @@
     try {
       const svg = box.querySelector('svg');
       if (!svg) return null;
-      const bb = svg.getBBox();
+      // LibreOffice legt die Grafik auf eine A4-Seite und vermerkt ihren Rahmen (BoundingBox) – genau diesen Ausschnitt nehmen,
+      // sonst gingen weiße Ränder der Grafik verloren und sie wäre verschoben
+      const gr = svg.querySelectorAll('g.Graphic');
+      const bbr = gr.length === 1 && gr[0].querySelector('rect.BoundingBox');
+      const bb = bbr ? { x: +bbr.getAttribute('x'), y: +bbr.getAttribute('y'), width: +bbr.getAttribute('width'), height: +bbr.getAttribute('height') } : svg.getBBox();
       if (!bb.width || !bb.height) return null;
       const vb = svg.viewBox && svg.viewBox.baseVal;
       const wAttr = svg.getAttribute('width') || '';
@@ -346,6 +350,22 @@
 
     // ---- Bilder hochladen (gleiche Datei nur einmal)
     const upCache = {};
+    // Video/Ton aus dem Paket auf den Server legen → Dateiname (sha1.ext) oder null
+    async function uploadMedia(mediaPath) {
+      const key = 'm:' + mediaPath;
+      if (key in upCache) return upCache[key];
+      return (upCache[key] = (async () => {
+        const b = z[mediaPath];
+        if (!b) return null;
+        try {
+          const fd = new FormData();
+          fd.append('file', new Blob([b]), mediaPath.split('/').pop());
+          const r = await fetch(C.API + '?a=mediaput', { method: 'POST', credentials: 'same-origin', headers: { 'X-PDFStift': '1' }, body: fd });
+          if (!r.ok) return null;
+          return (await r.json()).vid || null;
+        } catch (e) { return null; }
+      })());
+    }
     async function upload(mediaPath, crop, fx) {
       const key = mediaPath + (crop ? JSON.stringify(crop) : '') + (fx ? JSON.stringify(fx) : '');
       if (key in upCache) return upCache[key];
@@ -673,6 +693,11 @@
         if (!res) return;
         const e = { ...base, t: 'img', src: res.src, iw: res.w, ih: res.h };
         if (b.fx) e.fx = 1; if (b.fy) e.fy = 1;
+        // eingebettetes Video oder eingebetteter Ton: Datei mit übernehmen, das Bild dient als Vorschau
+        const nvPr = path(sp, 'nvPicPr', 'nvPr');
+        const mEl = nvPr && (all(nvPr, 'media')[0] || kid(nvPr, 'videoFile') || kid(nvPr, 'audioFile'));
+        const mRel = mEl && (ctx.rels[rid(mEl, 'embed')] || ctx.rels[rid(mEl, 'link')]);
+        if (mRel && !mRel.ext) { const vid = await uploadMedia(mRel.target); if (vid) e.vid = vid; else warn.other++; }
         const am = blip && kid(blip, 'alphaModFix');
         if (am && num(at(am, 'amt'), 100000) < 100000) e.op = r1(num(at(am, 'amt')) / 100000);
         const l = lineOf(spPr, null, T);
@@ -719,6 +744,17 @@
             row[i] = t.hasText && Math.abs(t.fs - fs) / fs > 0.04 ? scaleHtml(t.html, t.fs / fs) : t.html;
           }
           const e = { ...base, t: 'table', rows, cw: grid.map((g) => Math.round((g / tot) * 1000) / 1000), fs: Math.round(fs || 18) };
+          // Zeilenhöhen wie in PowerPoint (Mindesthöhen je Zeile) und Zellränder (Standard 0,1″ links/rechts, 0,05″ oben/unten)
+          const trH = kids(tbl, 'tr').slice(0, rows.length).map((tr) => num(at(tr, 'h')));
+          const sumH = trH.reduce((a, v) => a + v, 0);
+          if (sumH > 0 && trH.every((v) => v > 0)) {
+            const hPx = r1(px(sumH) * (M.s || 1));
+            if (hPx > e.h) e.h = hPx;
+            e.rh = trH.map((v) => Math.round(((px(v) * (M.s || 1)) / e.h) * 10000) / 10000);
+          }
+          const tc0 = all(tbl, 'tcPr')[0];
+          const mar = (n, d) => { const v = at(tc0, n); return px(v == null ? d : num(v)) * (M.s || 1); };
+          e.cm = [r1((mar('marT', 45720) + mar('marB', 45720)) / 2), r1((mar('marL', 91440) + mar('marR', 91440)) / 2)];
           // Zellformate: Tabellenformatvorlage (Kopfzeile, gebänderte Zeilen …) und eigene Zellfarben
           const tp = kid(tbl, 'tblPr');
           const flag = (n) => at(tp, n) === '1' || at(tp, n) === 'true';
@@ -809,9 +845,20 @@
           if (dec) e.dp = dec[1].length;
           if (all(ch, 'showVal').some((x) => at(x, 'val') === '1')) e.dl = 1;
           if (ct === 'line' && series.every((s) => s.mk === 'none')) e.mk = 0;
+          // Bild als Diagrammhintergrund (gestreckt oder gekachelt) und Rahmen des Diagramms
+          const cbf = csp && kid(csp, 'blipFill');
+          if (cbf) {
+            const crel = relsOf(cr.target)[rid(kid(cbf, 'blip'), 'embed')];
+            const res = crel && !crel.ext ? await upload(crel.target) : null;
+            if (res) { out.push({ ...base, id: X().uid(), t: 'img', src: res.src, iw: res.w, ih: res.h }); delete e.bg; }
+          }
+          const cln = csp && kid(csp, 'ln');
+          const clc = cln && !kid(cln, 'noFill') && color(kid(cln, 'solidFill'), T);
+          const frame = clc ? { ...base, id: X().uid(), t: 'shape', k: 'rect', line: clc.c, lw: Math.max(0.5, r1(px(num(at(cln, 'w')) || 9525))) } : null;
           // waagrechte Balken: PowerPoint zeichnet die erste Kategorie unten, außer die Achse ist umgekehrt
           if (ct === 'bar' && at(path(catAx, 'scaling', 'orientation'), 'val') !== 'maxMin') { e.labels.reverse(); e.series.forEach((s) => s.v.reverse()); }
           out.push(e);
+          if (frame) out.push(frame);
           return;
         }
         // eingebettete Objekte (OLE, z. B. Excel-Tabellen): das mitgespeicherte Vorschaubild zeigen
@@ -844,6 +891,19 @@
           const ext = dmX && all(dmX, 'dataModelExt')[0];
           if (ext && ctx.rels[at(ext, 'relId')] && xml(ctx.rels[at(ext, 'relId')].target)) rel = ctx.rels[at(ext, 'relId')];
           if (!rel) rel = Object.values(ctx.rels).find((r) => r.type === 'diagramDrawing' && xml(r.target));
+          // Hintergrund der SmartArt-Grafik (Bild oder Farbe) hinter die Formen legen
+          const dbg = dmX && kid(dmX.documentElement, 'bg');
+          if (dbg) {
+            const dbf = kid(dbg, 'blipFill');
+            if (dbf) {
+              const brel = relsOf(dmRel.target)[rid(kid(dbf, 'blip'), 'embed')];
+              const res = brel && !brel.ext ? await upload(brel.target) : null;
+              if (res) out.push({ ...base, id: X().uid(), t: 'img', src: res.src, iw: res.w, ih: res.h });
+            } else {
+              const sc = kid(dbg, 'solidFill') && color(kid(dbg, 'solidFill'), T);
+              if (sc && sc.a > 0.02) out.push({ ...base, id: X().uid(), t: 'shape', k: 'rect', fill: sc.c, ...(sc.a < 1 ? { fo: r1(sc.a) } : {}) });
+            }
+          }
           if (!rel) return;
           const dd = xml(rel.target);
           const tree = all(dd, 'spTree')[0];
@@ -951,6 +1011,23 @@
         const lnSp = firstAttr(chain.map((s) => kid(s, 'lvl1pPr')).filter(Boolean).map((x) => path(x, 'lnSpc', 'spcPct')).filter(Boolean), 'val');
         if (lnSp && Math.abs(num(lnSp) / 100000 - 1) > 0.05) e.lh = r1(num(lnSp) / 100000 * 1.2);
       } else if (e.t === 'text') return;
+      // Senkrechter Text (vert, vert270, eaVert): als um 90° gedrehtes Textfeld – sieht überall gleich aus (Bildschirm, PDF, PowerPoint)
+      const vert = firstAttr(bodies, 'vert');
+      if (e.html && /^(vert|eaVert|vert270|wordArtVertRtl)$/.test(vert || '')) {
+        const turn = vert === 'vert270' ? -90 : 90;
+        const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
+        const rot = (o) => { const w = o.h, h = o.w; Object.assign(o, { x: r1(cx - w / 2), y: r1(cy - h / 2), w: r1(w), h: r1(h), r: ((o.r || 0) + turn + 360) % 360 }); };
+        if (e.t === 'text') rot(e);
+        else {
+          // Form bleibt stehen, der Text kommt als eigenes gedrehtes Feld darüber
+          const te = { id: X().uid(), t: 'text', x: e.x, y: e.y, w: e.w, h: e.h, r: e.r || 0, html: e.html, fs: e.fs, va: e.va, pad: e.pad, c: e.c };
+          if (e.ff) te.ff = e.ff; if (e.lh) te.lh = e.lh; if (e.g) te.g = e.g;
+          delete e.html; delete e.fs; delete e.va; delete e.c; delete e.ff; delete e.lh; delete e.pad;
+          rot(te);
+          out.push(e, te);
+          return;
+        }
+      }
       // Text ohne Zeilenumbruch (wrap="none"): Feld so breit machen wie die längste Zeile
       const plainLines = e.html ? e.html.replace(/<br>/g, '\n').replace(/<\/(div|li)>/g, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').split('\n') : [];
       const longWord = Math.max(0, ...plainLines.flatMap((l) => l.split(/\s+/)).map((w) => w.length)) * (e.fs || 18) * 0.6 + 2 * (e.pad || 0) + 4;
@@ -1370,7 +1447,12 @@
           } else if (e.t === 'img') {
             const o = { ...boxO, data: await imgData(e.src), flipH: !!e.fx, flipV: !!e.fy, shadow };
             if (tr) o.transparency = tr;
-            mark(e); sl.addImage({ ...o, ...nm(e) });
+            let vidData = null;
+            if (e.vid) { try { const r = await fetch(P.mediaUrl(e.vid), { credentials: 'same-origin' }); if (r.ok) vidData = await blobToData(await r.blob()); } catch (er) { /* nur Vorschaubild */ } }
+            if (vidData) {
+              const ext = e.vid.split('.').pop();
+              sl.addMedia({ ...boxO, type: /^(mp3|m4a|wav)$/.test(ext) ? 'audio' : 'video', data: vidData, extn: ext, cover: o.data });
+            } else { mark(e); sl.addImage({ ...o, ...nm(e) }); }
           } else if (e.t === 'table') {
             const n = e.rows[0] ? e.rows[0].length : 1;
             const cw = e.cw || e.rows[0].map(() => 1 / n);
@@ -1386,7 +1468,7 @@
               const vv = cs.v || e.va; if (vv) options.valign = { t: 'top', m: 'middle', b: 'bottom' }[vv];
               return { text: runsOf(cell, { color, fs: e.fs || 18 }), options };
             }).filter(Boolean));
-            mark(e); sl.addTable(rows, { ...nm(e), x: inch(e.x), y: inch(e.y), w: inch(e.w), colW: cw.map((f) => inch(f * e.w)), rowH: inch(e.h / Math.max(1, e.rows.length)), fontFace: face, fontSize: e.fs || 18, valign: 'middle', border: { type: 'solid', pt: 1, color: noHash(e.line || '#868E96') }, margin: Math.max(1, Math.round((e.fs || 18) / 3)) });
+            mark(e); sl.addTable(rows, { ...nm(e), x: inch(e.x), y: inch(e.y), w: inch(e.w), colW: cw.map((f) => inch(f * e.w)), rowH: P.tblRows(e, true).map((f) => inch(f * e.h)), fontFace: face, fontSize: e.fs || 18, valign: 'middle', border: { type: 'solid', pt: 1, color: noHash(e.line || '#868E96') }, margin: e.cm ? [e.cm[0], e.cm[1], e.cm[0], e.cm[1]] : Math.max(1, Math.round((e.fs || 18) / 3)) });
           } else if (e.t === 'chart') {
             const T = { col: 'bar', bar: 'bar', line: 'line', pie: 'pie' }[e.ct] || 'bar';
             const ser = (e.series || []).filter((x) => x && Array.isArray(x.v));

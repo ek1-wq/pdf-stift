@@ -492,3 +492,43 @@ function img_file(string $src): ?string
     $f = img_dir() . '/' . $src;
     return is_file($f) ? $f : null;
 }
+
+
+/** Video oder Ton aus Präsentationen ablegen (gleiche Dateien nur einmal). Rückgabe: ['vid' => 'sha1.ext'] oder null. */
+function media_store_file(string $tmp): ?array
+{
+    $size = (int) @filesize($tmp);
+    if ($size < 64 || $size > 300 * 1024 * 1024) {
+        return null;
+    }
+    $h = (string) @file_get_contents($tmp, false, null, 0, 16);
+    $ext = null;
+    if (substr($h, 4, 4) === 'ftyp') {
+        $brand = substr($h, 8, 4);
+        $ext = in_array($brand, ['M4A ', 'M4B '], true) ? 'm4a' : (str_starts_with($brand, 'qt') ? 'mov' : 'mp4');
+    } elseif (substr($h, 0, 4) === "\x1A\x45\xDF\xA3") {
+        $ext = 'webm';
+    } elseif (substr($h, 0, 3) === 'ID3' || (ord($h[0] ?? "\0") === 0xFF && (ord($h[1] ?? "\0") & 0xE0) === 0xE0)) {
+        $ext = 'mp3';
+    } elseif (substr($h, 0, 4) === 'RIFF' && substr($h, 8, 4) === 'WAVE') {
+        $ext = 'wav';
+    }
+    if (!$ext) {
+        return null;
+    }
+    $src = sha1_file($tmp) . '.' . $ext;
+    $f = img_dir() . '/' . $src;
+    if (!is_file($f) && !@copy($tmp, $f)) {
+        return null;
+    }
+    return ['vid' => $src];
+}
+
+function media_file(string $src): ?string
+{
+    if (!preg_match('/^[a-f0-9]{40}\.(mp4|m4a|mov|webm|mp3|wav)$/', $src)) {
+        return null;
+    }
+    $f = img_dir() . '/' . $src;
+    return is_file($f) ? $f : null;
+}

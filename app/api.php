@@ -849,6 +849,65 @@ switch ($a) {
         }
         json_out($r);
 
+    // Videos und Töne aus PowerPoint-Dateien
+    case 'mediaput':
+        if ($method !== 'POST') {
+            fail('POST erwartet.', 405);
+        }
+        $f = $_FILES['file'] ?? null;
+        if (!$f || $f['error'] !== UPLOAD_ERR_OK) {
+            fail('Kein Video empfangen. Ist die Datei größer als upload_max_filesize?');
+        }
+        $r = media_store_file($f['tmp_name']);
+        if (!$r) {
+            fail('Das ist kein unterstütztes Video bzw. kein Ton (MP4, WebM, MOV, MP3, M4A, WAV) oder die Datei ist zu groß.');
+        }
+        json_out($r);
+
+    case 'media':
+        // mit Teilabrufen (Range), damit man im Video springen kann
+        $f = media_file((string) ($_GET['src'] ?? ''));
+        if (!$f) {
+            fail('Video nicht gefunden.', 404);
+        }
+        $ext = pathinfo($f, PATHINFO_EXTENSION);
+        $size = filesize($f);
+        $start = 0;
+        $end = $size - 1;
+        if (preg_match('/bytes=(\d*)-(\d*)/', (string) ($_SERVER['HTTP_RANGE'] ?? ''), $m)) {
+            if ($m[1] === '' && $m[2] !== '') {
+                $start = max(0, $size - (int) $m[2]);
+            } else {
+                $start = (int) $m[1];
+                if ($m[2] !== '') {
+                    $end = min($end, (int) $m[2]);
+                }
+            }
+            if ($start > $end || $start >= $size) {
+                http_response_code(416);
+                header("Content-Range: bytes */$size");
+                exit;
+            }
+            http_response_code(206);
+            header("Content-Range: bytes $start-$end/$size");
+        }
+        header('Content-Type: ' . ['mp4' => 'video/mp4', 'm4a' => 'audio/mp4', 'mov' => 'video/quicktime', 'webm' => 'video/webm', 'mp3' => 'audio/mpeg', 'wav' => 'audio/wav'][$ext]);
+        header('Accept-Ranges: bytes');
+        header('Content-Length: ' . ($end - $start + 1));
+        header('Cache-Control: private, max-age=31536000, immutable');
+        header('X-Content-Type-Options: nosniff');
+        $h = fopen($f, 'rb');
+        fseek($h, $start);
+        $left = $end - $start + 1;
+        while ($left > 0 && !feof($h)) {
+            $chunk = fread($h, (int) min(1048576, $left));
+            echo $chunk;
+            $left -= strlen($chunk);
+            flush();
+        }
+        fclose($h);
+        exit;
+
     // Windows-Grafiken (EMF, WMF, TIFF) aus PowerPoint-Dateien → SVG (mit LibreOffice auf dem Server)
     case 'imgconv':
         if ($method !== 'POST') {

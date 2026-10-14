@@ -139,7 +139,7 @@ DE = {
             'Bibliothek → Präsentationen → <b>Neue Präsentation</b> oder <b>PowerPoint öffnen</b> (eine oder mehrere .pptx-Dateien).',
             'Einen ganzen Ordner übernehmen: Menü (drei Punkte) auf der Karte „PowerPoint öffnen“ → „Ganzen Ordner übernehmen“; in der Windows-App '
             'auch Datei → „Ordner mit PowerPoint-Dateien übernehmen“. Am Ende zeigt eine Liste, was übernommen wurde.',
-            'Übernommen werden Texte, Formen, Bilder, Tabellen, Diagramme, SmartArt-Grafiken, Formeln, Farbverläufe, Animationen und Übergänge.',
+            'Übernommen werden Texte, Formen, Bilder, Tabellen, Diagramme, SmartArt-Grafiken, Formeln, Farbverläufe, Animationen, Übergänge sowie eingebettete Videos und Töne – ein Klick auf den Abspielknopf spielt sie ab.',
         ]),
         ('h2', 'Bearbeiten, vorführen und speichern'),
         ('ul', [
@@ -319,7 +319,7 @@ EN = {
             'Library → Presentations → <b>New presentation</b> or <b>Open PowerPoint</b> (one or more .pptx files).',
             'Import a whole folder: the menu (three dots) on the “Open PowerPoint” card → “Import whole folder”; in the Windows app also '
             'File → “Import folder of PowerPoint files”. A list shows what was imported.',
-            'Text, shapes, pictures, tables, charts, SmartArt graphics, equations, gradients, animations and transitions are imported.',
+            'Text, shapes, pictures, tables, charts, SmartArt graphics, equations, gradients, animations, transitions and embedded videos and sounds are imported – click the play button to play them.',
         ]),
         ('h2', 'Editing, Presenting and Saving'),
         ('ul', [

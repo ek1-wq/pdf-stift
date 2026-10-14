@@ -23,12 +23,13 @@
     if (STD_FONTS[k]) return STD_FONTS[k][1];
     if (k && k.startsWith('L:')) return `"${cssq(k.slice(2))}", sans-serif`;
     const m = FM.by[k];
+    if (k === 'winetahoma') return '"Tahoma", "PS WineTahoma", sans-serif'; // echtes Tahoma, wo vorhanden (gleiche Laufweite)
     return m ? `"PS ${m.f}", ${CAT_FB[m.c] || 'sans-serif'}` : STD_FONTS.sans[1];
   }
   const fontOk = (k) => !!(STD_FONTS[k] || FM.by[k] || (k && k.startsWith('L:') && k.length < 110));
   // PowerPoint: Schriftname ↔ Schlüssel (metrisch gleiche freie Schriften für Calibri, Cambria …)
-  const FONT_ALIAS = { calibri: 'carlito', cambria: 'caladea', georgia: 'gelasio', 'comic sans ms': 'comicneue', arial: 'sans', helvetica: 'sans', 'times new roman': 'serif', times: 'serif', 'courier new': 'mono', courier: 'mono' };
-  const FONT_OFFICE = { carlito: 'Calibri', caladea: 'Cambria', gelasio: 'Georgia', comicneue: 'Comic Sans MS', arimo: 'Arial', tinos: 'Times New Roman', cousine: 'Courier New', sans: 'Arial', serif: 'Times New Roman', mono: 'Courier New' };
+  const FONT_ALIAS = { tahoma: 'winetahoma', calibri: 'carlito', cambria: 'caladea', georgia: 'gelasio', 'comic sans ms': 'comicneue', arial: 'sans', helvetica: 'sans', 'times new roman': 'serif', times: 'serif', 'courier new': 'mono', courier: 'mono' };
+  const FONT_OFFICE = { winetahoma: 'Tahoma', carlito: 'Calibri', caladea: 'Cambria', gelasio: 'Georgia', comicneue: 'Comic Sans MS', arimo: 'Arial', tinos: 'Times New Roman', cousine: 'Courier New', sans: 'Arial', serif: 'Times New Roman', mono: 'Courier New' };
   function fontKey(name) {
     const n = String(name || '').trim().replace(/\s+(regular|normal|standard)$/i, ''), l = n.toLowerCase().replace(/\s+(light|semilight)$/, '');
     if (!n) return '';
@@ -202,6 +203,22 @@
 
   // ------------------------------------------------------------------ Zeichnen (Bearbeiten, Vorschau, Vortrag)
   const imgUrl = (src) => C.API + '?a=img&src=' + encodeURIComponent(src);
+  const mediaUrl = (src) => C.API + '?a=media&src=' + encodeURIComponent(src);
+  // Abspielknopf auf Videos (Bearbeiten, Vorführen): Video an die Stelle des Vorschaubilds setzen
+  document.addEventListener('pointerdown', (ev) => {
+    const b = ev.target.closest && ev.target.closest('.dk-play');
+    if (!b) return;
+    const n = b.closest('.dk-el');
+    if (!n || !n.dataset.vid || n.closest('.dk-thumb, .dk-sorter, .pr-next')) return;
+    ev.preventDefault(); ev.stopPropagation();
+    const audio = /\.(mp3|m4a|wav)$/.test(n.dataset.vid);
+    const v = document.createElement(audio ? 'audio' : 'video');
+    v.className = 'dk-video'; v.src = mediaUrl(n.dataset.vid); v.controls = true; v.autoplay = true; v.playsInline = true;
+    const im = n.querySelector('img');
+    if (!audio && im) v.poster = im.src;
+    if (!audio && im) im.replaceWith(v); else n.appendChild(v);
+    b.remove();
+  }, true);
   // Formen als SVG-Pfad im Rechteck w × h (gleiche Geometrie für Bildschirm und PDF)
   const P2 = (pts) => 'M' + pts.map(([x, y]) => `${+x.toFixed(2)} ${+y.toFixed(2)}`).join('L') + 'Z';
   const star = (w, h, n, ri) => P2(Array.from({ length: n * 2 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / n, r = i % 2 ? ri : 1; return [w / 2 + Math.cos(a) * w / 2 * r, h / 2 + Math.sin(a) * h / 2 * r]; }));
@@ -346,6 +363,16 @@
     const a = ((e.gr.ang || 0) * Math.PI) / 180, c = Math.cos(a) / 2, s0 = Math.sin(a) / 2;
     return `<defs><linearGradient id="gr-${e.id}" x1="${0.5 - c}" y1="${0.5 - s0}" x2="${0.5 + c}" y2="${0.5 + s0}">${stops}</linearGradient></defs>`;
   }
+  // Zeilenhöhen einer Tabelle als Anteile (aus PowerPoint übernommen oder gleich hoch)
+  // raw: Mindesthöhen wie in PowerPoint (Anteile an der Feldhöhe, Summe ≤ 1) – sonst auf die Feldhöhe verteilt
+  function tblRows(e, raw) {
+    const n = e.rows.length;
+    if (Array.isArray(e.rh) && e.rh.length === n) {
+      const sum = e.rh.reduce((a, b) => a + (+b || 0), 0) || 1;
+      return e.rh.map((v) => (+v || 0) / (raw && sum <= 1.001 ? 1 : sum));
+    }
+    return Array(n).fill(1 / n);
+  }
   function elNode(e, th) {
     th = th || DEF_TH;
     const n = document.createElement('div');
@@ -369,6 +396,11 @@
       const im = document.createElement('img');
       im.src = imgUrl(e.src); im.alt = ''; im.draggable = false;
       n.appendChild(im);
+      if (e.vid) {
+        // Video oder Ton aus PowerPoint: Vorschaubild mit Abspielknopf; ein Klick spielt es an Ort und Stelle ab
+        n.dataset.vid = e.vid;
+        n.insertAdjacentHTML('beforeend', `<button type="button" class="dk-play" title="Abspielen" aria-label="Abspielen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11"/><path d="M10 8l6 4-6 4z"/></svg></button>`);
+      }
       if (e.line) n.style.boxShadow = `inset 0 0 0 ${e.lw || 2}px ${e.line}`;
     } else if (e.t === 'shape') {
       const lineK = isLine(e), openK = isOpen(e);
@@ -395,9 +427,14 @@
       tb.style.setProperty('--bc', e.line || '#868E96');
       const cw = e.cw || e.rows[0].map(() => 1 / e.rows[0].length);
       const cp = Math.max(1, Math.round((e.fs || 18) / 3));
+      // Zellränder: aus PowerPoint übernommen (cm = [oben/unten, links/rechts]) oder nach der Schriftgröße
+      const cpad = e.cm ? `${e.cm[0]}px ${e.cm[1]}px` : `${Math.max(1, Math.round((e.fs || 18) * 0.2))}px ${cp}px`;
+      const rh = tblRows(e, true);
+      if (e.rh) tb.style.height = 'auto'; // Zeilen wachsen mit dem Text, wie in PowerPoint
+      if (e.cm) tb.classList.add('pp0'); // Tabellen aus PowerPoint: kein zusätzlicher Absatzabstand in den Zellen
       const MG = mergeMap(e);
       tb.innerHTML = '<colgroup>' + cw.map((f) => `<col style="width:${f * 100}%">`).join('') + '</colgroup>' +
-        e.rows.map((row, ri) => '<tr>' + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; const cs = (e.cs && e.cs[k]) || {}; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${cs.c || th.fg}`}${cs.f ? `;background:${cs.f}` : ''}${cs.b ? ';font-weight:700' : ''};vertical-align:${{ t: 'top', b: 'bottom' }[cs.v || e.va] || 'middle'}"><div class="dk-cell" style="padding:${Math.max(1, Math.round((e.fs || 18) * 0.2))}px ${cp}px">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
+        e.rows.map((row, ri) => `<tr style="height:${r1(rh[ri] * e.h)}px">` + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; const cs = (e.cs && e.cs[k]) || {}; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${cs.c || th.fg}`}${cs.f ? `;background:${cs.f}` : ''}${cs.b ? ';font-weight:700' : ''};vertical-align:${{ t: 'top', b: 'bottom' }[cs.v || e.va] || 'middle'}"><div class="dk-cell" style="padding:${cpad}">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
       n.appendChild(tb);
     }
     return n;
@@ -1157,8 +1194,8 @@
         const ri = cell ? cell[0] : e.rows.length - 1, ci = cell ? cell[1] : cols - 1;
         endEdit();
         change(() => {
-          if (f === 'row+') { e.rows.splice(ri + 1, 0, Array(cols).fill('')); e.h = r1(e.h + e.h / (e.rows.length - 1)); mergeShift(e, 'r', ri + 1, 1); }
-          if (f === 'row-' && e.rows.length > 1) { e.h = r1(e.h - e.h / e.rows.length); e.rows.splice(ri, 1); mergeShift(e, 'r', ri, -1); }
+          if (f === 'row+') { const fr = tblRows(e); const add = fr[ri] || 1 / e.rows.length; e.rows.splice(ri + 1, 0, Array(cols).fill('')); if (e.rh) { fr.splice(ri + 1, 0, add); e.rh = fr.map((x) => Math.round(x * 10000) / 10000); } e.h = r1(e.h * (1 + add)); mergeShift(e, 'r', ri + 1, 1); }
+          if (f === 'row-' && e.rows.length > 1) { const fr = tblRows(e); const sub = fr[ri]; e.h = r1(e.h * (1 - sub)); e.rows.splice(ri, 1); if (e.rh) { fr.splice(ri, 1); e.rh = fr.map((x) => Math.round(x * 10000) / 10000); } mergeShift(e, 'r', ri, -1); }
           if (f === 'col+') { e.rows.forEach((r) => r.splice(ci + 1, 0, '')); e.cw = Array(cols + 1).fill(1 / (cols + 1)); mergeShift(e, 'c', ci + 1, 1); }
           if (f === 'col-' && cols > 1) { e.rows.forEach((r) => r.splice(ci, 1)); e.cw = Array(cols - 1).fill(1 / (cols - 1)); mergeShift(e, 'c', ci, -1); }
           if (f === 'mergeR' || f === 'mergeD' || f === 'unmerge') {
@@ -2353,6 +2390,7 @@
     const redrawInk = () => { const old = mounted.wrap.querySelector('.dk-ink'); const tmp = document.createElement('div'); tmp.innerHTML = inkSvg(D.deck.slides[idx()]); if (old) old.replaceWith(tmp.firstChild); send({ t: 'ink', i: idx(), ink: D.deck.slides[idx()].ink || [] }); };
     // Zeichnen, radieren, zeigen
     cur.addEventListener('pointerdown', (ev) => {
+      if (ev.target.closest && ev.target.closest('.dk-play, .dk-video')) return; // Video: abspielen statt weiterblättern
       if (ev.button > 0 || !mounted || ev.target.closest('.pr-tools')) return;
       if (!P.tool) { if (P.end) end(); else go2(pos + 1); return; }
       if (P.tool === 'laser') return;
@@ -2690,11 +2728,19 @@
         flush2();
       }
     };
-    const drawTextBox = (pg, html, x, y, w, h, fs, color, va, pad, K, lhm) => {
-      lhm = lhm || 1.2;
+    // Höhe, die ein Text in einem Feld dieser Breite braucht (für Tabellenzeilen, die mit dem Text wachsen)
+    const textHeight = (html, fs, w, pad, lhm, color, pg0) => {
+      lhm = lhm || 1.2; const G = pg0 == null ? 0.3 : pg0;
+      const lines = layoutText(paras(html, color), fs, w - 2 * pad);
+      const total = lines.reduce((a0, l) => a0 + fs * (l.m || 1) * lhm + (l.last ? fs * (l.m || 1) * G : 0), 0) - (lines.length ? fs * (lines[lines.length - 1].m || 1) * G : 0);
+      return total + 2 * pad;
+    };
+    // pg0: Abstand nach einem Absatz in Schrifthöhen (Standard 0,3; Tabellen aus PowerPoint 0)
+    const drawTextBox = (pg, html, x, y, w, h, fs, color, va, pad, K, lhm, pg0) => {
+      lhm = lhm || 1.2; const G = pg0 == null ? 0.3 : pg0;
       const lines = layoutText(paras(html, color), fs, w - 2 * pad);
       const lhOf = (l) => fs * (l.m || 1) * lhm;
-      const total = lines.reduce((a0, l) => a0 + lhOf(l) + (l.last ? fs * (l.m || 1) * 0.3 : 0), 0) - (lines.length ? fs * (lines[lines.length - 1].m || 1) * 0.3 : 0);
+      const total = lines.reduce((a0, l) => a0 + lhOf(l) + (l.last ? fs * (l.m || 1) * G : 0), 0) - (lines.length ? fs * (lines[lines.length - 1].m || 1) * G : 0);
       let yy = y + pad + (va === 'm' ? Math.max(0, (h - 2 * pad - total) / 2) : va === 'b' ? Math.max(0, h - 2 * pad - total) : 0);
       for (const ln of lines) {
         const avail = w - 2 * pad - ln.ind;
@@ -2710,7 +2756,7 @@
           if (spaces) { const extra = (avail - ln.w) / spaces; ln.toks.forEach((t) => { if (!t.t.trim()) t.w += extra; }); gap = 0; drawJust(pg, ln, lx, yy, fs, color, K, lhm, extra); yy += lhOf(ln); continue; }
         }
         drawRuns(pg, ln, lx, yy, fs, color, K, lhm, gap);
-        yy += lhOf(ln) + (ln.last ? fs * (ln.m || 1) * 0.3 : 0);
+        yy += lhOf(ln) + (ln.last ? fs * (ln.m || 1) * G : 0);
       }
     };
     // Blocksatz-Zeile: Wort für Wort setzen
@@ -2828,9 +2874,22 @@
       } else if (e.t === 'table') {
         const rows = e.rows.length, cols = e.rows[0].length;
         const cw = e.cw || Array(cols).fill(1 / cols);
-        const rh = e.h / rows;
-        const cp = Math.max(1, Math.round((e.fs || 18) / 3));
+        const cp = e.cm ? e.cm[1] : Math.max(1, Math.round((e.fs || 18) / 3));
         const MG = mergeMap(e);
+        let RH = tblRows(e).map((f) => f * e.h);
+        if (e.rh) {
+          // wie auf dem Bildschirm: Mindesthöhe je Zeile, bei mehr Text höher
+          RH = tblRows(e, true).map((f, ri) => {
+            let need = f * e.h;
+            for (let ci = 0; ci < cols; ci++) {
+              const k = ri + ',' + ci; if (MG.hid.has(k) || (MG.span[k] && MG.span[k][0] > 1)) continue;
+              const csp = (MG.span[k] || [1, 1])[1]; let w = 0; for (let j = 0; j < csp; j++) w += e.w * cw[ci + j];
+              const html = e.rows[ri][ci] || ''; if (!html.replace(/<[^>]+>/g, '').trim()) continue;
+              try { need = Math.max(need, textHeight(html, e.fs || 18, w, cp, e.lh, th.fg, 0)); } catch (er) { /* */ }
+            }
+            return need;
+          });
+        }
         let yy = 0;
         for (let ri = 0; ri < rows; ri++) {
           let xx = 0;
@@ -2839,15 +2898,15 @@
             if (MG.hid.has(ri + ',' + ci)) { xx += w0; continue; }
             const [rs, cs] = MG.span[ri + ',' + ci] || [1, 1];
             let w = 0; for (let j = 0; j < cs; j++) w += e.w * cw[ci + j];
-            const hh = rh * rs;
+            let hh = 0; for (let j = 0; j < rs && ri + j < rows; j++) hh += RH[ri + j];
             const head = ri === 0 && e.head, cst = (e.cs && e.cs[ri + ',' + ci]) || {};
             const cf = cst.f || (head ? th.accent : null);
             pg.drawRectangle({ x: xx * K, y: -(yy + hh) * K, width: w * K, height: hh * K, color: cf ? col(cf) : (SH ? col('#000000') : undefined), borderColor: col(e.line || '#868E96'), borderWidth: 0.75, ...opa() });
             const bold = head || cst.b;
-            if (!SH) drawTextBox(pg, (bold ? '<b>' : '') + (e.rows[ri][ci] || '') + (bold ? '</b>' : ''), xx, yy, w, hh, e.fs || 18, cst.c || (head ? '#FFFFFF' : th.fg), cst.v || e.va || 'm', cp, K, e.lh);
+            if (!SH) drawTextBox(pg, (bold ? '<b>' : '') + (e.rows[ri][ci] || '') + (bold ? '</b>' : ''), xx, yy, w, hh, e.fs || 18, cst.c || (head ? '#FFFFFF' : th.fg), cst.v || e.va || 'm', cp, K, e.lh, e.cm ? 0 : undefined);
             xx += w0;
           }
-          yy += rh;
+          yy += RH[ri];
         }
       }
     }
@@ -2937,5 +2996,5 @@
   FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'F1' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); ev.stopImmediatePropagation(); rbCollapse(); } }, true);
   window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
-    PX: { mergeMap, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, inkSvg, hfEls, uid, bgOf, DEF_TH }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
+    PX: { mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();
