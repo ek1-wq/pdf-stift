@@ -1563,4 +1563,4 @@ body.hp-on { --hpr: 380px; }
 html body.focus.focus, html body.present.present { --hpr: 0px; }
 .cm-panel.hp-panel { right: var(--dr, 0px); }
 .split-pane { right: calc(var(--dr, 0px) + var(--tpr, 0px) + var(--hpr, 0px)); }
-body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--spr, 0px) + var(--hpr, 0px)); }
+body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--hpr, 0px)); }
