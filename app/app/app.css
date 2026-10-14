@@ -1557,3 +1557,10 @@ body.hp-on { --cmr: 380px; }
 .hp-body td:first-child { width: 46%; padding-right: 8px; }
 .hp-body .note { color: var(--muted); font-size: 12.5px; }
 .help-btn[aria-pressed="true"] { background: var(--accent-soft, #E6EAF5); color: var(--accent); }
+/* Kurzanleitung immer ganz rechts – auch bei „Zwei Dokumente“: das rechte Dokument und die Werkzeugspalte rücken nach links */
+body.hp-on { --hpr: 380px; }
+@media (max-width: 700px) { body.hp-on { --hpr: 0px; } }
+html body.focus.focus, html body.present.present { --hpr: 0px; }
+.cm-panel.hp-panel { right: var(--dr, 0px); }
+.split-pane { right: calc(var(--dr, 0px) + var(--tpr, 0px) + var(--hpr, 0px)); }
+body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--spr, 0px) + var(--hpr, 0px)); }
