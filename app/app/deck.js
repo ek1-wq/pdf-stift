@@ -21,7 +21,12 @@
   const cssq = (t) => String(t).replace(/["\\<>;{}]/g, '');
   function fontCss(k) {
     if (STD_FONTS[k]) return STD_FONTS[k][1];
-    if (k && k.startsWith('L:')) return `"${cssq(k.slice(2))}", sans-serif`;
+    if (k && k.startsWith('L:')) {
+      // fehlt die Schrift auf diesem Gerät: eine freie Schrift mit ähnlicher Laufweite statt der (oft breiteren) Systemschrift
+      const nm = k.slice(2), serif = /serif(?!.*sans)|times|garamond|georgia|minion|book|roman|palatino|cambria|baskerville|caslon|bodoni|didot/i.test(nm) && !/sans/i.test(nm);
+      const mono = /mono|courier|consol|\bcode\b/i.test(nm);
+      return `"${cssq(nm)}", ${mono ? '"PS Cousine", monospace' : serif ? '"PS Tinos", serif' : '"PS Arimo", sans-serif'}`;
+    }
     const m = FM.by[k];
     if (k === 'winetahoma') return '"Tahoma", "PS WineTahoma", sans-serif'; // echtes Tahoma, wo vorhanden (gleiche Laufweite)
     return m ? `"PS ${m.f}", ${CAT_FB[m.c] || 'sans-serif'}` : STD_FONTS.sans[1];
@@ -162,6 +167,26 @@
           el = document.createElement(tag === 'p' ? 'div' : tag);
           const al = st.textAlign || n.getAttribute('align');
           if (['center', 'right', 'justify'].includes(al) && tag !== 'ul' && tag !== 'ol') el.style.textAlign = al;
+          // Absatzabstand wie in PowerPoint (vor/nach, in Schrifthöhen) – nur Abstände in em
+          if (tag !== 'ul' && tag !== 'ol') {
+            const em = (v) => { const m = /^(\d*\.?\d+)em$/.exec(v || ''); return m && +m[1] <= 6 ? Math.round(+m[1] * 1000) / 1000 : null; };
+            const pt = em(st.paddingTop), pb = em(st.paddingBottom);
+            if (pt != null || pb != null || st.margin === '0px') { el.style.margin = '0'; if (pt) el.style.paddingTop = pt + 'em'; if (pb) el.style.paddingBottom = pb + 'em'; }
+          }
+          // Einzug eines Absatzes (links und hängend/erste Zeile, wie in PowerPoint) – nur in em
+          if (tag === 'div' || tag === 'p') {
+            const em2 = (v, lo) => { const m = /^(-?\d*\.?\d+)em$/.exec(v || ''); return m && +m[1] >= lo && +m[1] <= 20 ? Math.round(+m[1] * 1000) / 1000 : null; };
+            const pl = em2(st.paddingLeft, 0), ti = em2(st.textIndent, -20);
+            if (pl) el.style.paddingLeft = pl + 'em';
+            if (ti && (pl || 0) + ti >= 0) el.style.textIndent = ti + 'em';
+          }
+          // eigenes Aufzählungszeichen (z. B. ▸ oder ✔) und seine Farbe
+          if (tag === 'li') {
+            const bu = n.getAttribute('data-bu');
+            if (bu && [...bu].length <= 2 && !/[<>&"]/.test(bu)) el.setAttribute('data-bu', bu);
+            const bc = n.getAttribute('data-bc');
+            if (bu && /^#[0-9a-f]{6}$/i.test(bc || '')) el.setAttribute('data-bc', bc);
+          }
         } else if (tag === 'br') { dst.appendChild(document.createElement('br')); continue; }
         else if (tag === 'b' || tag === 'strong') el = document.createElement('b');
         else if (tag === 'i' || tag === 'em') el = document.createElement('i');
@@ -437,6 +462,8 @@
         e.rows.map((row, ri) => `<tr style="height:${r1(rh[ri] * e.h)}px">` + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; const cs = (e.cs && e.cs[k]) || {}; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${cs.c || th.fg}`}${cs.f ? `;background:${cs.f}` : ''}${cs.b ? ';font-weight:700' : ''};vertical-align:${{ t: 'top', b: 'bottom' }[cs.v || e.va] || 'middle'}"><div class="dk-cell" style="padding:${cpad}">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
       n.appendChild(tb);
     }
+    // Farbe eigener Aufzählungszeichen
+    n.querySelectorAll('li[data-bc]').forEach((li) => li.style.setProperty('--bc', li.getAttribute('data-bc')));
     return n;
   }
   // Hintergrund: Folie vor Design; Bild vor Verlauf vor Farbe
@@ -2541,6 +2568,12 @@
     return rgb(0.1, 0.1, 0.1);
   }
   // HTML → Absätze mit Läufen [{t, b, i, u, c}]
+  // Absatzabstand vor/nach (in Schrifthöhen) aus dem Stil eines Absatzes
+  function paraSp(p, el) {
+    if (!p || !el || !el.style) return;
+    if (el.style.margin === '0px' || el.style.paddingTop || el.style.paddingBottom) { p.sb = parseFloat(el.style.paddingTop) || 0; p.sa = parseFloat(el.style.paddingBottom) || 0; }
+    if (el.style.paddingLeft || el.style.textIndent) { p.ml = parseFloat(el.style.paddingLeft) || 0; p.ti = parseFloat(el.style.textIndent) || 0; }
+  }
   function paras(html, base) {
     const t = document.createElement('div');
     t.innerHTML = clean(html);
@@ -2555,10 +2588,10 @@
         if (tag === 'br') { newP(blk.al, null, blk.lvl, null); continue; }
         if (tag === 'ul' || tag === 'ol') {
           let k = 0;
-          for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k }; newP(b2.al, tag, b2.lvl, k); walk(li, st, b2); curP = null; }
+          for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k }; newP(b2.al, tag, b2.lvl, k); paraSp(curP, li); if (li.getAttribute('data-bu')) { curP.bu = li.getAttribute('data-bu'); curP.bc = li.getAttribute('data-bc') || ''; } walk(li, st, b2); curP = null; }
           continue;
         }
-        if (tag === 'div' || tag === 'li') { const b2 = { ...blk, al: c.style.textAlign || blk.al }; newP(b2.al, blk.list, blk.lvl, blk.num); walk(c, st, b2); curP = null; continue; }
+        if (tag === 'div' || tag === 'li') { const b2 = { ...blk, al: c.style.textAlign || blk.al }; newP(b2.al, blk.list, blk.lvl, blk.num); paraSp(curP, c); walk(c, st, b2); curP = null; continue; }
         const s2 = { ...st };
         if (tag === 'b') s2.b = 1; if (tag === 'i') s2.i = 1; if (tag === 'u') s2.u = 1; if (tag === 's') s2.s = 1;
         if (tag === 'sup') { s2.sup = 1; delete s2.sub; } if (tag === 'sub') { s2.sub = 1; delete s2.sup; }
@@ -2606,7 +2639,12 @@
           const fam = ff.slice(2);
           if (!FM.localData && 'queryLocalFonts' in window) { try { FM.localData = await window.queryLocalFonts(); } catch (e) { /* */ } }
           const list = (FM.localData || []).filter((f) => f.family === fam);
-          if (!list.length) throw new Error(`Die Schrift „${fam}“ gibt es auf diesem Gerät nicht`);
+          if (!list.length) {
+            // nicht vorhanden: wie auf dem Bildschirm eine freie Schrift mit ähnlicher Laufweite nehmen
+            const sub = /mono|courier|consol|\bcode\b/i.test(fam) ? 'cousine' : /serif(?!.*sans)|times|garamond|georgia|minion|book|roman|palatino|cambria|baskerville|caslon|bodoni|didot/i.test(fam) && !/sans/i.test(fam) ? 'tinos' : 'arimo';
+            if (FM.by[sub]) { fams[ff] = await famOf(sub); return fams[ff]; }
+            throw new Error(`Die Schrift „${fam}“ gibt es auf diesem Gerät nicht`);
+          }
           const st = (re) => list.find((f) => re.test(f.style || ''));
           const pickS = { Regular: st(/^(regular|normal|book|roman|standard)$/i) || list.find((f) => !/bold|italic|oblique|light|black|thin|medium|semi|demi|condensed|narrow/i.test(f.style || '')) || list[0],
             Bold: st(/^(bold|fett)$/i), Italic: st(/^(italic|oblique|kursiv)$/i), BoldItalic: st(/^bold ?(italic|oblique)$/i) };
@@ -2635,7 +2673,7 @@
     };
     const F = await famOf(th.font && fontOk(th.font) ? th.font : 'sans');
     let uni = null; // DejaVu für Zeichen außerhalb von WinAnsi (z. B. Pfeile, griechische Buchstaben)
-    const needUni = (allEls || []).some((e) => [e.html || '', ...(e.rows || []).flat(), e.title || '', ...(e.labels || []), ...(e.series || []).map((x) => x.n || '')].join('').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').split('').some((ch) => !winOk(ch) && ch !== '\n'));
+    const needUni = (allEls || []).some((e) => [(e.html || '').replace(/data-bu="([^"]*)"/g, '>$1<'), ...(e.rows || []).flat().map((x) => String(x).replace(/data-bu="([^"]*)"/g, '>$1<')), e.title || '', ...(e.labels || []), ...(e.series || []).map((x) => x.n || '')].join('').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').split('').some((ch) => !winOk(ch) && ch !== '\n'));
     if (needUni) {
       if (!kitOk) { await C.ensureFontkit(); doc.registerFontkit(window.fontkit); kitOk = true; }
       const get = async (n) => new Uint8Array(await (await fetch('vendor/fonts/' + n + '?v=' + C.VERSION)).arrayBuffer());
@@ -2683,12 +2721,12 @@
       const lines = [];
       const width = (tok) => { let s0 = 0; const z = tsz(tok, fs); for (const ch of tok.t) { const f = fontCh(ch, tok) || fontOf(tok); try { s0 += f.widthOfTextAtSize(ch, z); } catch (e) { s0 += z * 0.5; } } return s0; };
       for (const p of ps) {
-        const ind = p.list ? fs * 1.2 * p.lvl : 0;
-        const maxW = Math.max(fs, w - ind);
+        const ind0 = (p.list ? fs * 1.2 * p.lvl : 0) + (p.ml || 0) * fs; // Einzug links; erste Zeile zusätzlich um ti verschoben
+        let ind = ind0 + (p.ti || 0) * fs, maxW = Math.max(fs, w - ind);
         const toks = [];
         for (const r of p.runs) for (const part of r.t.split(/(\s+)/)) if (part) toks.push({ ...r, t: part });
         let line = [], lw = 0, first = true;
-        const push = (last) => { const m = line.length ? Math.max(...line.map((t) => t.z || 1)) : (p.runs[0] && p.runs[0].z) || 1; lines.push({ toks: line, w: lw, al: p.al, ind, bullet: first ? p : null, last, m }); first = false; line = []; lw = 0; };
+        const push = (last) => { const m = line.length ? Math.max(...line.map((t) => t.z || 1)) : (p.runs[0] && p.runs[0].z) || 1; lines.push({ toks: line, w: lw, al: p.al, ind, bullet: first ? p : null, last, m, sb: first ? p.sb : undefined, sa: last ? p.sa : undefined }); first = false; line = []; lw = 0; ind = ind0; maxW = Math.max(fs, w - ind); };
         for (const tk of toks) {
           const tw = width(tk);
           tk.w = tw;
@@ -2729,25 +2767,36 @@
       }
     };
     // Höhe, die ein Text in einem Feld dieser Breite braucht (für Tabellenzeilen, die mit dem Text wachsen)
+    // Gesamthöhe gesetzter Zeilen: Zeilenhöhe + Abstand vor/nach dem Absatz (eigener Abstand aus PowerPoint oder Standard G)
+    const gapAfter = (l, fs, G) => (l.last ? fs * (l.m || 1) * (l.sa != null ? l.sa : G) : 0);
+    const gapBefore = (l, fs) => (l.sb ? fs * (l.m || 1) * l.sb : 0);
+    const linesHeight = (lines, fs, lhm, G) => {
+      let h = 0;
+      lines.forEach((l, i) => { h += gapBefore(l, fs) + fs * (l.m || 1) * lhm + (i < lines.length - 1 ? gapAfter(l, fs, G) : 0); });
+      return h;
+    };
     const textHeight = (html, fs, w, pad, lhm, color, pg0) => {
       lhm = lhm || 1.2; const G = pg0 == null ? 0.3 : pg0;
       const lines = layoutText(paras(html, color), fs, w - 2 * pad);
-      const total = lines.reduce((a0, l) => a0 + fs * (l.m || 1) * lhm + (l.last ? fs * (l.m || 1) * G : 0), 0) - (lines.length ? fs * (lines[lines.length - 1].m || 1) * G : 0);
-      return total + 2 * pad;
+      return linesHeight(lines, fs, lhm, G) + 2 * pad;
     };
     // pg0: Abstand nach einem Absatz in Schrifthöhen (Standard 0,3; Tabellen aus PowerPoint 0)
     const drawTextBox = (pg, html, x, y, w, h, fs, color, va, pad, K, lhm, pg0) => {
       lhm = lhm || 1.2; const G = pg0 == null ? 0.3 : pg0;
       const lines = layoutText(paras(html, color), fs, w - 2 * pad);
       const lhOf = (l) => fs * (l.m || 1) * lhm;
-      const total = lines.reduce((a0, l) => a0 + lhOf(l) + (l.last ? fs * (l.m || 1) * G : 0), 0) - (lines.length ? fs * (lines[lines.length - 1].m || 1) * G : 0);
+      const total = linesHeight(lines, fs, lhm, G);
       let yy = y + pad + (va === 'm' ? Math.max(0, (h - 2 * pad - total) / 2) : va === 'b' ? Math.max(0, h - 2 * pad - total) : 0);
+      lines.forEach((l, i) => { l.i0 = i; });
       for (const ln of lines) {
+        yy += gapBefore(ln, fs);
         const avail = w - 2 * pad - ln.ind;
         const lx = x + pad + ln.ind + (ln.al === 'center' ? (avail - ln.w) / 2 : ln.al === 'right' ? avail - ln.w : 0);
         if (ln.bullet && ln.bullet.list) {
-          const mark = ln.bullet.list === 'ol' ? ln.bullet.num + '.' : '•';
-          pg.drawText(mark, { x: (x + pad + ln.ind - fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8)) * K, y: -(yy + fs * (ln.m || 1) * (0.92 + (lhm - 1.2) / 2)) * K, size: fs * K, font: FF.custom ? FF.r : F.r, color: col(color) });
+          const mark = ln.bullet.list === 'ol' ? ln.bullet.num + '.' : ln.bullet.bu || '•';
+          const mf = ln.bullet.bu ? (fontCh([...mark][0], {}) || (FF.custom ? FF.r : F.r)) : (FF.custom ? FF.r : F.r);
+          let mk = mark; if (ln.bullet.bu && !fontCh([...mark][0], {})) mk = '•';
+          pg.drawText(mk, { x: (x + pad + ln.ind - fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8)) * K, y: -(yy + fs * (ln.m || 1) * (0.92 + (lhm - 1.2) / 2)) * K, size: fs * K, font: mf, color: col(ln.bullet.bc || color) });
         }
         // Blocksatz: Lücken gleichmäßig strecken (nicht in der letzten Zeile eines Absatzes)
         let gap = 0;
@@ -2756,7 +2805,7 @@
           if (spaces) { const extra = (avail - ln.w) / spaces; ln.toks.forEach((t) => { if (!t.t.trim()) t.w += extra; }); gap = 0; drawJust(pg, ln, lx, yy, fs, color, K, lhm, extra); yy += lhOf(ln); continue; }
         }
         drawRuns(pg, ln, lx, yy, fs, color, K, lhm, gap);
-        yy += lhOf(ln) + (ln.last ? fs * (ln.m || 1) * G : 0);
+        yy += lhOf(ln) + gapAfter(ln, fs, G);
       }
     };
     // Blocksatz-Zeile: Wort für Wort setzen

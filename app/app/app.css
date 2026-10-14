@@ -1575,3 +1575,9 @@ body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--hpr, 0px)); }
 .dk-el audio.dk-video { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; }
 .dk-thumb .dk-play, .dk-sorter .dk-play { pointer-events: none; }
 .dk-table table.pp0 .dk-cell > div, .dk-table table.pp0 .dk-cell li, .dk-table table.pp0 .dk-cell ul, .dk-table table.pp0 .dk-cell ol { margin-bottom: 0; }
+/* Aufzählungszeichen aus PowerPoint (▸, ✔, ➢ …) */
+.dk-el li[data-bu]::marker { content: attr(data-bu) "\00a0\00a0"; }
+.dk-el li[data-bc]::marker { color: var(--bc); }
+/* Symbole für Aufzählungszeichen (➢ ✔ ❖ ➔ …): mitgelieferte DejaVu, nur für diese Zeichen */
+@font-face { font-family: "PS Sym"; src: url("../vendor/fonts/DejaVuSans.ttf") format("truetype"); unicode-range: U+2190-21FF, U+2500-27BF, U+2B00-2BFF; font-display: swap; }
+.dk-el li[data-bu]::marker { font-family: "PS Sym", sans-serif; }

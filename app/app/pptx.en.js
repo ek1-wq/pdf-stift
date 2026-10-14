@@ -6,6 +6,24 @@
   'use strict';
   const C = window.PDFSTIFT_CORE;
   const X = () => window.PDFSTIFT_DECK.PX;
+  // Aufzählungszeichen aus PowerPoint: Zeichen der Symbolschriften (Wingdings, Symbol) in Unicode übersetzen
+  // je Schrift: Zeichencode (unteres Byte, Symbolschriften liegen oft bei U+F0xx) → Unicode
+  const SYM_BU = {
+    wingdings: { 0x6c: '●', 0x6e: '■', 0x71: '❑', 0x75: '◆', 0x76: '❖', 0xa7: '▪', 0xa8: '◻', 0xd8: '➢', 0xe0: '➔', 0xe8: '➔', 0xf0: '⇨', 0xfa: '✗', 0xfb: '✗', 0xfc: '✔', 0xfe: '☑' },
+    'wingdings 2': { 0x96: '▪', 0x97: '●', 0x98: '◆', 0x9b: '■', 0xa0: '■', 0xa1: '◻', 0xd2: '✔', 0xd0: '✗' },
+    'wingdings 3': { 0x7d: '▸', 0x7c: '◂', 0xad: '➤', 0x75: '▶', 0x71: '▶' },
+    symbol: { 0x2d: '–', 0xb7: '•', 0xae: '→', 0xd8: '¬' },
+    starsymbol: { 0x6c: '●', 0x2d: '–', 0xb7: '•', 0x6e: '■' },
+  };
+  function bulletChar(ch, font) {
+    if (!ch) return '';
+    const f = (font || '').toLowerCase().trim();
+    const code = ch.codePointAt(0);
+    const map = SYM_BU[f] || (/^wingdings/.test(f) ? SYM_BU.wingdings : null);
+    if (map) return map[code & 0xff] || (code >= 0x2000 && code < 0xf000 ? ch : '▪');
+    if (code >= 0xf000 && code <= 0xf0ff) return SYM_BU.wingdings[code & 0xff] || '•';
+    return ch === '•' ? '' : ch; // normaler Punkt: Standard-Aufzählung
+  }
   const EMU = 12700; // EMU je pt
   const r1 = (v) => Math.round(v * 10) / 10;
   const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -506,6 +524,8 @@
       if (!txBody) return null;
       const T = ctx.T;
       const scale = (() => { const na = path(txBody, 'bodyPr', 'normAutofit'); return na && at(na, 'fontScale') ? num(at(na, 'fontScale')) / 100000 : 1; })();
+      // „Text bei Überlauf verkleinern“: PowerPoint verringert auch Zeilen- und Absatzabstände
+      const lnRed = (() => { const na = path(txBody, 'bodyPr', 'normAutofit'); return na && at(na, 'lnSpcReduction') ? num(at(na, 'lnSpcReduction')) / 100000 : 0; })();
       const paras = [];
       const stats = { sz: new Map(), c: new Map(), ff: new Map() };
       const bump = (m, k, n) => m.set(k, (m.get(k) || 0) + n);
@@ -515,12 +535,24 @@
         const lv = chain.map((s) => kid(s, `lvl${lvl + 1}pPr`)).filter(Boolean);
         const pl = [pPr, ...lv].filter(Boolean);
         const algn = firstAttr(pl, 'algn') || 'l';
-        let list = null;
+        let list = null, bu = '', buC = '';
         for (const e of pl) {
           if (kid(e, 'buNone')) { list = null; break; }
           if (kid(e, 'buAutoNum')) { list = 'ol'; break; }
-          if (kid(e, 'buChar') || kid(e, 'buBlip')) { list = 'ul'; break; }
+          if (kid(e, 'buChar') || kid(e, 'buBlip')) {
+            list = 'ul';
+            const bc = kid(e, 'buChar');
+            if (bc) {
+              let fnt = ''; for (const e2 of pl) { const f = kid(e2, 'buFont'); if (f) { fnt = at(f, 'typeface') || ''; break; } }
+              bu = bulletChar(at(bc, 'char') || '', fnt);
+            }
+            break;
+          }
         }
+        if (list === 'ul') { for (const e of pl) { const bcl = kid(e, 'buClr'); if (bcl) { const cc = color(bcl, T); if (cc) buC = cc.c; break; } if (kid(e, 'buClrTx')) break; } }
+        // Abstand vor/nach dem Absatz: in Punkt (spcPts) oder in Prozent der Zeile (spcPct); Autofit verkleinert nur Schrift und Zeilenabstand, nicht diese Abstände
+        const spc = (n) => { for (const e of pl) { const sp = kid(e, n); if (!sp) continue; const pts = kid(sp, 'spcPts'), pct = kid(sp, 'spcPct'); if (pts) return { pt: num(at(pts, 'val')) / 100 }; if (pct) return { pct: num(at(pct, 'val')) / 100000 }; } return null; };
+        const sB = spc('spcBef'), sA = spc('spcAft');
         const defR = pl.map((e) => kid(e, 'defRPr')).filter(Boolean);
         const ownDef = [pPr, ...chain.slice(0, chain.own || 0).map((st) => kid(st, `lvl${lvl + 1}pPr`))].filter(Boolean).map((e) => kid(e, 'defRPr')).filter(Boolean); // eigene Stile vor dem Formstil (fontRef)
         const runs = [];
@@ -544,6 +576,11 @@
           for (const e of rl) { const l = kid(e, 'latin'); if (l && at(l, 'typeface')) { face = at(l, 'typeface'); break; } }
           if (face === '+mj-lt') face = T.major; else if (face === '+mn-lt') face = T.minor;
           if (!face) face = base.major ? T.major : T.minor;
+          // Zeichen aus Symbolschriften (Wingdings …, im privaten Bereich U+F0xx) in Unicode übersetzen
+          if (/[\uf020-\uf0ff]/.test(t)) {
+            let sf = face; for (const e of rl) { const sy = kid(e, 'sym'); if (sy && at(sy, 'typeface')) { sf = at(sy, 'typeface'); break; } }
+            t = t.replace(/[\uf020-\uf0ff]/g, (ch) => bulletChar(ch, sf) || '•');
+          }
           const hl = rPr && kid(rPr, 'hlinkClick');
           const link = hl && ctx.rels[rid(hl, 'id')];
           const hi = rPr && kid(rPr, 'highlight');
@@ -558,7 +595,15 @@
           const n = t.length;
           bump(stats.sz, Math.round(size), n); if (col) bump(stats.c, col.c, n); bump(stats.ff, face, n);
         }
-        paras.push({ algn, list, lvl, runs });
+        // leere Absätze: Höhe nach der Schriftgröße am Absatzende; Zeilenabstand des Absatzes
+        const eSz = num(at(kid(p, 'endParaRPr'), 'sz')) || num(firstAttr(defR, 'sz')) || (base.sz || 18) * 100;
+        let lnPct = null;
+        for (const e of pl) { const ls = path(e, 'lnSpc', 'spcPct'); if (ls) { lnPct = num(at(ls, 'val')) / 100000; break; } }
+        if (lnRed) lnPct = Math.max(0.75, (lnPct || 1) * (1 - lnRed)); // nicht enger als ¾ Zeile, sonst überlappen die Zeilen
+        // Einzug ohne Aufzählungszeichen: marL (links) und indent (erste Zeile, negativ = hängend), in Punkt
+        const mAt = (n) => { for (const e of pl) { const v = at(e, n); if (v != null) return num(v) / 12700; } return 0; };
+        const mlPt = list ? 0 : mAt('marL'), tiPt = list ? 0 : mAt('indent');
+        paras.push({ algn, list, lvl, runs, bu, buC, sB, sA, eSz: (eSz / 100) * scale * K, lnPct, mlPt, tiPt });
       }
       const top = (m) => [...m.entries()].sort((a, b) => b[1] - a[1])[0];
       const fs = top(stats.sz) ? top(stats.sz)[0] : Math.round((base.sz || 18) * K);
@@ -578,16 +623,49 @@
       let html = '';
       const stack = []; // offene Listen [{tag, lvl}]
       const closeTo = (depth) => { while (stack.length > depth) html += `</li></${stack.pop().tag}>`; };
+      const anySp = paras.some((p) => p.sB || p.sA);
+      // Zeilenabstand: der häufigste unter den Absätzen mit Text
+      const lnC = new Map(); for (const p of paras) if (p.runs.some((r) => r.t && r.t.trim())) { const v = p.lnPct || 1; lnC.set(v, (lnC.get(v) || 0) + p.runs.reduce((n, r) => n + (r.t || '').length, 0)); } // nach Textmenge
+      const lnPct = [...lnC.entries()].sort((a, b) => b[1] - a[1])[0];
+      // leere Absätze werden zu Abstand vor dem nächsten Absatz (sonst wären sie so hoch wie die Schrift des Felds)
+      const blank = (p) => !p.runs.length || p.runs.every((r) => !r.br && !(r.t || '').trim());
+      paras.forEach((p, i) => {
+        if (!anySp || !blank(p) || i === paras.length - 1) return;
+        const lh = (p.lnPct || (lnPct ? lnPct[0] : 1)) * 1.2;
+        const esz = (p.runs.find((r) => r.sz) || {}).sz || p.eSz; // Absatz nur aus Leer-/Tabzeichen: dessen Schriftgröße
+        const hpx = esz * lh + (i && p.sB ? (p.sB.pt != null ? p.sB.pt * K : p.sB.pct * esz * 1.2) : 0); // Abstand vor dem ersten Absatz zählt nicht
+        p.skip = 1;
+        const nx = paras[i + 1]; // mehrere leere Absätze hintereinander summieren sich
+        nx.extraPx = (nx.extraPx || 0) + (p.extraPx || 0) + hpx;
+      });
+      let firstOut = true;
+      const lastOut = [...paras].reverse().find((p) => !p.skip && !blank(p)); // Abstand nach dem letzten Absatz zählt nicht (PowerPoint)
+      if (lastOut) lastOut.sA = null;
       for (const p of paras) {
+        if (p.skip) continue;
+        if (firstOut) { if (p === paras[0]) p.sB = null; firstOut = false; } // PowerPoint: kein Abstand vor dem ersten Absatz
+        // hängender Einzug mit Tab am Anfang: der Tab springt zum linken Einzug
+        if (!p.list && p.tiPt < 0 && p.runs[0] && /^\t/.test(p.runs[0].t || '')) { p.runs[0] = { ...p.runs[0], t: p.runs[0].t.slice(1) }; p.tiPt = 0; }
         const inner = p.runs.map((r) => (r.br ? '<br>' : runHtml(r))).join('') || '<br>';
-        const al = AL[p.algn] ? ` style="text-align: ${AL[p.algn]};"` : '';
+        // Abstände in Schrifthöhen des Felds (Prozentangaben beziehen sich auf die Zeilenhöhe der Absatzschrift)
+        const pfs = (p.runs.find((r) => r.sz) || {}).sz || fs;
+        const toEm = (v) => (!v ? 0 : v.pt != null ? (v.pt * K) / fs : (v.pct * pfs * 1.2) / fs);
+        const sb = Math.round((toEm(p.sB) + (p.extraPx || 0) / fs) * 1000) / 1000, sa = Math.round(toEm(p.sA) * 1000) / 1000;
+        let spSt = anySp ? `margin: 0;${sb ? ` padding-top: ${Math.min(6, sb)}em;` : ''}${sa ? ` padding-bottom: ${Math.min(6, sa)}em;` : ''}` : '';
+        if (!p.list && p.mlPt + Math.min(0, p.tiPt) >= -0.5 && (p.mlPt > 1 || Math.abs(p.tiPt) > 1)) {
+          const r3 = (v) => Math.round(Math.max(-20, Math.min(20, v)) * 1000) / 1000;
+          const ml = Math.max(0, r3((p.mlPt * K) / fs)), ti = r3((p.tiPt * K) / fs);
+          if (ml) spSt += ` padding-left: ${ml}em;`; if (ti && ml + ti >= 0) spSt += ` text-indent: ${ti}em;`;
+        }
+        const al = AL[p.algn] || spSt ? ` style="${AL[p.algn] ? `text-align: ${AL[p.algn]};` : ''}${spSt}"` : '';
         if (p.list && p.runs.length) {
           const depth = p.lvl + 1;
           if (stack.length > depth) closeTo(depth);
           if (stack.length === depth && stack[depth - 1].tag !== p.list) closeTo(depth - 1);
           if (stack.length === depth) html += '</li>';
           while (stack.length < depth) { html += `<${p.list}>`; stack.push({ tag: p.list }); if (stack.length < depth) html += '<li>'; }
-          html += `<li>${al ? `<div${al}>${inner}</div>` : inner}`;
+          const buA = p.bu && p.list === 'ul' ? ` data-bu="${esc(p.bu)}"${p.buC && p.buC !== c ? ` data-bc="${p.buC}"` : ''}` : '';
+          html += `<li${buA}${spSt ? ` style="${spSt}"` : ''}>${AL[p.algn] ? `<div style="text-align: ${AL[p.algn]};">${inner}</div>` : inner}`;
         } else {
           closeTo(0);
           html += `<div${al}>${inner}</div>`;
@@ -595,7 +673,7 @@
       }
       closeTo(0);
       const hasText = paras.some((p) => p.runs.some((r) => r.t && r.t.trim()));
-      return { html, fs: Math.max(4, fs), c, ff, hasText };
+      return { html, fs: Math.max(4, fs), c, ff, hasText, lnPct: lnPct ? lnPct[0] : null };
     }
 
     // freie Form: DrawingML-Pfade → SVG-Pfad in 0…1000 (Bögen werden zu Bézierkurven)
@@ -1008,8 +1086,8 @@
         }
         const key = X().fontKey(t.ff);
         if (key && key !== ctx.deckFont) e.ff = key;
-        const lnSp = firstAttr(chain.map((s) => kid(s, 'lvl1pPr')).filter(Boolean).map((x) => path(x, 'lnSpc', 'spcPct')).filter(Boolean), 'val');
-        if (lnSp && Math.abs(num(lnSp) / 100000 - 1) > 0.05) e.lh = r1(num(lnSp) / 100000 * 1.2);
+        const lnSp = t.lnPct != null ? t.lnPct * 100000 : firstAttr(chain.map((s) => kid(s, 'lvl1pPr')).filter(Boolean).map((x) => path(x, 'lnSpc', 'spcPct')).filter(Boolean), 'val');
+        if (lnSp && Math.abs(num(lnSp) / 100000 - 1) > 0.05) e.lh = Math.round(num(lnSp) / 1000 * 1.2) / 100;
       } else if (e.t === 'text') return;
       // Senkrechter Text (vert, vert270, eaVert): als um 90° gedrehtes Textfeld – sieht überall gleich aus (Bildschirm, PDF, PowerPoint)
       const vert = firstAttr(bodies, 'vert');
@@ -1315,9 +1393,10 @@
         if (tag === 'li' || tag === 'div' || tag === 'p') {
           const al = (k.style && k.style.textAlign) || blk.al || '';
           const unit = blk.unit || ++U;
-          if (tag === 'li') { np({ ...blk, al, unit }); walk(k, st, { ...blk, al, inLi: 1, unit }); cur = null; continue; }
+          const spOf = (q) => { if (k.style && (k.style.paddingTop || k.style.paddingBottom)) { q.sb = parseFloat(k.style.paddingTop) || 0; q.sa = parseFloat(k.style.paddingBottom) || 0; } return q; };
+          if (tag === 'li') { const q = spOf(np({ ...blk, al, unit })); if (k.getAttribute('data-bu')) { q.bu = k.getAttribute('data-bu'); q.bc = k.getAttribute('data-bc') || ''; } walk(k, st, { ...blk, al, inLi: 1, unit }); cur = null; continue; }
           if (blk.inLi && cur && !cur.runs.length) { cur.al = al; walk(k, st, { ...blk, al }); continue; }
-          np({ ...blk, al, unit }); walk(k, st, { ...blk, al, unit }); cur = null; continue;
+          spOf(np({ ...blk, al, unit })); walk(k, st, { ...blk, al, unit }); cur = null; continue;
         }
         if (tag === 'br') { if (!cur) np(blk); else if (cur.runs.length) np(blk); else cur.br = 1; continue; }
         const s2 = { ...st };
@@ -1337,7 +1416,10 @@
     const out = [];
     paras.forEach((p, pi) => {
       const po = { align: AL[p.al] || 'left' };
-      if (p.list) { po.bullet = p.list === 'ol' ? { type: 'number' } : true; if (p.lvl) po.indentLevel = p.lvl; }
+      if (p.list) { po.bullet = p.list === 'ol' ? { type: 'number' } : p.bu ? { characterCode: p.bu.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') } : true; if (p.lvl) po.indentLevel = p.lvl; }
+      const pfs = (o && o.fs) || 18;
+      if (p.sb) po.paraSpaceBefore = Math.round(p.sb * pfs * 10) / 10;
+      if (p.sa) po.paraSpaceAfter = Math.round(p.sa * pfs * 10) / 10;
       const runs = p.runs.length ? p.runs : [{ t: '', st: {} }];
       runs.forEach((r, ri) => {
         const op = { ...po };
