@@ -1443,7 +1443,9 @@
       const grpOf = (id) => { const g = (byId(id) || {}).g; return g ? els().filter((x) => x.g === g).map((x) => x.id) : [id]; };
       if (!ED.sel.includes(nid)) ED.sel = grpOf(nid);
       render();
-      startDrag(ev, 'move', wasSel || (host.editOnFirstClick && host.editOnFirstClick(byId(nid))) ? nid : null);
+      // Tabellen: ein Klick in eine Zelle setzt gleich die Schreibmarke dorthin (wie in PowerPoint) – Verschieben am Rahmen
+      const tblCell = (byId(nid) || {}).t === 'table' && ev.target.closest && ev.target.closest('td');
+      startDrag(ev, 'move', wasSel || tblCell || (host.editOnFirstClick && host.editOnFirstClick(byId(nid))) ? nid : null);
       return true;
     }
     function startDrag(ev, mode, clickEdit) {
@@ -1625,6 +1627,7 @@
       const [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
       const e = { id: uid(), r: 0, t: 'table', x: r1(cx - w / 2), y: r1(Math.max(0, cy - h / 2)), w: r1(w), h: r1(h), fs: Math.round(18 * q), head: true, rows: Array.from({ length: rows }, () => Array(cols).fill('')), cw: Array(cols).fill(1 / cols) };
       change(() => { els().push(e); ED.sel = [e.id]; }, true);
+      startEdit(e.id, null); // gleich in die erste Zelle schreiben
     }
     function pasteEls() {
       if (!ED.clip) return;

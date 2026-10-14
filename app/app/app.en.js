@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.83.2';
+  const VERSION = '1.83.3';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -13004,6 +13004,28 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
       if (show && q) hits++;
     });
     pn.querySelector('.hp-none').hidden = !q || hits > 0;
+    helpMark(body, q);
+  }
+  // Fundstellen gelb hervorheben (wie bei der Suche in der PDF); die erste ins Bild holen
+  function helpMark(root, q) {
+    root.querySelectorAll('mark.hp-hit').forEach((m) => { const t = document.createTextNode(m.textContent); m.replaceWith(t); });
+    root.normalize();
+    if (!q) return;
+    const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeValue.toLowerCase().includes(q) && !n.parentElement.closest('[hidden]') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
+    const nodes = []; while (tw.nextNode()) nodes.push(tw.currentNode);
+    for (const n of nodes) {
+      const txt = n.nodeValue, low = txt.toLowerCase(), frag = document.createDocumentFragment();
+      let i = 0, j;
+      while ((j = low.indexOf(q, i)) >= 0) {
+        if (j > i) frag.appendChild(document.createTextNode(txt.slice(i, j)));
+        const m = document.createElement('mark'); m.className = 'hp-hit'; m.textContent = txt.slice(j, j + q.length); frag.appendChild(m);
+        i = j + q.length;
+      }
+      if (i < txt.length) frag.appendChild(document.createTextNode(txt.slice(i)));
+      n.replaceWith(frag);
+    }
+    const first = root.querySelector('mark.hp-hit');
+    if (first) first.scrollIntoView({ block: 'nearest' });
   }
   function helpPlace() {
     const pn = $('#hpPanel'); if (!pn || pn.hidden) return;

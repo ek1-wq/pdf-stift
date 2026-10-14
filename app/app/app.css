@@ -1564,3 +1564,4 @@ html body.focus.focus, html body.present.present { --hpr: 0px; }
 .cm-panel.hp-panel { right: var(--dr, 0px); }
 .split-pane { right: calc(var(--dr, 0px) + var(--tpr, 0px) + var(--hpr, 0px)); }
 body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--hpr, 0px)); }
+.hp-body mark.hp-hit { background: #FFE066; color: #1B1F29; border-radius: 2px; padding: 0 1px; }
