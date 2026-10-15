@@ -43,6 +43,97 @@ jobs:
         with:
           name: PDF-Stift-Setup
           path: desktop/dist/*.exe
+  check-windows:
+    # installs the published Windows installer on a fresh machine and tests start, quick guide, Word → PDF and PowerPoint;
+    # if anything fails, the release is turned into a pre-release so that installed apps and the demo do not pick it up
+    needs: windows
+    if: needs.windows.outputs.mode == 'publish'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          V="${{ needs.windows.outputs.version }}"
+          mkdir -p wt
+          gh release download "v$V" -p "PDF-Stift-Setup-$V.exe" -O setup.exe
+          SECONDS=0
+          powershell -NoProfile -Command "\$p = Start-Process .\setup.exe -ArgumentList '/S' -PassThru; if (-not \$p.WaitForExit(1500000)) { exit 1 }; exit \$p.ExitCode"
+          echo "installed in ${SECONDS}s"
+          EXE="$(find "$LOCALAPPDATA/Programs" -iname 'PDF-Stift.exe' 2>/dev/null | head -1)"
+          [ -n "$EXE" ] || { echo "program not found"; exit 1; }
+          echo "$EXE" > wt/exe.txt
+          D="$(dirname "$EXE")"; du -sh "$D"
+          mkdir -p tf; printf 'Dear reader,\n\nthis is a test letter for PDF-Stift.\n' > tf/brief.txt
+          MSYS_NO_PATHCONV=1 timeout 300 "$D/resources/libreoffice/program/soffice.com" --headless --norestore "-env:UserInstallation=file:///$(cygpath -m "$PWD/tf")/profil" --convert-to docx --outdir "$(cygpath -w "$PWD/tf")" "$(cygpath -w "$PWD/tf/brief.txt")"
+          [ -s tf/brief.docx ]
+      - name: Test
+        run: |
+          mkdir -p wtn && cd wtn && npm init -y >/dev/null && npm i --no-audit --no-fund playwright@1.48.2 >/dev/null 2>&1; cd ..
+          NODE_PATH="$PWD/wtn/node_modules" node tools/check/windows-test.js "$(cat wt/exe.txt)" "$(cygpath -w "$PWD/tf/brief.docx")" "$(cygpath -w "$PWD/tools/check/sample.pptx")" "$(cygpath -w "$PWD/wt")"
+          cat wt/test.txt
+          grep -q 'Quick guide\|Kurzanleitung' wt/test.txt
+          grep -q 'Word → PDF: ok' wt/test.txt
+          grep -q '"pptxpdf":200' wt/test.txt
+          ! grep -q 'SEITENFEHLER\|ABBRUCH' wt/test.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-check
+          path: wt
+      - name: Withdraw the release if the check failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "v${{ needs.windows.outputs.version }}" --prerelease
+  check-android:
+    # starts the Android app in an emulator (offline mode, notebook page); a crash or freeze turns the release into a pre-release
+    needs: [windows, android]
+    if: needs.windows.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: PDF-Stift-Android
+          path: apk
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Emulator and test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: Nexus 10
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash tools/check/android-test.sh "$PWD/aout" "$(ls $PWD/apk/*.apk | head -1)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-check
+          path: aout
+      - name: Withdraw the release if the check failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "v${{ needs.windows.outputs.version }}" --prerelease
   linux:
     # after Windows, so that both upload into the same release
     needs: windows

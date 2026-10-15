@@ -1002,6 +1002,11 @@
           const e = { ...base, t: 'chart', ct, labels: labels.slice(0, 60), series: series.slice(0, 10).map((s) => ({ n: s.n, v: s.v.slice(0, 60), ...(s.c ? { c: s.c } : {}), ...(s.t ? { t: s.t } : {}), ...(s.nl ? { nl: 1 } : {}), ...(s.nm ? { nm: 1 } : {}), ...(s.dl ? { dl: 1 } : {}) })), fs: Math.max(6, Math.round((csz / 100) * K)), legend: path(cd.documentElement, 'chart', 'legend') ? 1 : 0 };
           if (pieC && pieC.length) e.pc = pieC.slice(0, 60);
           if (title && path(cd.documentElement, 'chart', 'autoTitleDeleted') && at(path(cd.documentElement, 'chart', 'autoTitleDeleted'), 'val') === '1') { /* kein Titel */ } else if (title) e.title = title;
+          else if (path(cd.documentElement, 'chart', 'title') && at(path(cd.documentElement, 'chart', 'autoTitleDeleted'), 'val') !== '1') {
+            // Titel ohne eigenen Text: PowerPoint zeigt den Namen der einzigen Reihe, sonst „Diagrammtitel“
+            e.title = series.length === 1 && series[0].n ? series[0].n : "Chart Title";
+          }
+          if (/3DChart$/.test(ch.localName)) e.d3 = 1; // räumlich: Säulen mit Seitenflächen, Kreis schräg von oben
           // Aussehen: Hintergrund, Schriftfarbe, Achsenbereich, Zahlenformat, Werte an den Balken, Punkte
           const csp = kid(cd.documentElement, 'spPr');
           const bgc = csp && color(kid(csp, 'solidFill'), T);

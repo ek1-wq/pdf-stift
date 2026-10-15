@@ -44,6 +44,11 @@ rm -rf lo lo.msi
 ( cd desktop/libreoffice
   rm -rf help readmes share/gallery share/template share/wizards share/extensions/dict-* share/extensions/wiki-publisher share/extensions/nlpsolver
   for d in program/resource/*/; do case "$(basename "$d")" in de|en_GB|en_US) ;; *) rm -rf "$d" ;; esac; done
+  # icon themes (only one is needed), other UI languages and Python scripting (Java/database parts stay: removing them stalls the start)
+  for f in share/config/images_*.zip; do case "$(basename "$f")" in images_colibre.zip) ;; *) rm -f "$f" ;; esac; done
+  for f in share/registry/Langpack-*.xcd share/registry/res/registry_*.xcd share/registry/res/fcfg_langpack_*.xcd; do case "$(basename "$f")" in Langpack-de.xcd|Langpack-en-US.xcd|Langpack-en-GB.xcd|registry_de.xcd|registry_en-GB.xcd|fcfg_langpack_de.xcd|fcfg_langpack_en-US.xcd|fcfg_langpack_en-GB.xcd) ;; *) rm -f "$f" ;; esac; done
+  rm -rf program/python-core-* program/python*.dll program/python.exe program/pythonloader* program/pyuno* program/uno.py program/unohelper.py share/registry/pyuno.xcd
+
   du -sh program share 2>/dev/null; du -sh share/* 2>/dev/null | sort -h | tail -6 )
 du -sh desktop/libreoffice
 # short test: plain text → PDF

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.92.0';
+const PDFSTIFT_VERSION = '1.93.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -305,7 +305,7 @@ function stroke_obj($e): ?array
         if (in_array($e['lp'] ?? '', ['r', 't', 'l'], true)) $o['lp'] = $e['lp'];
         foreach (['pl', 'lg'] as $k) if (is_array($e[$k] ?? null) && count($e[$k]) === 4) $o[$k] = array_map(static fn ($v) => is_numeric($v) ? max(-1, min(2, round((float) $v, 3))) : 0, array_values($e[$k]));
         if (isset($e['lr']) && is_numeric($e['lr'])) $o['lr'] = max(-90, min(90, (int) $e['lr']));
-        foreach (['nc', 'nv', 'ng'] as $k) if (!empty($e[$k])) $o[$k] = 1;
+        foreach (['nc', 'nv', 'ng', 'd3'] as $k) if (!empty($e[$k])) $o[$k] = 1;
         $o['title'] = mb_substr((string) ($e['title'] ?? ''), 0, 300);
         $o['legend'] = empty($e['legend']) ? 0 : 1;
     }

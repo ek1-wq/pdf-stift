@@ -617,6 +617,8 @@
     return out;
   }
   // Diagramm als einfache Zeichenbefehle (gleich für Bildschirm und PDF)
+  // Farbe abdunkeln (Seitenflächen räumlicher Diagramme)
+  const shadeC = (c, f) => { const m = /^#?([0-9a-f]{6})$/i.exec(c || ''); if (!m) return c; const v = parseInt(m[1], 16); return '#' + [16, 8, 0].map((k) => Math.round(((v >> k) & 255) * f).toString(16).padStart(2, '0')).join(''); };
   function chartPrims(e, th) {
     const P = [], fs = e.fs || 14, w = e.w, h = e.h, col0 = chartColors(th), fg = e.tc || th.fg, grid = '#D5D9E0';
     // Lücken in den Werten (leere Zellen) als null, nicht als „Loch“ im Feld
@@ -679,7 +681,32 @@
       const vals = (ser[0] ? ser[0].v : []).map((v) => Math.max(0, +v || 0));
       const sum = vals.reduce((a, b) => a + b, 0) || 1;
       const cx = PL ? PL.x + PL.w / 2 : (left + right) / 2, cy = PL ? PL.y + PL.h / 2 : (top + bottom) / 2;
-      const r = Math.max(4, PL ? Math.min(PL.w, PL.h) / 2 : Math.min((right - left) * 0.45, (bottom - top) / 2));
+      let r = Math.max(4, PL ? Math.min(PL.w, PL.h) / 2 : Math.min((right - left) * 0.45, (bottom - top) / 2));
+      if (e.d3) {
+        // räumlich: Ellipse (schräg von oben) mit dunklerem Rand nach unten
+        const rx = PL ? PL.w / 2 : Math.min((right - left) * 0.48, (bottom - top) * 0.85), ry = rx * 0.55, dep = rx * 0.14;
+        const cy3 = (PL ? PL.y + PL.h / 2 : (top + bottom) / 2) - dep / 2;
+        const pt = (a, dy = 0) => `${(cx + rx * Math.cos(a)).toFixed(2)} ${(cy3 + ry * Math.sin(a) + dy).toFixed(2)}`;
+        let b0 = -Math.PI / 2;
+        const segs = vals.map((v) => { const b1 = b0 + (v / sum) * Math.PI * 2; const sg = [b0, b1]; b0 = b1; return sg; });
+        // Seitenflächen nur im vorderen Halbkreis (Winkel 0 … π)
+        segs.forEach(([s0, s1], i) => {
+          for (const k of [0, 2]) {
+            const lo = Math.max(s0, k * Math.PI), hi = Math.min(s1, k * Math.PI + Math.PI);
+            if (hi - lo < 1e-3 || vals[i] <= 0) continue;
+            P.push({ k: 'path', d: `M${pt(lo)}A${rx} ${ry} 0 0 1 ${pt(hi)}L${pt(hi, dep)}A${rx} ${ry} 0 0 0 ${pt(lo, dep)}Z`, fill: shadeC(col[i % col.length], 0.7), stroke: shadeC(col[i % col.length], 0.6), sw: 0.6 });
+          }
+        });
+        segs.forEach(([s0, s1], i) => {
+          const v = vals[i]; if (v <= 0) return;
+          const big = s1 - s0 > Math.PI ? 1 : 0;
+          const d = v >= sum ? `M${cx - rx} ${cy3}A${rx} ${ry} 0 1 0 ${cx + rx} ${cy3}A${rx} ${ry} 0 1 0 ${cx - rx} ${cy3}Z` : `M${cx} ${cy3}L${pt(s0)}A${rx} ${ry} 0 ${big} 1 ${pt(s1)}Z`;
+          P.push({ k: 'path', d, fill: col[i % col.length], stroke: '#FFFFFF', sw: 1 });
+          const am = (s0 + s1) / 2, pct = Math.round((v / sum) * 100);
+          if (pct >= 4) P.push({ k: 'text', x: cx + rx * 0.62 * Math.cos(am), y: cy3 + ry * 0.62 * Math.sin(am) + fs * 0.35, s: pct + ' %', fs, a: 'middle', c: '#FFFFFF', b: 1 });
+        });
+        return P;
+      }
       let a0 = -Math.PI / 2;
       vals.forEach((v, i) => {
         const a1 = a0 + (v / sum) * Math.PI * 2;
@@ -753,6 +780,19 @@
         const c = col[si % col.length];
         if (horiz) P.push({ k: 'rect', x: Math.min(p0, p1), y: T + off, w: Math.abs(p1 - p0), h: bw * (stack ? 1 : 0.92), fill: c });
         else P.push({ k: 'rect', x: L + off, y: Math.min(p0, p1), w: bw * (stack ? 1 : 0.92), h: Math.abs(p1 - p0), fill: c });
+        if (e.d3 && Math.abs(p1 - p0) > 0.5) {
+          // räumlich: Seiten- und Deckfläche, nach rechts oben versetzt
+          const bwi = bw * (stack ? 1 : 0.92), dx = Math.min(bwi * 0.45, fs * 0.9), dy = dx * 0.6;
+          if (horiz) {
+            const x0 = Math.min(p0, p1), x1 = Math.max(p0, p1), y0 = T + off;
+            P.push({ k: 'path', d: `M${x0} ${y0}L${x0 + dx} ${y0 - dy}L${x1 + dx} ${y0 - dy}L${x1} ${y0}Z`, fill: shadeC(c, 0.85) });
+            P.push({ k: 'path', d: `M${x1} ${y0}L${x1 + dx} ${y0 - dy}L${x1 + dx} ${y0 + bwi - dy}L${x1} ${y0 + bwi}Z`, fill: shadeC(c, 0.65) });
+          } else {
+            const x0 = L + off, x1 = x0 + bwi, yt = Math.min(p0, p1), yb = Math.max(p0, p1);
+            P.push({ k: 'path', d: `M${x1} ${yt}L${x1 + dx} ${yt - dy}L${x1 + dx} ${yb - dy}L${x1} ${yb}Z`, fill: shadeC(c, 0.65) });
+            P.push({ k: 'path', d: `M${x0} ${yt}L${x0 + dx} ${yt - dy}L${x1 + dx} ${yt - dy}L${x1} ${yt}Z`, fill: shadeC(c, 0.85) });
+          }
+        }
         if (e.dl || s0.dl) {
           const s1 = e.pct || !pctAx ? fmtV(+s0.v[i] || 0) : fmtNum(+s0.v[i] || 0);
           if (stack) { if (Math.abs(p1 - p0) > fs * 0.9) P.push(horiz ? { k: 'text', x: (p0 + p1) / 2, y: T + off + bw / 2 + fs * 0.3, s: s1, fs: fs * 0.85, a: 'middle', c: dark(c) ? '#FFFFFF' : fg } : { k: 'text', x: L + off + bw / 2, y: (p0 + p1) / 2 + fs * 0.3, s: s1, fs: fs * 0.85, a: 'middle', c: dark(c) ? '#FFFFFF' : fg }); }

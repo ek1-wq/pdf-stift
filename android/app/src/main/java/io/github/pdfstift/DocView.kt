@@ -619,7 +619,7 @@ class DocView(ctx: Context) : View(ctx), InkTools {
             MotionEvent.ACTION_DOWN -> {
                 gesture = false
                 if (markNext != null && placeMarker(ev)) return true
-                val draws = isPen || (isMouse && (ev.buttonState and MotionEvent.BUTTON_PRIMARY) != 0) || (fingerDraw && tt == MotionEvent.TOOL_TYPE_FINGER) ||
+                val draws = isPen || (isMouse && (ev.buttonState and MotionEvent.BUTTON_PRIMARY) != 0) || (fingerDraw && (tt == MotionEvent.TOOL_TYPE_FINGER || tt == MotionEvent.TOOL_TYPE_UNKNOWN)) ||
                     (tool == "la" && !present && pick == null && selHitAt(ev.x, ev.y) != null) || (pick != null && pickSelHit(ev.x, ev.y) != null)
                 // Handballen ignorieren, solange/kurz nachdem der Stift schreibt
                 if (!isPen && (penDown || System.currentTimeMillis() - lastPenUp < 250) && !isMouse) return true

@@ -3222,5 +3222,7 @@
   "Folie als Bild aus PowerPoint übernehmen": "Take slide as picture from PowerPoint",
   "\n      <div class=\"set-row\"><span>Design</span>": "\n      <div class=\"set-row\"><span>Theme</span>",
   "Kurzanleitung beim Start als erstes Dokument öffnen": "Open the quick guide as the first document at start",
-  "Als PDF im ersten Reiter; abschalten, wenn Sie sie nicht mehr brauchen.": "As a PDF in the first tab; switch this off when you no longer need it."
+  "Als PDF im ersten Reiter; abschalten, wenn Sie sie nicht mehr brauchen.": "As a PDF in the first tab; switch this off when you no longer need it.",
+  "<a:buClr><a:srgbClr val=\"": null,
+  "Diagrammtitel": "Chart Title"
 }

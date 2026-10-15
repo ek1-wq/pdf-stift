@@ -291,7 +291,7 @@ class BoardView(ctx: Context) : View(ctx), InkTools {
         if (swallow) { if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) swallow = false; return true }
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                val draws = isPen || (isMouse && (ev.buttonState and MotionEvent.BUTTON_PRIMARY) != 0) || (fingerDraw && tt == MotionEvent.TOOL_TYPE_FINGER) ||
+                val draws = isPen || (isMouse && (ev.buttonState and MotionEvent.BUTTON_PRIMARY) != 0) || (fingerDraw && (tt == MotionEvent.TOOL_TYPE_FINGER || tt == MotionEvent.TOOL_TYPE_UNKNOWN)) ||
                     (tool == "la" && selHit(ev.x, ev.y) != null)
                 if (!isPen && !isMouse && (penDown || System.currentTimeMillis() - lastPenUp < 250)) return true
                 if (draws) {
