@@ -593,6 +593,11 @@
         const runs = [];
         for (const r of p.children) {
           if (r.localName === 'br') { runs.push({ br: 1 }); continue; }
+          // Formel mitten im Text (Office-Formel): als Formel im Fließtext übernehmen
+          if (r.localName === 'm' && /drawing\/2010\/main/.test(r.namespaceURI || '')) {
+            for (const c of r.children) if (c.localName === 'oMathPara' || c.localName === 'oMath') { const tx = X().ommlTex(c); if (tx) runs.push({ t: '', m: tx }); }
+            continue;
+          }
           if (r.localName !== 'r' && r.localName !== 'fld') continue;
           let t = (kid(r, 't') || {}).textContent || '';
           if (!t) continue;
@@ -653,6 +658,7 @@
       const ff = top(stats.ff) ? top(stats.ff)[0] : base.major ? T.major : T.minor;
       // HTML bauen
       const runHtml = (r) => {
+        if (r.m) return `<span class="dk-im" data-tex="${esc(r.m)}"></span>`;
         let h = esc(r.t).replace(/\t/g, ' ').replace(/ {2}/g, ' &nbsp;');
         if (r.sup) h = `<sup>${h}</sup>`; if (r.sub) h = `<sub>${h}</sub>`;
         if (r.u) h = `<u>${h}</u>`; if (r.s) h = `<s>${h}</s>`; if (r.i) h = `<i>${h}</i>`; if (r.b) h = `<b>${h}</b>`;
@@ -670,7 +676,7 @@
       const lnC = new Map(); for (const p of paras) if (p.runs.some((r) => r.t && r.t.trim())) { const v = p.lnPct || 1; lnC.set(v, (lnC.get(v) || 0) + p.runs.reduce((n, r) => n + (r.t || '').length, 0)); } // nach Textmenge
       const lnPct = [...lnC.entries()].sort((a, b) => b[1] - a[1])[0];
       // leere Absätze werden zu Abstand vor dem nächsten Absatz (sonst wären sie so hoch wie die Schrift des Felds)
-      const blank = (p) => !p.runs.length || p.runs.every((r) => !r.br && !(r.t || '').trim());
+      const blank = (p) => !p.runs.length || p.runs.every((r) => !r.br && !r.m && !(r.t || '').trim());
       paras.forEach((p, i) => {
         if (!anySp || !blank(p) || i === paras.length - 1) return;
         const lh = (p.lnPct || (lnPct ? lnPct[0] : 1)) * 1.2;
@@ -729,7 +735,7 @@
         }
       }
       closeTo(0);
-      const hasText = paras.some((p) => p.runs.some((r) => r.t && r.t.trim()));
+      const hasText = paras.some((p) => p.runs.some((r) => r.m || (r.t && r.t.trim())));
       return { html, fs: Math.max(4, fs), c, ff, hasText, lnPct: lnPct ? lnPct[0] : null };
     }
 
@@ -815,6 +821,21 @@
             }
           } catch (er) { /* dann das Ersatzbild */ }
         }
+        // Formel aus PowerPoint (Office-Formel im Textfeld): als änderbare Formel übernehmen
+        const csp = ch && kids(ch, 'sp')[0];
+        if (csp && all(csp, 'oMath').length) {
+          try {
+            const n0 = out.length;
+            if (await mathFromSp(csp, ctx, M, out, gid)) {
+              if (ctx.anim) { const cid = at(path(csp, 'nvSpPr', 'cNvPr'), 'id'); for (let i = n0; i < out.length; i++) { out[i]._spid = cid; out[i]._grp = ctx.grpIds || []; } }
+              return;
+            }
+            // Text mit Formeln dazwischen: die Form selbst übernehmen (die Formeln stehen dann im Fließtext)
+            await X().mathLib();
+            await convert(csp, ctx, M, out, gid);
+            if (out.length > n0) return;
+          } catch (er) { /* dann das Ersatzbild */ }
+        }
         const alt = kid(sp, 'Fallback') || kid(sp, 'Choice');
         if (alt) for (const c of alt.children) await convert(c, ctx, M, out, gid);
         return;
@@ -824,6 +845,48 @@
       try { await convertOne(sp, ctx, M, out, gid); } finally {
         if (ctx.anim) { const cid = at(path(sp, ...[{ sp: 'nvSpPr', pic: 'nvPicPr', cxnSp: 'nvCxnSpPr', graphicFrame: 'nvGraphicFramePr' }[ln], 'cNvPr']), 'id'); for (let i = outBefore; i < out.length; i++) { out[i]._spid = cid; out[i]._grp = ctx.grpIds || []; } }
       }
+    }
+    // Textfeld, das nur aus Formeln besteht → Formel-Objekt (Lage wie in PowerPoint: Ausrichtung und Innenabstand des Felds)
+    async function mathFromSp(sp, ctx, M, out, gid) {
+      const body = kid(sp, 'txBody');
+      if (!body) return false;
+      const P = X();
+      const texs = [];
+      for (const p of kids(body, 'p')) {
+        if (kids(p, 'r').some((r) => ((kid(r, 't') || {}).textContent || '').trim())) return false; // Text und Formel gemischt: Ersatzbild
+        const parts = [];
+        for (const m of all(p, 'm')) {
+          if (!/drawing\/2010\/main/.test(m.namespaceURI || '')) continue;
+          for (const c of m.children) if (c.localName === 'oMathPara' || c.localName === 'oMath') parts.push(P.ommlTex(c));
+        }
+        if (parts.length) texs.push(parts.join(' '));
+      }
+      if (!texs.length) return false;
+      const tex = texs.length > 1 ? `\\begin{gathered}${texs.join('\\\\')}\\end{gathered}` : texs[0];
+      const xf = xfrmOf(sp);
+      if (!xf) return false;
+      const b = box(xf);
+      const [x0, y0] = M.f(b.x, b.y), [x1, y1] = M.f(b.x + b.w, b.y + b.h);
+      const gx = OX + (x0 / EMU) * K, gy = OY + (y0 / EMU) * K, gw = ((x1 - x0) / EMU) * K, gh = ((y1 - y0) / EMU) * K;
+      const szN = all(body, 'rPr').map((r) => at(r, 'sz')).find(Boolean) || at(all(body, 'endParaRPr')[0], 'sz');
+      const fs = ((szN ? num(szN) / 100 : 18) * K * (M.s || 1));
+      let c = null;
+      for (const r of all(body, 'rPr')) { const f = kid(r, 'solidFill'); if (f) { c = color(f, ctx.T); break; } }
+      await P.mathLib();
+      const r = P.texSvg(tex);
+      const w = (r.vb[2] / 1000) * fs, h = (r.vb[3] / 1000) * fs;
+      const bp = kid(body, 'bodyPr');
+      const ins = (k, d) => (at(bp, k) != null ? (num(at(bp, k)) / EMU) * K : d * K);
+      const lI = ins('lIns', 7.2), rI = ins('rIns', 7.2), tI = ins('tIns', 3.6), bI = ins('bIns', 3.6);
+      const algn = at(path(kids(body, 'p')[0], 'pPr'), 'algn') || 'l';
+      const anc = at(bp, 'anchor') || 't';
+      const x = algn === 'ctr' ? gx + (gw - w) / 2 : algn === 'r' ? gx + gw - rI - w : gx + lI;
+      const y = anc === 'ctr' ? gy + (gh - h) / 2 : anc === 'b' ? gy + gh - bI - h : gy + tI;
+      const e = { id: P.uid(), t: 'math', tex, svg: r.svg, vb: r.vb, x: r1(x), y: r1(y), w: r1(w), h: r1(h), r: r1(b.r || 0), fs: r1(fs) };
+      if (c && c.c) e.c = c.c;
+      if (gid) e.g = gid;
+      out.push(e);
+      return true;
     }
     async function convertOne(sp, ctx, M, out, gid) {
       const T = ctx.T;
@@ -1537,6 +1600,7 @@
     const paras = [];
     let cur = null;
     let U = 0; // Einheiten für „absatzweise“ (wie in PDF-Stift: oberste Absätze und Aufzählungspunkte)
+    const maths = []; // Formeln im Fließtext: Platzhalter „⁣n⁣“, später durch echte Formeln ersetzt
     const np = (blk) => { cur = { al: blk.al || '', list: blk.list || null, lvl: blk.lvl || 0, runs: [], unit: blk.unit || ++U }; paras.push(cur); return cur; };
     const walk = (n, st, blk) => {
       for (const k of [...n.childNodes]) {
@@ -1565,6 +1629,12 @@
           spOf(np({ ...blk, al, unit })); walk(k, st, { ...blk, al, unit }); cur = null; continue;
         }
         if (tag === 'br') { if (!cur) np(blk); else if (cur.runs.length) np(blk); else cur.br = 1; continue; }
+        if (tag === 'span' && k.classList.contains('dk-im')) {
+          if (!cur) np(blk);
+          const tx = k.getAttribute('data-tex') || '';
+          if (o && o.im) { cur.runs.push({ t: '\u2063' + maths.length + '\u2063', st }); maths.push(tx); } else cur.runs.push({ t: texLinear(tx), st });
+          continue;
+        }
         const s2 = { ...st };
         if (tag === 'b') s2.b = 1; else if (tag === 'i') s2.i = 1; else if (tag === 'u') s2.u = 1; else if (tag === 's') s2.s = 1;
         else if (tag === 'sup') s2.sup = 1; else if (tag === 'sub') s2.sub = 1;
@@ -1608,6 +1678,7 @@
     });
     out.units = [...unitR.values()].filter((r) => r.txt || paras[r.st].list).map((r) => [r.st, r.en]);
     out.fix = fixes.some(Boolean) ? fixes : null;
+    out.maths = maths.length ? maths : null;
     return out;
   }
   // Absätze im Text einer Form nachbessern: Einzüge (marL/indent) und Farbe des Aufzählungszeichens
@@ -1691,8 +1762,9 @@
             if (e.fill) o.fill = { color: noHash(e.fill), transparency: (e.fo != null ? Math.round((1 - e.fo) * 100) : tr) || undefined };
             if (e.line) o.line = { color: noHash(e.line), width: e.lw || 2 };
             if (e.lh) o.lineSpacingMultiple = Math.round((e.lh / 1.2) * 100) / 100;
-            const rr = runsOf(e.html, { color: noHash(e.c || th.fg), fs: e.fs || 24 }); mark(e, rr.units);
+            const rr = runsOf(e.html, { color: noHash(e.c || th.fg), fs: e.fs || 24, im: 1 }); mark(e, rr.units);
             if (rr.fix) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, fix: rr.fix }); }
+            if (rr.maths) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, inline: await Promise.all(rr.maths.map((t) => P.texOmml(t).catch(() => null))), tex: rr.maths }); }
             sl.addText(rr, { ...o, ...nm(e) });
           } else if (e.t === 'shape') {
             const lineK = LINE_K.includes(e.k), openK = OPEN_K.includes(e.k);
@@ -1723,8 +1795,9 @@
             }
             if (e.html && !openK) {
               Object.assign(o, { fontFace: face, fontSize: e.fs || 20, color: noHash(e.c || (e.fill ? '#FFFFFF' : th.fg)), valign: VA[e.va || 'm'], margin: e.pad != null ? e.pad : 8, align: 'center' });
-              const rr = runsOf(e.html, { color: o.color, fs: e.fs || 20 }); mark(e, rr.units);
+              const rr = runsOf(e.html, { color: o.color, fs: e.fs || 20, im: 1 }); mark(e, rr.units);
               if (rr.fix) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, fix: rr.fix }); }
+              if (rr.maths) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, inline: await Promise.all(rr.maths.map((t) => P.texOmml(t).catch(() => null))), tex: rr.maths }); }
               sl.addText(rr, { ...o, ...nm(e) });
             } else { mark(e); sl.addText('', { ...o, ...nm(e) }); }
           } else if (e.t === 'img') {
@@ -1832,6 +1905,7 @@
           const at0 = x.indexOf(`name="ps-${f.id}"`);
           if (at0 < 0) continue;
           if (f.math) { x = mathXml(x, at0, f); continue; }
+          if (f.inline) { x = inlineXml(x, at0, f); continue; }
           const endTag = f.cells ? '</p:graphicFrame>' : '</p:sp>';
           const end = x.indexOf(endTag, at0);
           if (end < 0) continue;
@@ -1860,6 +1934,34 @@
     return { blob, skipped };
   }
 
+  // ---- Formel-Läufe im Aussehen des Texts: Schriftgröße (pt), Farbe, Cambria Math; Buchstaben kursiv, Zahlen und Namen gerade
+  function omStyle(om, szPt, clr) {
+    const sz = Math.max(100, Math.round(szPt) * 100);
+    const rpr = `<a:rPr lang="de-DE" sz="${sz}" b="0" i="0"><a:solidFill><a:srgbClr val="${clr}"/></a:solidFill><a:latin typeface="Cambria Math" panose="02040503050406030204" pitchFamily="18" charset="0"/></a:rPr>`;
+    return om.replace(/<m:r>(<m:rPr>[\s\S]*?<\/m:rPr>)?(<m:t\b[^>]*>)([^<]*)/g, (all, rp, tt, tx) => '<m:r>' + (rp || '') + (!/m:sty m:val="[pb]"/.test(rp || '') && /^[A-Za-zα-ω]+$/.test(tx) ? rpr.replace(' i="0"', ' i="1"') : rpr) + tt + tx)
+      .replace(/<m:ctrlPr\/>/g, `<m:ctrlPr>${rpr.replace(' b="0" i="0"', ' i="1"')}</m:ctrlPr>`);
+  }
+  // LaTeX grob als lesbarer Text (Ersatz für Programme ohne Formeln)
+  function texLinear(t) {
+    let s = String(t || '');
+    for (let i = 0; i < 4; i++) s = s.replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)').replace(/\\sqrt\{([^{}]*)\}/g, '√($1)');
+    const SY = { cdot: '·', times: '×', div: '÷', pm: '±', le: '≤', ge: '≥', ne: '≠', approx: '≈', to: '→', infty: '∞', sum: '∑', prod: '∏', int: '∫', partial: '∂', alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', varepsilon: 'ε', epsilon: 'ε', lambda: 'λ', mu: 'μ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ', varphi: 'φ', phi: 'φ', omega: 'ω', Delta: 'Δ', Sigma: 'Σ', Omega: 'Ω', euro: '€' };
+    s = s.replace(/\\([A-Za-z]+) ?/g, (m, n) => SY[n] || (/^(left|right|mathrm|text|mathbf|operatorname|begin|end|aligned|gathered)$/.test(n) ? '' : n));
+    return s.replace(/\^\{([^{}]*)\}/g, '^$1').replace(/_\{([^{}]*)\}/g, '_$1').replace(/[{}&]/g, '').replace(/\\\\/g, '; ').replace(/\\[,;:!]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  // ---- Formeln im Fließtext: Form mit echten Formeln (PowerPoint), daneben dieselbe Form mit lesbarem Text (andere Programme)
+  function inlineXml(x, at0, f) {
+    const p0 = x.lastIndexOf('<p:sp>', at0), p1 = x.indexOf('</p:sp>', at0);
+    if (p0 < 0 || p1 < 0) return x;
+    const sp = x.slice(p0, p1 + 7);
+    const RE = /<a:r>((?:(?!<\/a:r>)[\s\S])*?)<a:t>\u2063(\d+)\u2063<\/a:t><\/a:r>/g;
+    const rprOf = (pre) => { const sz = /\bsz="(\d+)"/.exec(pre), c = /<a:srgbClr val="([0-9A-Fa-f]{6})"/.exec(pre); return [sz ? +sz[1] / 100 : 18, c ? c[1].toUpperCase() : '000000']; };
+    const choice = sp.replace(RE, (m, pre, i) => { const om = f.inline[+i]; if (!om) return `<a:r>${pre}<a:t>${xmlEsc(texLinear(f.tex[+i]))}</a:t></a:r>`; const [sz, c] = rprOf(pre); return `<a14:m>${omStyle(om, sz, c)}</a14:m>`; });
+    const fb = sp.replace(RE, (m, pre, i) => `<a:r>${pre}<a:t>${xmlEsc(texLinear(f.tex[+i]))}</a:t></a:r>`);
+    const alt = `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14">${choice}</mc:Choice><mc:Fallback>${fb}</mc:Fallback></mc:AlternateContent>`;
+    return x.slice(0, p0) + alt + x.slice(p1 + 7);
+  }
+  const xmlEsc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // ---- Formel: das Ersatzbild in eine Wahlmöglichkeit einpacken (PowerPoint nimmt die echte Formel, andere das Bild)
   function mathXml(x, at0, f) {
     const p0 = x.lastIndexOf('<p:pic>', at0), p1 = x.indexOf('</p:pic>', at0);
@@ -1870,10 +1972,7 @@
     const descr = (/<p:cNvPr [^>]*?descr="([^"]*)"/.exec(pic) || [])[1];
     const xf = (/<a:xfrm[\s\S]*?<\/a:xfrm>/.exec(pic) || [''])[0];
     const sz = Math.max(100, Math.round(f.fs) * 100);
-    const clr = String(f.c || '#000000').replace('#', '').toUpperCase();
-    const rpr = `<a:rPr lang="de-DE" sz="${sz}" b="0" i="0"><a:solidFill><a:srgbClr val="${clr}"/></a:solidFill><a:latin typeface="Cambria Math" panose="02040503050406030204" pitchFamily="18" charset="0"/></a:rPr>`;
-    // Buchstaben kursiv wie Variablen, Zahlen, Zeichen und Namen (sin, lim …) gerade
-    const om = f.math.replace(/<m:r>(<m:rPr>[\s\S]*?<\/m:rPr>)?(<m:t\b[^>]*>)([^<]*)/g, (all, rp, tt, tx) => '<m:r>' + (rp || '') + (!/m:sty m:val="[pb]"/.test(rp || '') && /^[A-Za-zα-ω]+$/.test(tx) ? rpr.replace(' i="0"', ' i="1"') : rpr) + tt + tx).replace(/<m:ctrlPr\/>/g, `<m:ctrlPr>${rpr.replace(' b="0" i="0"', ' i="1"')}</m:ctrlPr>`);
+    const om = omStyle(f.math, f.fs, String(f.c || '#000000').replace('#', '').toUpperCase());
     const sp = `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nmx}"${descr ? ` descr="${descr}"` : ''}/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xf}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
       `<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/><a:p><a:pPr algn="ctr"/><a14:m><m:oMathPara xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:oMathParaPr><m:jc m:val="centerGroup"/></m:oMathParaPr>${om}</m:oMathPara></a14:m><a:endParaRPr lang="de-DE" sz="${sz}" dirty="0"/></a:p></p:txBody></p:sp>`;
     const alt = `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14">${sp}</mc:Choice><mc:Fallback>${pic}</mc:Fallback></mc:AlternateContent>`;

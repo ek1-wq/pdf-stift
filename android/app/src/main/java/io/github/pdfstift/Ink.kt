@@ -61,7 +61,12 @@ object Ink {
 
     fun draw(c: Canvas, s: JSONObject) {
         val t = s.optString("t", "pen")
-        if (t == "ob") return // Objekte (Textfeld, Form, Bild, Tabelle) zeigt die App noch nicht an
+        if (t == "ob") {
+            // Objekte: Formeln werden gezeichnet; Textfeld, Form, Bild und Tabelle zeigt die App noch nicht an
+            val e = s.optJSONObject("e")
+            if (e != null && e.optString("t") == "math") MathInk.draw(c, e)
+            return
+        }
         val p = pts(s)
         val col = color(s)
         val rot = s.optDouble("r", 0.0).toFloat()

@@ -141,7 +141,7 @@
     blank: { name: 'Leer', els: () => [] },
   };
   const PH_TEXT = ['Titel', 'Untertitel', 'Erster Punkt Zweiter Punkt', 'Linke Spalte', 'Rechte Spalte'];
-  const plain = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  const plain = (h) => String(h || '').replace(/<span class="dk-im"[^>]*>/g, ' ƒ ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
   // unberührter Platzhalter: in der Bearbeitung grau, beim Vortragen und im PDF unsichtbar
   const isPh = (e) => !!(e.ph && e.t === 'text' && PH_TEXT.includes(plain(e.html)));
   const newSlide = (lay) => ({ id: uid(), els: (LAYOUTS[lay] || LAYOUTS.blank).els().map((e) => ({ id: uid(), r: 0, ...e, y: Math.round(e.y * H / 540), h: Math.round(e.h * H / 540) })) });
@@ -201,6 +201,12 @@
         else if (tag === 'a') {
           const href = (n.getAttribute('href') || '').trim();
           if (/^(https?:\/\/|mailto:)/i.test(href)) { el = document.createElement('a'); el.setAttribute('href', href); el.setAttribute('target', '_blank'); el.setAttribute('rel', 'noopener'); }
+        }
+        else if (tag === 'span' && n.classList.contains('dk-im')) {
+          // Formel im Fließtext: nur der LaTeX-Text wird gespeichert, die Grafik entsteht beim Anzeigen
+          const tx = (n.getAttribute('data-tex') || '').slice(0, 3000);
+          if (tx.trim()) { const sp = document.createElement('span'); sp.className = 'dk-im'; sp.setAttribute('data-tex', tx); sp.setAttribute('contenteditable', 'false'); dst.appendChild(sp); }
+          continue;
         }
         else if (tag === 'span' || tag === 'font') {
           const c = st.color || n.getAttribute('color');
@@ -333,6 +339,7 @@
   const animOrder = (s) => s.els.map((e, i) => ({ e, i })).filter((x) => x.e.an).sort((a, b) => (a.e.ao ?? a.i) - (b.e.ao ?? b.i) || a.i - b.i).map((x) => x.e);
   function animUnits(n, e) {
     if (!e.ap) return [n];
+    if (e.t === 'math') { const r = [...n.querySelectorAll('.dk-mrow')]; return r.length ? r : [n]; }
     const tx = n.querySelector('.dk-tx');
     if (!tx) return [n];
     const out = [];
@@ -450,7 +457,12 @@
       }
     } else if (e.t === 'math') {
       n.style.color = e.c || th.fg;
-      n.innerHTML = `<svg viewBox="${(e.vb || [0, 0, 1, 1]).join(' ')}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(e.tex || '')}">${mathSafe(e.svg)}</svg>`;
+      const sv0 = `<svg viewBox="${(e.vb || [0, 0, 1, 1]).join(' ')}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(e.tex || '')}">${mathSafe(e.svg)}</svg>`;
+      if (e.ap && Array.isArray(e.rb) && e.rb.length > 1 && e.vb) {
+        // zeilenweise einblenden: dieselbe Grafik je Zeile, auf deren Band zugeschnitten
+        const top = e.vb[1], H0 = e.vb[3];
+        n.innerHTML = e.rb.map((b) => `<div class="dk-mrow" style="clip-path:inset(${Math.max(0, ((b[0] - top) / H0) * 100).toFixed(2)}% -50% ${Math.max(0, ((top + H0 - b[1]) / H0) * 100).toFixed(2)}% -50%)">${sv0}</div>`).join('');
+      } else n.innerHTML = sv0;
     } else if (e.t === 'chart') {
       n.innerHTML = chartSvg(e, th);
       if (e.fill) n.style.background = e.fill;
@@ -470,6 +482,7 @@
         e.rows.map((row, ri) => `<tr style="height:${r1(rh[ri] * e.h)}px">` + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; const cs = (e.cs && e.cs[k]) || {}; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${cs.c || th.fg}`}${cs.f ? `;background:${cs.f}` : ''}${cs.b ? ';font-weight:700' : ''};vertical-align:${{ t: 'top', b: 'bottom' }[cs.v || e.va] || 'middle'}"><div class="dk-cell" style="padding:${cpad}${cs.vt ? ';writing-mode:vertical-rl' + (cs.vt === 'u' ? ';transform:rotate(180deg)' : '') : ''}">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
       n.appendChild(tb);
     }
+    fillIm(n);
     // Farbe eigener Aufzählungszeichen
     n.querySelectorAll('li[data-bc]').forEach((li) => li.style.setProperty('--bc', li.getAttribute('data-bc')));
     n.querySelectorAll('li[data-bi]').forEach((li) => { li.style.setProperty('--bi', li.getAttribute('data-bi') + 'em'); if (li.getAttribute('data-bs')) li.style.setProperty('--bs', li.getAttribute('data-bs')); });
@@ -576,7 +589,7 @@
     rowAdd: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M12 16.5v5M9.5 19h5"/>', rowDel: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M9.5 19h5"/>',
     colAdd: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5M19 9.5v5"/>', colDel: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5"/>',
     newslide: '<rect x="3.5" y="5" width="13" height="10" rx="1"/><path d="M19 13v6M16 16h6"/>', layout: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9h17M10 9v10.5"/>',
-    math: '<path d="M17 4H7l5 8-5 8h10"/>', latex: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 5l-4 14"/>', done: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', mathEdit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+    math: '<path d="M17 4H7l5 8-5 8h10"/>', latex: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 5l-4 14"/>', abbr: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h2M11 10h2M15 10h2M7 14h10"/>', done: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', mathEdit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
     chart: '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="7"/><rect x="10.5" y="6" width="3" height="12"/><rect x="15.5" y="9" width="3" height="9"/>',
     omega: '<path d="M5 19h4.5v-2.2A6.5 6.5 0 1 1 14.5 16.8V19H19"/>', crop: '<path d="M7 3v14h14"/><path d="M3 7h14v14"/>', link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
     date: '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>', hf: '<rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M7 16.5h10M7 7h10" stroke-dasharray="2 1.5"/>',
@@ -985,15 +998,63 @@
     const er = sv.querySelector('[data-mjx-error]');
     const vb = sv.getAttribute('viewBox').split(/[\s,]+/).map((v) => Math.round(+v * 10) / 10);
     const raw = sv.innerHTML.replace(/ data-[a-z-]+="[^"]*"/g, '').replace(/(\d+\.\d)\d+/g, '$1');
-    return { svg: mathSafe(raw), vb, err: er ? er.getAttribute('data-mjx-error') || 'Fehler' : '' };
+    return { svg: mathSafe(raw), vb, rb: mathRows(sv, vb), err: er ? er.getAttribute('data-mjx-error') || 'Fehler' : '' };
+  }
+  // Zeilen eines mehrzeiligen Rechenwegs (für das zeilenweise Einblenden): Bänder [oben, unten] in viewBox-Einheiten
+  function mathRows(sv, vb) {
+    const tb = sv.querySelector('[data-mml-node="mtable"]');
+    if (!tb) return null;
+    const rows = [...tb.querySelectorAll(':scope > [data-mml-node="mtr"], :scope > [data-mml-node="mlabeledtr"]')];
+    if (rows.length < 2) return null;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;visibility:hidden;width:1000px';
+    const c = sv.cloneNode(true);
+    c.setAttribute('width', vb[2] / 10); c.setAttribute('height', vb[3] / 10); c.style.cssText = '';
+    host.appendChild(c); document.body.appendChild(host);
+    try {
+      const R = c.getBoundingClientRect();
+      if (!R.height) return null;
+      const k = vb[3] / R.height;
+      const ys = [...c.querySelector('[data-mml-node="mtable"]').querySelectorAll(':scope > [data-mml-node="mtr"], :scope > [data-mml-node="mlabeledtr"]')].map((g) => { const r = g.getBoundingClientRect(); return [vb[1] + (r.top - R.top) * k, vb[1] + (r.bottom - R.top) * k]; });
+      const out = ys.map((y, i) => [i ? (ys[i - 1][1] + y[0]) / 2 : vb[1], i < ys.length - 1 ? (y[1] + ys[i + 1][0]) / 2 : vb[1] + vb[3]]);
+      return out.map((b) => b.map((v) => Math.round(v * 10) / 10));
+    } catch (er) { return null; } finally { host.remove(); }
+  }
+  // Formeln im Fließtext: LaTeX → { svg, vb } (Zeilenhöhe wie der Text, Grundlinie bei y = 0)
+  const IMC = new Map();
+  function imSvg(tex) {
+    if (IMC.has(tex)) return IMC.get(tex);
+    const box = window.MathJax.tex2svg(texFix(tex), { display: false });
+    const sv = box.querySelector('svg');
+    const vb = sv.getAttribute('viewBox').split(/[\s,]+/).map((v) => Math.round(+v * 10) / 10);
+    const r = { svg: mathSafe(sv.innerHTML.replace(/ data-[a-z-]+="[^"]*"/g, '').replace(/(\d+\.\d)\d+/g, '$1')), vb };
+    if (IMC.size > 500) IMC.clear();
+    IMC.set(tex, r);
+    return r;
+  }
+  const imHtml = (tex) => { const r = imSvg(tex), v = r.vb; return `<svg viewBox="${v.join(' ')}" style="width:${(v[2] / 1000).toFixed(3)}em;height:${(v[3] / 1000).toFixed(3)}em;vertical-align:${(-(v[1] + v[3]) / 1000).toFixed(3)}em;overflow:visible" aria-hidden="true">${r.svg}</svg>`; };
+  let imWait = false;
+  function fillIm(root) {
+    const list = root.querySelectorAll ? root.querySelectorAll('.dk-im') : [];
+    if (!list.length) return;
+    if (!window.MathJax || !window.MathJax.tex2svg) {
+      list.forEach((sp) => { if (!sp.firstChild) sp.textContent = sp.dataset.tex; });
+      if (!imWait) { imWait = true; mathLib().then(() => { imWait = false; fillIm(document); }).catch(() => { imWait = false; }); }
+      return;
+    }
+    for (const sp of list) {
+      if (sp.dataset.ok === sp.dataset.tex) continue;
+      try { sp.innerHTML = imHtml(sp.dataset.tex || ''); sp.dataset.ok = sp.dataset.tex; } catch (er) { sp.textContent = sp.dataset.tex; }
+    }
   }
   const mathFs = (e) => (e && e.svg && e.vb && e.vb[3] ? (e.h * 1000) / e.vb[3] : (e && e.fs) || 32);
   // Größe ändern: Schriftgröße fs, die linke Kante und die Mitte senkrecht bleiben
   function mathScale(e, fs) {
     if (!e.vb) return;
-    const cy = e.y + e.h / 2;
+    const cy = e.y + e.h / 2, cx = e.x + e.w / 2, rx = e.x + e.w;
     e.w = r1((e.vb[2] / 1000) * fs); e.h = r1((e.vb[3] / 1000) * fs); e.fs = r1(fs);
     e.y = r1(cy - e.h / 2);
+    if (e.al === 'c') e.x = r1(cx - e.w / 2); else if (e.al === 'r') e.x = r1(rx - e.w);
   }
   // Formel als eigenständige SVG-Datei (für die PowerPoint-Ausgabe als Ersatzbild)
   function mathSvgDoc(e, th) {
@@ -1019,9 +1080,145 @@
           body.appendChild(nx);
         }
       }
+      // lose Textstücke (kommen beim Umwandeln vor) in ordentliche Läufe packen – sonst meldet PowerPoint einen Fehler
+      const walkT = (n) => {
+        for (const c of [...n.childNodes]) {
+          if (c.nodeType === 3 && c.nodeValue.trim() && n.localName !== 't') {
+            const r = doc.createElementNS(NS, 'm:r'), t = doc.createElementNS(NS, 'm:t');
+            t.setAttribute('xml:space', 'preserve'); t.textContent = c.nodeValue; r.appendChild(t); n.replaceChild(r, c);
+          } else if (c.nodeType === 1 && c.localName !== 't') walkT(c);
+        }
+      };
+      walkT(doc.documentElement);
+      // Funktionsnamen (sin, ln, lim …) als eigenes, gerades Stück, wie PowerPoint es schreibt
+      for (const t of [...doc.getElementsByTagNameNS(NS, 't')]) {
+        const m = /^([A-Za-z]+)\u2061(.*)$/s.exec(t.textContent);
+        if (!m) continue;
+        const r = t.parentNode, r2 = r.cloneNode(true);
+        t.textContent = m[1];
+        let rp = [...r.childNodes].find((x) => x.localName === 'rPr');
+        if (!rp) { rp = doc.createElementNS(NS, 'm:rPr'); r.insertBefore(rp, r.firstChild); }
+        const sty = doc.createElementNS(NS, 'm:sty'); sty.setAttributeNS(NS, 'm:val', 'p'); rp.appendChild(sty);
+        [...r2.childNodes].find((x) => x.localName === 't').textContent = m[2];
+        if (m[2]) r.parentNode.insertBefore(r2, r.nextSibling);
+      }
       om = new XMLSerializer().serializeToString(doc);
     } catch (er) { /* wie geliefert */ }
     return om.replace(/<w:[^>]*\/>|<w:[^>]*>[\s\S]*?<\/w:[^>]*>/g, '').replace(/\s+xmlns:w="[^"]*"/g, '');
+  }
+  // ---- Office-Formel (OMML, aus PowerPoint oder Word) → LaTeX, damit sie hier bearbeitbar ist
+  const OM_CHR = { '∑': '\\sum', '∏': '\\prod', '∐': '\\coprod', '∫': '\\int', '∬': '\\iint', '∭': '\\iiint', '∮': '\\oint', '⋃': '\\bigcup', '⋂': '\\bigcap', '⋁': '\\bigvee', '⋀': '\\bigwedge' };
+  const OM_ACC = { '̂': '\\hat', '̃': '\\tilde', '̄': '\\bar', '̅': '\\overline', '⃗': '\\vec', '̇': '\\dot', '̈': '\\ddot', '̌': '\\check', '́': '\\acute', '̀': '\\grave', '̆': '\\breve', '⃖': '\\overleftarrow', '→': '\\vec', '^': '\\hat', '~': '\\tilde', '¯': '\\bar' };
+  const OM_SYM = { '−': '-', '∙': '\\cdot ', '⋅': '\\cdot ', '·': '\\cdot ', '×': '\\times ', '÷': '\\div ', '±': '\\pm ', '∓': '\\mp ', '≤': '\\le ', '≥': '\\ge ', '≠': '\\ne ', '≈': '\\approx ', '≡': '\\equiv ', '∞': '\\infty ', '→': '\\to ', '←': '\\leftarrow ', '⇒': '\\Rightarrow ', '⇔': '\\Leftrightarrow ', '∈': '\\in ', '∉': '\\notin ', '⊂': '\\subset ', '⊆': '\\subseteq ', '∪': '\\cup ', '∩': '\\cap ', '∀': '\\forall ', '∃': '\\exists ', '∂': '\\partial ', '∇': '\\nabla ', '…': '\\ldots ', '⋯': '\\cdots ', '′': "'", '°': '^{\\circ}',
+    'α': '\\alpha ', 'β': '\\beta ', 'γ': '\\gamma ', 'δ': '\\delta ', 'ε': '\\varepsilon ', 'ϵ': '\\epsilon ', 'ζ': '\\zeta ', 'η': '\\eta ', 'θ': '\\theta ', 'ι': '\\iota ', 'κ': '\\kappa ', 'λ': '\\lambda ', 'μ': '\\mu ', 'ν': '\\nu ', 'ξ': '\\xi ', 'π': '\\pi ', 'ρ': '\\rho ', 'σ': '\\sigma ', 'τ': '\\tau ', 'υ': '\\upsilon ', 'φ': '\\varphi ', 'ϕ': '\\phi ', 'χ': '\\chi ', 'ψ': '\\psi ', 'ω': '\\omega ',
+    'Γ': '\\Gamma ', 'Δ': '\\Delta ', 'Θ': '\\Theta ', 'Λ': '\\Lambda ', 'Ξ': '\\Xi ', 'Π': '\\Pi ', 'Σ': '\\Sigma ', 'Φ': '\\Phi ', 'Ψ': '\\Psi ', 'Ω': '\\Omega ' };
+  const OM_FN = new Set(['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'log', 'ln', 'lg', 'exp', 'lim', 'max', 'min', 'sup', 'inf', 'det', 'dim', 'ker', 'gcd', 'arg', 'deg', 'hom', 'Pr']);
+  function ommlTex(node) {
+    const kids = (n, name) => [...n.childNodes].filter((c) => c.nodeType === 1 && (!name || c.localName === name));
+    const kid = (n, name) => kids(n, name)[0];
+    const val = (n, name, def) => { const x = n && kid(n, name); if (!x) return def; for (const a of x.attributes) if (a.localName === 'val') return a.value; return def; };
+    const esc1 = (t) => t.replace(/[\\{}%#$_^]/g, (m) => (m === '\\' ? '\\backslash ' : '\\' + m));
+    const grp = (s) => (s.length === 1 || /^\\[a-zA-Z]+ ?$/.test(s) ? s.trim() : `{${s}}`);
+    const run = (r) => {
+      const raw = kids(r, 't').map((t) => t.textContent).join('');
+      if (!raw) return '';
+      const rp = kid(r, 'rPr');
+      if (rp && kid(rp, 'nor')) return `\\text{${esc1(raw.replace(/[⁡-⁤​]/g, ''))}}`;
+      const sty = val(rp, 'sty', '');
+      const chars = (t) => { let o = ''; for (const ch of t) o += ch === '&' ? '&' : ch === ' ' ? '\\ ' : OM_SYM[ch] || (/[\\{}%#$_^]/.test(ch) ? esc1(ch) : ch); return o; };
+      const seg = (t) => {
+        if (!t) return '';
+        if (OM_FN.has(t.trim())) return `\\${t.trim()} `;
+        if (sty === 'p' && /^[A-Za-z]{2,}$/.test(t)) return `\\mathrm{${t}}`;
+        if (sty === 'p' && /^[A-Za-z]$/.test(t)) return `\\mathrm{${t}}`;
+        if (sty === 'b' || sty === 'bi') return `\\mathbf{${chars(t)}}`;
+        return chars(t);
+      };
+      // „sin⁡x“: Funktionsname vor dem unsichtbaren Funktionszeichen
+      const parts = raw.split(/([A-Za-z]+)⁡/);
+      let out = '';
+      parts.forEach((p, i) => { out += i % 2 ? (OM_FN.has(p) ? `\\${p} ` : `\\operatorname{${p}}`) : seg(p.replace(/[⁡-⁤​]/g, '')); });
+      return out;
+    };
+    const all = (n) => [...n.childNodes].map((c) => (c.nodeType === 1 ? conv(c) : c.nodeType === 3 && c.nodeValue.trim() ? [...c.nodeValue.trim()].map((ch) => OM_SYM[ch] || ch).join('') : '')).join('');
+    const e = (n, name) => { const x = kid(n, name); return x ? all(x) : ''; };
+    const fence = (c, left) => {
+      if (c === '' || c == null) return '.';
+      const m = { '{': '\\{', '}': '\\}', '|': '|', '‖': '\\|', '⟨': '\\langle', '⟩': '\\rangle', '⌊': '\\lfloor', '⌋': '\\rfloor', '⌈': '\\lceil', '⌉': '\\rceil', '[': '[', ']': ']', '(': '(', ')': ')' };
+      return m[c] || (left ? '(' : ')');
+    };
+    function conv(n) {
+      switch (n.localName) {
+        case 'r': return run(n);
+        case 'oMath': case 'e': case 'num': case 'den': case 'sub': case 'sup': case 'deg': case 'lim': case 'fName': return all(n);
+        case 'oMathPara': { const ms = kids(n, 'oMath').map(all); return ms.length > 1 ? `\\begin{gathered}${ms.join('\\\\')}\\end{gathered}` : ms.join(''); }
+        case 'f': { const t = val(kid(n, 'fPr'), 'type', 'bar'), a = e(n, 'num'), b = e(n, 'den'); return t === 'lin' ? `${grp(a)}/${grp(b)}` : t === 'noBar' ? `\\genfrac{}{}{0pt}{}{${a}}{${b}}` : `\\frac{${a}}{${b}}`; }
+        case 'sSup': return `${grp(e(n, 'e'))}^{${e(n, 'sup')}}`;
+        case 'sSub': return `${grp(e(n, 'e'))}_{${e(n, 'sub')}}`;
+        case 'sSubSup': return `${grp(e(n, 'e'))}_{${e(n, 'sub')}}^{${e(n, 'sup')}}`;
+        case 'sPre': return `{}_{${e(n, 'sub')}}^{${e(n, 'sup')}}${grp(e(n, 'e'))}`;
+        case 'rad': { const hide = val(kid(n, 'radPr'), 'degHide', 'off'); const d = e(n, 'deg'); return /^(1|on|true)$/.test(hide) || !d ? `\\sqrt{${e(n, 'e')}}` : `\\sqrt[${d}]{${e(n, 'e')}}`; }
+        case 'nary': {
+          const pr = kid(n, 'naryPr');
+          const c = val(pr, 'chr', '∫');
+          let s = OM_CHR[c] || `\\mathop{${c}}`;
+          const sub = e(n, 'sub'), sup = e(n, 'sup');
+          if (!/^(1|on|true)$/.test(val(pr, 'subHide', 'off')) && sub) s += `_{${sub}}`;
+          if (!/^(1|on|true)$/.test(val(pr, 'supHide', 'off')) && sup) s += `^{${sup}}`;
+          return s + ' ' + e(n, 'e');
+        }
+        case 'd': {
+          const pr = kid(n, 'dPr');
+          const b = val(pr, 'begChr', '('), en = val(pr, 'endChr', ')'), sep = val(pr, 'sepChr', '|');
+          const parts = kids(n, 'e').map(all);
+          return `\\left${fence(b, true)}${parts.join(sep === '|' ? '\\middle|' : sep === ',' ? ',' : sep)}\\right${fence(en, false)}`;
+        }
+        case 'func': { const nm = e(n, 'fName').trim(); return `${/^\\[a-z]+$/.test(nm) || nm.startsWith('\\') ? nm : OM_FN.has(nm) ? '\\' + nm : `\\operatorname{${nm}}`} ${grp(e(n, 'e'))}`; }
+        case 'limLow': { const b = e(n, 'e').trim(); return /^\\(lim|max|min|sup|inf)\s*$/.test(b) || /^\\mathrm\{(lim|max|min)\}$/.test(b) ? `${b.replace(/\\mathrm\{(\w+)\}/, '\\$1')}_{${e(n, 'lim')}}` : `\\underset{${e(n, 'lim')}}{${b}}`; }
+        case 'limUpp': return `\\overset{${e(n, 'lim')}}{${e(n, 'e')}}`;
+        case 'acc': { const c = val(kid(n, 'accPr'), 'chr', '̂'); return `${OM_ACC[c] || '\\hat'}{${e(n, 'e')}}`; }
+        case 'bar': return val(kid(n, 'barPr'), 'pos', 'bot') === 'top' ? `\\overline{${e(n, 'e')}}` : `\\underline{${e(n, 'e')}}`;
+        case 'groupChr': { const pr = kid(n, 'groupChrPr'); const c = val(pr, 'chr', '⏟'); const top = val(pr, 'pos', 'bot') === 'top' || c === '⏞'; return top ? `\\overbrace{${e(n, 'e')}}` : `\\underbrace{${e(n, 'e')}}`; }
+        case 'borderBox': return `\\boxed{${e(n, 'e')}}`;
+        case 'box': return e(n, 'e');
+        case 'phant': return `\\phantom{${e(n, 'e')}}`;
+        case 'eqArr': {
+          const rows = kids(n, 'e').map(all);
+          const al = rows.some((r) => r.includes('&'));
+          return al ? `\\begin{aligned}${rows.join('\\\\')}\\end{aligned}` : `\\begin{gathered}${rows.join('\\\\')}\\end{gathered}`;
+        }
+        case 'm': return `\\begin{matrix}${kids(n, 'mr').map((r) => kids(r, 'e').map(all).join('&')).join('\\\\')}\\end{matrix}`;
+        default: return /Pr$/.test(n.localName) ? '' : all(n);
+      }
+    }
+    return conv(node).replace(/\s+/g, ' ').replace(/ ([}^_])/g, '$1').trim();
+  }
+  // Rechenweg: eine neue Zeile „= …“ anhängen; eine einzeilige Formel wird dabei am ersten = ausgerichtet
+  function mathNewRow(tex) {
+    tex = String(tex || '').trim();
+    const m = /^\\begin\{aligned\}([\s\S]*)\\end\{aligned\}$/.exec(tex);
+    if (m) return `\\begin{aligned}${m[1].replace(/\s*$/, '')}\\\\&=\\end{aligned}`;
+    let depth = 0, at = -1;
+    for (let i = 0; i < tex.length; i++) { const c = tex[i]; if (c === '{') depth++; else if (c === '}') depth--; else if (c === '=' && depth === 0 && tex[i - 1] !== '\\') { at = i; break; } }
+    const first = at >= 0 ? `${tex.slice(0, at)}&=${tex.slice(at + 1)}` : `${tex}&`;
+    return `\\begin{aligned}${first}\\\\&=\\end{aligned}`;
+  }
+  // Zwischenablage aus Word (oder anderen Office-Programmen): enthaltene Formeln als LaTeX
+  function clipMath(dt) {
+    const html = dt && dt.getData ? dt.getData('text/html') : '';
+    if (!html || !/<m:oMath/i.test(html)) return [];
+    const out = [];
+    const blocks = html.match(/<m:oMathPara\b[\s\S]*?<\/m:oMathPara>|<m:oMath\b[\s\S]*?<\/m:oMath>/gi) || [];
+    for (let b of blocks) {
+      b = b.replace(/<\/?(?!m:)[A-Za-z]+:[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);)/gi, '&amp;');
+      try {
+        const doc = new DOMParser().parseFromString(`<x xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">${b}</x>`, 'application/xml');
+        if (doc.querySelector('parsererror')) continue;
+        const t = ommlTex(doc.documentElement.firstElementChild);
+        if (t) out.push(t);
+      } catch (er) { /* überspringen */ }
+    }
+    return out;
   }
   const MATH_STRUCT = [
     ['Bruch', '\\frac{#@}{#?}', '<rect x="8" y="2.5" width="8" height="7" stroke-dasharray="2 1.4"/><path d="M5 12h14" stroke-width="1.6"/><rect x="8" y="14.5" width="8" height="7" stroke-dasharray="2 1.4"/>'],
@@ -1040,11 +1237,15 @@
     ['Strich darüber (Mittelwert)', '\\overline{#@}', '<path d="M6 4h12"/><rect x="7" y="8" width="10" height="12" stroke-dasharray="2 1.4"/>'],
     ['Dach', '\\hat{#@}', '<path d="M8 6l4-3 4 3"/><rect x="7" y="8" width="10" height="12" stroke-dasharray="2 1.4"/>'],
     ['Vektor', '\\vec{#@}', '<path d="M6 4h12M15 2l3 2-3 2"/><rect x="7" y="8" width="10" height="12" stroke-dasharray="2 1.4"/>'],
+    ['Rechenweg: mehrere Zeilen, am = ausgerichtet (neue Zeile: Eingabetaste)', '\\begin{aligned}#@&=#?\\\\&=#?\\end{aligned}', '<path d="M3 6h5M3 12h5M3 18h5"/><path d="M10 5h3M10 7h3M10 11h3M10 13h3M10 17h3M10 19h3" stroke-width="1.2"/><rect x="15" y="4" width="6" height="4" stroke-dasharray="2 1.4"/><rect x="15" y="10" width="6" height="4" stroke-dasharray="2 1.4"/><rect x="15" y="16" width="6" height="4" stroke-dasharray="2 1.4"/>'],
     ['Matrix 2×2', '\\begin{pmatrix}#?&#?\\\\#?&#?\\end{pmatrix}', '<path d="M5 3Q2 12 5 21M19 3q3 9 0 18"/><rect x="7" y="5" width="4" height="5" stroke-dasharray="2 1.4"/><rect x="13" y="5" width="4" height="5" stroke-dasharray="2 1.4"/><rect x="7" y="14" width="4" height="5" stroke-dasharray="2 1.4"/><rect x="13" y="14" width="4" height="5" stroke-dasharray="2 1.4"/>'],
     ['Fallunterscheidung', '\\begin{cases}#?&\\text{für }#?\\\\#?&\\text{sonst}\\end{cases}', '<path d="M8 3Q5 3 5 7v3l-2 2 2 2v3q0 4 3 4"/><rect x="10" y="4" width="10" height="5" stroke-dasharray="2 1.4"/><rect x="10" y="15" width="10" height="5" stroke-dasharray="2 1.4"/>'],
   ];
   const MATH_SYM = [['α', '\\alpha'], ['β', '\\beta'], ['γ', '\\gamma'], ['δ', '\\delta'], ['ε', '\\varepsilon'], ['η', '\\eta'], ['θ', '\\theta'], ['λ', '\\lambda'], ['μ', '\\mu'], ['π', '\\pi'], ['ρ', '\\rho'], ['σ', '\\sigma'], ['τ', '\\tau'], ['φ', '\\varphi'], ['ω', '\\omega'], ['Δ', '\\Delta'], ['Σ', '\\Sigma'], ['Ω', '\\Omega'], ['∂', '\\partial'], ['∞', '\\infty'],
     ['±', '\\pm'], ['·', '\\cdot'], ['×', '\\times'], ['÷', '\\div'], ['≤', '\\le'], ['≥', '\\ge'], ['≠', '\\ne'], ['≈', '\\approx'], ['→', '\\to'], ['⇒', '\\Rightarrow'], ['⇔', '\\Leftrightarrow'], ['∈', '\\in'], ['∀', '\\forall'], ['∃', '\\exists'], ['∅', '\\emptyset'], ['°', '^{\\circ}']];
+  // Abkürzungen beim Tippen (zusätzlich zu denen, die MathLive schon kennt, etwa alpha, sqrt, sum, int)
+  const MATH_ABBR = [['<=', '\\le', '≤'], ['>=', '\\ge', '≥'], ['!=', '\\ne', '≠'], ['~=', '\\approx', '≈'], ['+-', '\\pm', '±'], ['->', '\\to', '→'], ['=>', '\\Rightarrow', '⇒'], ['<=>', '\\Leftrightarrow', '⇔'],
+    ['**', '\\cdot', '·'], ['infty', '\\infty', '∞'], ['sum', '\\sum', '∑'], ['int', '\\int', '∫'], ['sqrt', '\\sqrt{#?}', '√'], ['lim', '\\lim_{#?}', 'lim'], ['delta', '\\delta', 'δ'], ['Delta', '\\Delta', 'Δ'], ['eps', '\\varepsilon', 'ε'], ['alpha', '\\alpha', 'α'], ['beta', '\\beta', 'β'], ['lambda', '\\lambda', 'λ'], ['pi', '\\pi', 'π'], ['sigma', '\\sigma', 'σ'], ['mu', '\\mu', 'μ']];
   const MATH_TPL = [
     ['Kapitalwert', 'C_0=-I_0+\\sum_{t=1}^{n}\\frac{CF_t}{(1+i)^t}'],
     ['Annuität', 'A=K_0\\cdot\\frac{i\\,(1+i)^n}{(1+i)^n-1}'],
@@ -1309,18 +1510,25 @@
         h += grp('Symbole', big('data-ins="math"', 'Formel', RI.math) + big('data-menu="sym"', 'Sonderzeichen', RI.omega, true, true));
         if (host.insertExtra) h += host.insertExtra(kit);
       } else if (RB.tab === 'math') {
-        const editing = !!(MATH_CUR && MATH_CUR.edit && MATH_CUR.edit.math);
+        const editing = !!(MATH_CUR && ((MATH_CUR.edit && MATH_CUR.edit.math) || MATH_CUR.im));
         const mst = (x, i) => `<button type="button" class="rb-s rb-mst" data-f="mst" data-v="${i}" title="${esc(x[0])}" aria-label="${esc(x[0])}">${x[2] ? svg(x[2]) : `<span class="rb-mt">${esc(x[3])}</span>`}</button>`;
+        let rec = []; try { rec = (C.ls('mathRecent') || []).filter((k) => /^(st|sy)\d+$/.test(k)); } catch (er) { /* */ }
+        rec = rec.filter((k) => (k[1] === 't' ? MATH_STRUCT : MATH_SYM)[+k.slice(2)]).slice(0, 10);
+        if (rec.length) {
+          const rb = (k) => { const i = +k.slice(2); if (k[1] === 't') return mst(MATH_STRUCT[i], i); const x = MATH_SYM[i]; return `<button type="button" class="rb-s rb-msy" data-f="msy" data-v="${i}" title="${esc(x[1])}">${esc(x[0])}</button>`; };
+          h += grp('Zuletzt', rows(rec.slice(0, 5).map(rb).join(''), rec.slice(5).map(rb).join('')), 'rb-math');
+        }
         const half = Math.ceil(MATH_STRUCT.length / 2);
         h += grp('Struktur', rows(MATH_STRUCT.slice(0, half).map((x, i) => mst(x, i)).join(''), MATH_STRUCT.slice(half).map((x, i) => mst(x, i + half)).join('')), 'rb-math');
         const per = Math.ceil(MATH_SYM.length / 3);
         h += grp('Symbole', rows(...[0, 1, 2].map((r) => MATH_SYM.slice(r * per, r * per + per).map((x, i) => `<button type="button" class="rb-s rb-msy" data-f="msy" data-v="${r * per + i}" title="${esc(x[1])}">${esc(x[0])}</button>`).join(''))), 'rb-math');
-        h += grp('Vorlagen', big('data-menu="mtpl"', 'Vorlage', RI.math, true, true));
+        h += grp('Vorlagen', big('data-menu="mtpl"', 'Vorlage', RI.math, true, true) + big('data-menu="mabbr"', 'Abkürzungen', RI.abbr, true, true));
         const em = e && e.t === 'math' ? e : null;
         const fsM = em ? Math.round(mathFs(em) / u()) : 32;
         const szs = [...new Set([...SIZES.filter((x) => x >= 10), fsM])].sort((a, b) => a - b);
         h += grp('Formel', rows(cb('color', 'Farbe der Formel', (em && em.c) || host.theme().fg, false, '<span class="cb-a">A</span>', !!em),
           `<select data-f="fs" class="rb-size" title="Größe der Formel"${dis(!!em)}>${szs.map((x) => `<option value="${x}"${x === fsM ? ' selected' : ''}>${x}</option>`).join('')}</select>`) +
+          rows(sb('mal', 'Beim Ändern links stehen bleiben', RI.al, { v: 'l', en: !!em, on: !!em && !em.al }) + sb('mal', 'Beim Ändern mittig stehen bleiben', RI.ac, { v: 'c', en: !!em, on: !!em && em.al === 'c' }) + sb('mal', 'Beim Ändern rechts stehen bleiben', RI.ar, { v: 'r', en: !!em, on: !!em && em.al === 'r' }), '') +
           big('data-f="mlatex"', 'LaTeX', RI.latex) + big('data-f="mdone"', 'Fertig', RI.done, editing));
       } else if (host.tabContent) h += host.tabContent(RB.tab, kit);
       if (RB.tab === 'help') {
@@ -1374,7 +1582,8 @@
     function menu(m, btn) {
       const r = btn.getBoundingClientRect(), x = r.left, y = r.bottom + 4;
       const n = ED.sel.length;
-      if (m === 'mtpl') { popMenu(x, y, MATH_TPL.map((t, i) => ['t' + i, t[0], () => mathPut(t[1])])); return; }
+      if (m === 'mtpl') { mathTplMenu(x, y); return; }
+      if (m === 'mabbr') { popMenu(x, y, MATH_ABBR.map(([k, t, l]) => ['a' + k, `${k}   →   ${l}`, () => mathPut(t)])); return; }
       if (m === 'arrange') {
         const word = host.alignWord ? 'Seite' : 'Folie';
         popMenu(x, y, [
@@ -1448,10 +1657,11 @@
       if (f === 'rot0') { each((x) => { x.r = 0; }); return; }
       if ((f === 'fs' || f === 'fs+' || f === 'fs-') && ED.edit && !ED.edit.math && sizeSelection(f, v)) return;
       if (f === 'mathedit') { if (ids[0]) startMath(ids[0]); return; }
-      if (f === 'mst') { mathPut(MATH_STRUCT[+v][1]); return; }
-      if (f === 'msy') { mathPut(MATH_SYM[+v][1]); return; }
+      if (f === 'mst') { mathRecent('st' + v); mathPut(MATH_STRUCT[+v][1]); return; }
+      if (f === 'msy') { mathRecent('sy' + v); mathPut(MATH_SYM[+v][1]); return; }
+      if (f === 'mal') { const ms = ids.map(byId).filter((x) => x && x.t === 'math'); change(() => ms.forEach((x) => { if (v === 'l') delete x.al; else x.al = v; }), true); return; }
       if (f === 'mlatex') { mathLatex(); return; }
-      if (f === 'mdone') { if (MATH_CUR && MATH_CUR !== ED) MATH_CUR.endEdit(); else endEdit(); return; }
+      if (f === 'mdone') { if (ED.im) { imClose(); return; } if (MATH_CUR && MATH_CUR !== ED) { if (MATH_CUR.im) MATH_CUR.imClose(); else MATH_CUR.endEdit(); } else endEdit(); return; }
       // Formeln: Größe über die Schriftgröße, Farbe fürs ganze Objekt
       const mths = ids.map(byId).filter((x) => x && x.t === 'math');
       if (mths.length && (f === 'fs' || f === 'fs+' || f === 'fs-' || f === 'color')) {
@@ -1460,6 +1670,7 @@
           const c = mathFs(x) / u();
           const t = f === 'fs' ? +v : f === 'fs+' ? (SIZES.find((z) => z > c + 0.1) || c + 8) : ([...SIZES].reverse().find((z) => z < c - 0.1) || Math.max(6, c - 2));
           mathScale(x, t * u());
+          mathFsSave(t);
           if (ED.edit && ED.edit.math && ED.edit.id === x.id) ED.edit.fs = x.fs;
         }), true);
         if (mths.length === ids.length) return;
@@ -1613,15 +1824,39 @@
       if (r) change(() => { const t = byId(id); if (t) Object.assign(t, r); }, true);
     }
     // ---------------------------------------------------------------- Formeln: direkt auf der Folie tippen, die Werkzeuge stehen im Reiter „Formel“
+    // Startgröße neuer Formeln: zuletzt gewählte Größe, sonst die Schrift des Fließtexts auf der Folie, sonst 32
+    const fsKey = () => (host.alignWord ? 'mathFsP' : 'mathFs');
+    function mathDefFs() {
+      const last = +C.ls(fsKey());
+      if (last >= 6 && last <= 200) return last;
+      const t = els().filter((x) => x.t === 'text' && !isPh(x) && x.fs).map((x) => x.fs).sort((a, b) => a - b);
+      return t.length ? Math.max(14, Math.min(48, t[Math.floor(t.length / 2)] / u())) : 32;
+    }
+    const mathFsSave = (fs) => { try { C.ls(fsKey(), Math.round(fs)); } catch (er) { /* */ } };
     const mfTex = () => (ED.mf ? (ED.mf.getValue ? ED.mf.getValue('latex-without-placeholders') : ED.mf.value).trim() : '');
     async function addMath() {
+      if (ED.im) { ED.im.mf.focus(); return; }
+      if (ED.edit && !ED.edit.math) { imInsert(''); return; } // im Textfeld: Formel mitten im Text
       endEdit();
       try { await mathLib(true); } catch (err) { C.toast(err.message, 6000); return; }
-      const fs = 32 * u();
+      const fs = mathDefFs() * u();
       const [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
       const e = { id: uid(), r: 0, t: 'math', tex: '', svg: '', vb: [0, -1000, 3000, 1500], fs: r1(fs), x: r1(cx - fs * 1.5), y: r1(cy - fs * 0.75), w: r1(fs * 3), h: r1(fs * 1.5) };
       change(() => { els().push(e); ED.sel = [e.id]; }, true);
       await startMath(e.id, true);
+    }
+    // fertige Formeln (z. B. aus Word eingefügt) untereinander in die Mitte setzen
+    async function addMathTex(list) {
+      endEdit();
+      try { await mathLib(); } catch (err) { C.toast(err.message, 6000); return; }
+      const fs = mathDefFs() * u();
+      const [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
+      const made = list.map((tex) => { const r = texSvg(tex); const w = (r.vb[2] / 1000) * fs, h = (r.vb[3] / 1000) * fs; return { id: uid(), r: 0, t: 'math', tex, svg: r.svg, vb: r.vb, ...(r.rb ? { rb: r.rb } : {}), fs: r1(fs), w: r1(w), h: r1(h), x: 0, y: 0 }; });
+      const tot = made.reduce((a, e) => a + e.h, 0) + (made.length - 1) * fs * 0.4;
+      let y = cy - tot / 2;
+      for (const e of made) { e.x = r1(cx - e.w / 2); e.y = r1(y); y += e.h + fs * 0.4; }
+      change(() => { els().push(...made); ED.sel = made.map((e) => e.id); }, true);
+      C.toast(made.length > 1 ? made.length + ' Formeln eingefügt – Doppelklick bearbeitet sie.' : 'Formel eingefügt – Doppelklick bearbeitet sie.', 3500);
     }
     async function startMath(id, fresh) {
       if (ED.edit && ED.edit.id === id) return;
@@ -1638,6 +1873,18 @@
         ED.mf.className = 'dk-mf';
         ED.mf.addEventListener('input', () => { const t = ED.edit && ED.edit.math && byId(ED.edit.id); if (t) t.tex = mfTex(); });
         ED.mf.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+        try { ED.mf.inlineShortcuts = { ...(ED.mf.inlineShortcuts || {}), ...Object.fromEntries(MATH_ABBR.filter(([k]) => !/[A-Za-z]/.test(k)).map(([k, t]) => [k, t])) }; } catch (er) { /* */ }
+        try { ED.mf.smartFence = true; } catch (er) { /* */ }
+        // Eingabetaste: neue Zeile im Rechenweg (aus einer einzeiligen Formel wird ein Rechenweg, ausgerichtet am =)
+        ED.mf.addEventListener('keydown', (ev) => {
+          if (ev.key !== 'Enter' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+          ev.preventDefault(); ev.stopPropagation();
+          ED.mf.value = mathNewRow(mfTex());
+          try { ED.mf.executeCommand('moveToMathfieldEnd'); ED.mf.executeCommand('moveToPreviousChar'); } catch (er) { /* */ }
+          const t = ED.edit && byId(ED.edit.id); if (t) t.tex = mfTex();
+        }, true);
+        // Formel aus Word in die gerade bearbeitete Formel einfügen
+        ED.mf.addEventListener('paste', (ev) => { const l = clipMath(ev.clipboardData); if (!l.length) return; ev.preventDefault(); ev.stopPropagation(); ED.mf.insert(l.join('\\,'), { format: 'latex' }); const t = ED.edit && byId(ED.edit.id); if (t) t.tex = mfTex(); }, true);
       }
       ED.mf.value = e.tex || '';
       if (RB.tab !== 'math') { ED.prevTab = RB.tab; RB.tab = 'math'; }
@@ -1649,6 +1896,7 @@
     function endMath(ed) {
       if (MATH_CUR === ED) MATH_CUR = null;
       const e = byId(ed.id);
+      mathFsSave(ed.fs / u());
       const tex = mfTex();
       if (ED.mf) { try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide(); } catch (er) { /* */ } ED.mf.remove(); }
       if (RB.tab === 'math') RB.tab = ED.prevTab && ED.prevTab !== 'math' ? ED.prevTab : 'start';
@@ -1660,6 +1908,7 @@
             const r = texSvg(tex);
             const was = !e.svg, cx = e.x + e.w / 2;
             Object.assign(e, { tex, svg: r.svg, vb: r.vb });
+            if (r.rb) e.rb = r.rb; else delete e.rb;
             mathScale(e, ed.fs);
             if (was) e.x = r1(cx - e.w / 2);
             if (r.err) C.toast('Die Formel enthält einen Fehler: ' + r.err, 6000);
@@ -1686,6 +1935,9 @@
       return ED;
     }
     async function mathPut(t) {
+      if (ED.im) { ED.im.mf.focus(); ED.im.mf.insert(t, { selectionMode: 'placeholder', format: 'latex' }); return; }
+      if (ED.edit && !ED.edit.math) { imInsert(t); return; }
+      if (MATH_CUR && MATH_CUR !== ED && MATH_CUR.im) { MATH_CUR.mathPut(t); return; }
       if (!(ED.edit && ED.edit.math)) { const o = await mathOpen(); if (o && o !== ED) { o.mathPut(t); return; } }
       if (!ED.mf || !ED.edit || !ED.edit.math) return;
       ED.mf.focus();
@@ -1693,7 +1945,99 @@
       const e = byId(ED.edit.id);
       if (e) e.tex = mfTex();
     }
+    // zuletzt benutzte Knöpfe (alle Geräte)
+    function mathRecent(k) {
+      let l = []; try { l = C.ls('mathRecent') || []; } catch (er) { /* */ }
+      l = [k, ...l.filter((x) => x !== k)].slice(0, 10);
+      try { C.ls('mathRecent', l); } catch (er) { /* */ }
+    }
+    // Vorlagen: mitgelieferte und eigene (gelten auf allen Geräten)
+    const myTpl = () => { try { const l = C.ls('mathTpl'); return Array.isArray(l) ? l.filter((t) => Array.isArray(t) && typeof t[1] === 'string') : []; } catch (er) { return []; } };
+    function mathTplMenu(x, y) {
+      const mine = myTpl();
+      const cur = (MATH_CUR && MATH_CUR.edit && MATH_CUR.edit.math) ? MATH_CUR : null;
+      const sel = ED.sel.length === 1 && byId(ED.sel[0]);
+      const texNow = cur ? cur.mfTexNow() : sel && sel.t === 'math' ? sel.tex : '';
+      popMenu(x, y, [
+        ...MATH_TPL.map((t, i) => ['t' + i, t[0], () => mathPut(t[1])]),
+        ...(mine.length ? [['-', ''], ...mine.map((t, i) => ['m' + i, '★ ' + t[0], () => mathPut(t[1])])] : []),
+        ['-', ''],
+        ['save', 'Aktuelle Formel als Vorlage speichern …', async () => {
+          if (!texNow) { C.toast('Bitte zuerst eine Formel anklicken oder schreiben.', 3500); return; }
+          const nm = await C.askText('Als Vorlage speichern', 'Name der Vorlage:', '', 'Speichern');
+          if (!nm || !nm.trim()) return;
+          C.ls('mathTpl', [...myTpl().filter((t) => t[0] !== nm.trim()), [nm.trim().slice(0, 60), texNow]].slice(-40));
+          C.toast(`Vorlage „${nm.trim()}“ gespeichert – sie steht jetzt unter „Vorlage“.`, 3500);
+        }],
+        ...(mine.length ? [['del', 'Eigene Vorlage löschen …', () => popMenu(x, y, mine.map((t, i) => ['d' + i, '✕ ' + t[0], () => { C.ls('mathTpl', myTpl().filter((z) => z[0] !== t[0])); C.toast(`Vorlage „${t[0]}“ gelöscht.`, 2500); }]))]] : []),
+      ]);
+    }
+    // ---------------------------------------------------------------- Formel im Fließtext eines Textfelds
+    // kleines Eingabefeld direkt unter der Formel; Eingabetaste, Esc, „Fertig“ oder ein Klick daneben schließen es
+    function imNode() { const b = host.box(); return b && b.querySelector('.dk-el.editing'); }
+    async function imInsert(tex) {
+      try { await mathLib(true); } catch (err) { C.toast(err.message, 6000); return; }
+      const n = imNode();
+      if (!n) return;
+      const sel = getSelection();
+      let range = sel.rangeCount && n.contains(sel.anchorNode) ? sel.getRangeAt(0) : null;
+      if (!range) { const tg = n.querySelector('[contenteditable="true"]'); if (!tg) return; range = document.createRange(); range.selectNodeContents(tg.lastElementChild && /^(DIV|LI|P)$/.test(tg.lastElementChild.tagName) ? tg.lastElementChild : tg); range.collapse(false); }
+      const sp = document.createElement('span');
+      sp.className = 'dk-im'; sp.contentEditable = 'false'; sp.dataset.tex = '';
+      range.deleteContents(); range.insertNode(sp);
+      imOpen(sp, tex);
+    }
+    function imOpen(sp, insertTex) {
+      if (ED.im) imClose();
+      const n = imNode();
+      const idx = n ? [...n.querySelectorAll('.dk-im')].indexOf(sp) : -1;
+      const mf = document.createElement('math-field');
+      mf.className = 'dk-imf';
+      const pop = document.createElement('div');
+      pop.className = 'dk-impop';
+      pop.appendChild(mf);
+      pop.insertAdjacentHTML('beforeend', '<button type="button" class="btn small primary">Fertig</button>');
+      document.body.appendChild(pop);
+      const r = sp.getBoundingClientRect();
+      pop.style.left = Math.max(8, Math.min(innerWidth - 340, r.left - 10)) + 'px';
+      pop.style.top = Math.min(innerHeight - 90, r.bottom + 8) + 'px';
+      mf.value = sp.dataset.tex || '';
+      const off = (ev) => { if (pop.contains(ev.target) || (host.fmtBar() && host.fmtBar().contains(ev.target)) || (ev.target.closest && ev.target.closest('.dk-menu, .dk-pal, dialog'))) return; imClose(); };
+      ED.im = { sp, mf, pop, idx, off };
+      MATH_CUR = ED;
+      mf.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); imClose(); } }, true);
+      mf.addEventListener('paste', (ev) => { const l = clipMath(ev.clipboardData); if (!l.length) return; ev.preventDefault(); ev.stopPropagation(); mf.insert(l.join('\\,'), { format: 'latex' }); }, true);
+      pop.querySelector('button').onclick = () => imClose();
+      pop.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      setTimeout(() => document.addEventListener('pointerdown', off, true), 0);
+      try { mf.inlineShortcuts = { ...(mf.inlineShortcuts || {}), ...Object.fromEntries(MATH_ABBR.filter(([k]) => !/[A-Za-z]/.test(k)).map(([k, t]) => [k, t])) }; } catch (er) { /* */ }
+      setTimeout(() => { mf.focus(); if (insertTex) mf.insert(insertTex, { selectionMode: 'placeholder', format: 'latex' }); else try { mf.executeCommand('moveToMathfieldEnd'); } catch (er) { /* */ } }, 0);
+      renderFmt();
+    }
+    function imClose() {
+      const im = ED.im;
+      if (!im) return;
+      ED.im = null;
+      if (MATH_CUR === ED) MATH_CUR = null;
+      document.removeEventListener('pointerdown', im.off, true);
+      const tex = (im.mf.getValue ? im.mf.getValue('latex-without-placeholders') : im.mf.value).trim();
+      try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide(); } catch (er) { /* */ }
+      im.pop.remove();
+      const n = imNode();
+      let sp = im.sp;
+      if (!document.contains(sp) && n && im.idx >= 0) sp = n.querySelectorAll('.dk-im')[im.idx] || null;
+      if (sp) {
+        if (!tex) sp.remove(); else { sp.dataset.tex = tex; delete sp.dataset.ok; fillIm(sp.parentNode || document); }
+      }
+      if (n && ED.edit) {
+        syncEdit(n);
+        const tg = sp && document.contains(sp) ? sp.closest('[contenteditable="true"]') : n.querySelector('[contenteditable="true"]');
+        if (tg) { tg.focus(); try { const r = document.createRange(); if (sp && document.contains(sp)) r.setStartAfter(sp); else { r.selectNodeContents(tg); r.collapse(false); } r.collapse(true); const s0 = getSelection(); s0.removeAllRanges(); s0.addRange(r); } catch (er) { /* */ } }
+      }
+      renderFmt();
+    }
     async function mathLatex() {
+      if (ED.im) { const v = await C.askText('LaTeX', 'Die Formel als LaTeX-Text:', ED.im.mf.value, 'Übernehmen'); if (v != null && ED.im) { ED.im.mf.value = v; ED.im.mf.focus(); } return; }
       if (!(ED.edit && ED.edit.math)) { const o = await mathOpen(); if (o && o !== ED) { o.mathLatex(); return; } }
       if (!ED.edit || !ED.edit.math) return;
       const id = ED.edit.id;
@@ -1794,6 +2138,8 @@
       if (e && e.t === 'math') { startMath(id); return; }
       if (!e || e.t === 'img' || isLine(e) || isOpen(e)) return;
       if (ED.edit && ED.edit.id === id) return;
+      const imT = ev && ev.target && ev.target.closest ? ev.target.closest('.dk-im') : null;
+      const imI = imT && imT.closest('.dk-el') ? [...imT.closest('.dk-el').querySelectorAll('.dk-im')].indexOf(imT) : -1;
       endEdit();
       ED.sel = [id];
       ED.edit = { id, before: JSON.stringify(e), snap: host.snap(), cell: null };
@@ -1803,6 +2149,7 @@
       const box = host.box();
       const n = box && box.querySelector(`.dk-el[data-id="${id}"]`);
       if (!n) return;
+      if (imI >= 0) { const sp = n.querySelectorAll('.dk-im')[imI]; if (sp) { imOpen(sp); return; } }
       const tgt = e.t === 'table' ? n.querySelector(`td[data-r="${ED.edit.cell ? ED.edit.cell[0] : 0}"][data-c="${ED.edit.cell ? ED.edit.cell[1] : 0}"] .dk-cell`) : n.querySelector('.dk-tx');
       if (!tgt) return;
       // Platzhaltertext beim ersten Klick ganz markieren, sonst Schreibmarke an die Klickstelle
@@ -1839,6 +2186,7 @@
         if (!tx) return;
         tx.contentEditable = 'true';
         tx.addEventListener('input', () => syncEdit(n));
+        tx.addEventListener('dblclick', (ev) => { const sp = ev.target.closest && ev.target.closest('.dk-im'); if (sp) { ev.preventDefault(); ev.stopPropagation(); imOpen(sp); } });
       }
     }
     function syncEdit(n) {
@@ -1852,6 +2200,7 @@
       if (host.typing) host.typing();
     }
     function endEdit() {
+      if (ED.im) imClose();
       if (!ED.edit) return;
       const ed = ED.edit;
       ED.edit = null;
@@ -2187,7 +2536,7 @@
       return false;
     }
     function select(ids) { endEdit(); ED.sel = ids.filter((id) => byId(id)); render(); }
-    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, mathPut, mathLatex, fmt, menu });
+    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, addMathTex, mathPut, mathLatex, imClose, mfTexNow: () => mfTex(), fmt, menu });
     return ED;
   }
 
@@ -2275,7 +2624,7 @@
         const sel = D.ed.sel.map((id) => s0.els.find((x) => x.id === id)).filter(Boolean);
         const e0 = sel[0], has = !!e0, cur = e0 ? e0.an || '' : null;
         const ordList = animOrder(s0), nr = e0 && e0.an ? ordList.indexOf(e0) + 1 : 0;
-        const texty = !!(e0 && e0.an && e0.html && plain(e0.html));
+        const texty = !!(e0 && e0.an && ((e0.html && plain(e0.html)) || (e0.t === 'math' && Array.isArray(e0.rb) && e0.rb.length > 1)));
         return grp('Vorschau', big('data-f="an:preview"', 'Vorschau', RI.play1, ordList.length > 0)) +
           grp('Animation', AN_LIST.map(([k, l]) => big(`data-f="an:set" data-v="${k}"`, l, AN_IC[k], has).replace('class="rb-big"', `class="rb-big${cur === k ? ' on' : ''}"`)).join('')) +
           grp('Einstellungen', rows(sb('an:para', 'Bei Text: jeden Absatz (Aufzählungspunkt) einzeln einblenden', RI.ul, { label: 'Absatzweise', on: !!(e0 && e0.ap), en: texty }),
@@ -2679,7 +3028,9 @@
     D.ed.act(a, b);
   }
   function onPaste(ev) {
-    if (!D.root || D.root.hidden || D.ed.edit || ev.target.closest('math-field, input, textarea, [contenteditable="true"]')) return;
+    if (!D.root || D.root.hidden || D.ed.edit || (ev.target.closest && ev.target.closest('math-field, input, textarea, [contenteditable="true"]'))) return;
+    const ml = clipMath(ev.clipboardData);
+    if (ml.length) { ev.preventDefault(); D.ed.addMathTex(ml); return; }
     const items = [...(ev.clipboardData ? ev.clipboardData.items : [])];
     const img = items.find((i) => i.type.startsWith('image/'));
     if (img) { ev.preventDefault(); D.ed.addImage(img.getAsFile()); return; }
@@ -2757,7 +3108,7 @@
       change(() => {
         for (const e of sel) {
           if (!v) { delete e.an; delete e.ao; delete e.ap; continue; }
-          if (!e.an) { e.ao = animOrder(s0).length + 1; const blocks = e.html ? (clean(e.html).match(/<(li|div)\b/g) || []).length : 0; if (blocks > 1) e.ap = 1; }
+          if (!e.an) { e.ao = animOrder(s0).length + 1; const blocks = e.html ? (clean(e.html).match(/<(li|div)\b/g) || []).length : 0; if (blocks > 1 || (e.t === 'math' && Array.isArray(e.rb) && e.rb.length > 1)) e.ap = 1; }
           e.an = v;
         }
         renumber(animOrder(s0));
@@ -3026,6 +3377,7 @@
         if (c.nodeType !== 1) continue;
         const tag = c.tagName.toLowerCase();
         if (tag === 'br') { newP(blk.al, null, blk.lvl, null); continue; }
+        if (tag === 'span' && c.classList.contains('dk-im')) { if (!curP) newP(blk.al, blk.list, blk.lvl, blk.num); curP.runs.push({ ...st, t: '\uFFFC', m: c.getAttribute('data-tex') || '' }); continue; }
         if (tag === 'ul' || tag === 'ol') {
           let k = 0;
           for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k }; newP(b2.al, tag, b2.lvl, k); paraSp(curP, li); if (li.getAttribute('data-bu')) curP.bu = li.getAttribute('data-bu'); curP.bc = li.getAttribute('data-bc') || ''; if (li.getAttribute('data-bi')) { curP.bi = parseFloat(li.getAttribute('data-bi')) || 0; curP.bin = li.getAttribute('data-bi') === '0'; curP.ml = parseFloat(li.style.marginLeft) || 0; curP.bs = parseFloat(li.getAttribute('data-bs')) || 0; } walk(li, st, b2); curP = null; }
@@ -3120,6 +3472,10 @@
       uni = { r: await doc.embedFont(await get('DejaVuSans.ttf'), { subset: true }), b: await doc.embedFont(await get('DejaVuSans-Bold.ttf'), { subset: true }) };
     }
     let FF = F; // Schrift des gerade gezeichneten Elements
+    // Formeln im Fließtext vorab setzen
+    const imTex = new Set();
+    for (const e of allEls || []) for (const h of [e.html || '', ...(e.rows || []).flat()]) { if (!/dk-im/.test(h)) continue; const d = document.createElement('div'); d.innerHTML = clean(h); d.querySelectorAll('.dk-im').forEach((x) => imTex.add(x.getAttribute('data-tex') || '')); }
+    if (imTex.size) { try { await mathLib(); imTex.forEach((t) => { try { imSvg(t); } catch (er) { /* */ } }); } catch (er) { /* ohne Formeln */ } }
     const fontOf = (r) => FF[(r.b ? 'b' : '') + (r.i ? 'i' : '') || 'r'] || FF.r;
     const fontCh = (ch, tok) => {
       const ok = FF.custom ? FF.set.has(ch.codePointAt(0)) : winOk(ch);
@@ -3159,7 +3515,7 @@
     // Text in ein Rechteck setzen (w in Einheiten)
     const layoutText = (ps, fs, w) => {
       const lines = [];
-      const width = (tok) => { let s0 = 0; const z = tsz(tok, fs); for (const ch of tok.t) { const f = fontCh(ch, tok) || fontOf(tok); try { s0 += f.widthOfTextAtSize(ch, z); } catch (e) { s0 += z * 0.5; } } return s0; };
+      const width = (tok) => { if (tok.m != null) { const r = IMC.get(tok.m); return r ? (r.vb[2] / 1000) * tsz(tok, fs) : tsz(tok, fs); } let s0 = 0; const z = tsz(tok, fs); for (const ch of tok.t) { const f = fontCh(ch, tok) || fontOf(tok); try { s0 += f.widthOfTextAtSize(ch, z); } catch (e) { s0 += z * 0.5; } } return s0; };
       for (const p of ps) {
         const ind0 = (p.list ? fs * 1.2 * p.lvl : 0) + (p.ml || 0) * fs; // Einzug links; erste Zeile zusätzlich um ti verschoben
         let ind = ind0 + (p.ti || 0) * fs + (p.bin ? fs * 0.75 : 0), maxW = Math.max(fs, w - ind); // Zeichen direkt vor dem Text
@@ -3184,6 +3540,13 @@
       const base = yTop + fsL * (0.92 + (lhm - 1.2) / 2);
       for (const tk of ln.toks) {
         const z = tsz(tk, fs), dy = tk.sup ? -z * 0.5 : tk.sub ? z * 0.2 : 0;
+        if (tk.m != null) {
+          // Formel im Fließtext: auf der Grundlinie, in der Farbe des Texts
+          const r = IMC.get(tk.m);
+          if (r) { const s0 = z / 1000; svgPaths(pg, r.svg, [s0, 0, 0, s0, x - r.vb[0] * s0, base + dy], tk.c || color, K); }
+          x += tk.w || 0;
+          continue;
+        }
         // Markerfarbe hinter dem Wort (auch über die Lücke zum nächsten Wort)
         if (tk.bg && !SH) pg.drawRectangle({ x: x * K, y: -(yTop + fsL * lhm) * K, width: (tk.w + (gap || 0)) * K, height: fsL * lhm * K, color: hexRgb(tk.bg), ...opa() });
         let seg = '', segF = null;
@@ -3346,8 +3709,11 @@
       const vb = e.vb;
       if (!vb || !vb[2] || !vb[3] || !e.svg) return;
       const sc = Math.min(e.w / vb[2], e.h / vb[3]);
-      const root = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${mathSafe(e.svg)}</svg>`, 'image/svg+xml').documentElement;
-      const base = e.c || th.fg;
+      svgPaths(pg, e.svg, [sc, 0, 0, sc, (e.w - vb[2] * sc) / 2 - vb[0] * sc, (e.h - vb[3] * sc) / 2 - vb[1] * sc], e.c || th.fg, K);
+    };
+    // Pfade einer Formel-Grafik ins PDF; M0 bildet die SVG-Koordinaten auf das Element ab (y nach unten)
+    const svgPaths = (pg, svgStr, M0, base, K) => {
+      const root = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${mathSafe(svgStr)}</svg>`, 'image/svg+xml').documentElement;
       const o = opa();
       const put = (M, fn) => { pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(M[0], -M[1], -M[2], M[3], M[4] * K, -M[5] * K)); try { fn(); } finally { pg.pushOperators(popGraphicsState()); } };
       const walk = (node, M, fill, stroke, sw) => {
@@ -3380,7 +3746,7 @@
           if (tag === 'g' || tag === 'svg') walk(ch, m, f, st, w);
         }
       };
-      walk(root, [sc, 0, 0, sc, (e.w - vb[2] * sc) / 2 - vb[0] * sc, (e.h - vb[3] * sc) / 2 - vb[1] * sc], 'currentColor', 'none', 0);
+      walk(root, M0, 'currentColor', 'none', 0);
     };
     async function drawEl(pg, e, K, base) {
       FF = await famOf(e.ff);
@@ -3585,6 +3951,6 @@
 
   FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'F1' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); ev.stopImmediatePropagation(); rbCollapse(); } }, true);
-  window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
-    PX: { mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH, mathSvgDoc, texOmml, mathFs, mathLib, texSvg }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
+  window.PDFSTIFT_DECK = { clipMath, open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
+    PX: { mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH, mathSvgDoc, texOmml, mathFs, mathLib, texSvg, ommlTex }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();

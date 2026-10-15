@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.96.0';
+const PDFSTIFT_VERSION = '1.97.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -349,6 +349,21 @@ function stroke_obj($e): ?array
         $o['tex'] = mb_substr((string) ($e['tex'] ?? ''), 0, 5000);
         $o['svg'] = $svg;
         $o['vb'] = array_map(static fn ($v) => is_numeric($v) ? round((float) $v, 1) : 0.0, $vb);
+        // Zeilen eines Rechenwegs (zeilenweise einblenden), Ausrichtung beim Ändern, Schriftgröße
+        if (is_array($e['rb'] ?? null)) {
+            $rb = [];
+            foreach (array_slice(array_values($e['rb']), 0, 60) as $b) {
+                if (is_array($b) && count($b) === 2 && is_numeric($b[0] ?? null) && is_numeric($b[1] ?? null)) {
+                    $rb[] = [round((float) $b[0], 1), round((float) $b[1], 1)];
+                }
+            }
+            if (count($rb) > 1) {
+                $o['rb'] = $rb;
+            }
+        }
+        if (in_array($e['al'] ?? '', ['c', 'r'], true)) {
+            $o['al'] = $e['al'];
+        }
     }
     if ($t === 'shape') {
         $o['k'] = preg_match('/^[A-Za-z0-9]{2,12}$/', (string) ($e['k'] ?? '')) ? (string) $e['k'] : 'rect';

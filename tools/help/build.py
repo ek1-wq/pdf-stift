@@ -152,6 +152,11 @@ DE = {
             '<b>Formeln</b>: Einfügen → <b>Formel</b> oder ein Knopf im Reiter <b>Formel</b> (auch auf PDF-Seiten), dann direkt an Ort und Stelle tippen. Der Reiter enthält Struktur '
             '(Bruch, Hochzahl, Wurzel, Summe, Integral …), Symbolen, Vorlagen wie Kapitalwert, Farbe, Größe und LaTeX. Beim Tippen ergibt / einen Bruch, ^ eine Hochzahl, '
             '_ einen Index. Fertig: daneben klicken oder „Fertig“; Doppelklick bearbeitet die Formel wieder.',
+            '<b>Rechenweg</b>: in einer Formel die Eingabetaste drücken – es entsteht eine neue Zeile, alle „=“ stehen untereinander. Mit einer Animation '
+            '(Reiter „Animationen“, „Absatzweise“) erscheint der Rechenweg beim Vorführen Zeile für Zeile.',
+            '<b>Formel im Text</b>: beim Schreiben in einem Textfeld einen Knopf im Reiter „Formel“ wählen – die Formel steht dann mitten im Satz. '
+            'Formeln aus Word lassen sich einfach einfügen (' + keys('Strg+V') + '); Formeln aus PowerPoint-Dateien bleiben bearbeitbar.',
+            'Eigene Vorlagen: Reiter „Formel“ → <b>Vorlage</b> → „Aktuelle Formel als Vorlage speichern“. <b>Abkürzungen</b> zeigt Kürzel wie &lt;= für ≤ oder -&gt; für →.',
             'Vorführen: ' + keys('F5') + ' von Beginn an, ' + keys('Umschalt+F5') + ' ab der aktuellen Folie; dazu die Referentenansicht mit nächster Folie, Stoppuhr und Notizen.',
             'Speichern: als PDF oder wieder als PowerPoint-Datei – Animationen, Einzüge, Farben der Aufzählungszeichen, Diagramme und Formeln (in PowerPoint weiter bearbeitbar) bleiben erhalten.',
         ]),
@@ -340,6 +345,11 @@ EN = {
             '<b>Equations</b>: Insert → <b>Equation</b> or any button on the <b>Equation</b> tab (also on PDF pages), then type right in place. The tab has structures '
             '(fraction, superscript, root, sum, integral …), symbols, templates such as net present value, colour, size and LaTeX. While typing, / makes a fraction, '
             '^ a superscript, _ a subscript. Done: click elsewhere or “Done”; double-click edits the equation again.',
+            '<b>Calculation steps</b>: press Enter inside an equation – a new line appears and all “=” signs line up. With an animation '
+            '(“Animations” tab, “By paragraph”) the steps appear line by line when presenting.',
+            '<b>Equations in text</b>: while typing in a text box, choose a button on the “Equation” tab – the equation sits right in the sentence. '
+            'Equations from Word can simply be pasted (' + keys('Ctrl+V') + '); equations in PowerPoint files stay editable.',
+            'Own templates: “Equation” tab → <b>Template</b> → “Save current equation as template”. <b>Shortcuts</b> lists abbreviations such as &lt;= for ≤ or -&gt; for →.',
             'Present: ' + keys('F5') + ' from the beginning, ' + keys('Shift+F5') + ' from the current slide; the presenter view shows the next slide, a timer and your notes.',
             'Save as PDF or back as a PowerPoint file – animations, indents, bullet colours, charts and equations (still editable in PowerPoint) are kept.',
         ]),

@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.96.0';
+  const VERSION = '1.97.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -97,7 +97,7 @@
   }
   // Einstellungen der Oberfläche, die auf allen Geräten gleich sein sollen (über den Server abgeglichen)
   const UI_KEYS = new Set(['favs', 'color', 'wi', 'txKind', 'shKind', 'ttSize', 'ttStyle', 'ttBg', 'ttBo', 'stampColor', 'stampName', 'meanings', 'tpPins', 'tpRecent',
-    'dockLay', 'vbPos', 'vbHide', 'tpW', 'tpSide', 'toolPanel', 'thSide', 'thW', 'thumbs', 'showTools', 'theme', 'libView', 'snippets']);
+    'dockLay', 'vbPos', 'vbHide', 'tpW', 'tpSide', 'toolPanel', 'thSide', 'thW', 'thumbs', 'showTools', 'theme', 'libView', 'snippets', 'mathTpl', 'mathRecent']);
   const UIS = { timer: 0, dirty: new Set(), last: {}, pulling: false };
   const uiTimes = () => { try { return JSON.parse(localStorage.getItem('pdfstift.uiT')) || {}; } catch (e) { return {}; } };
   function uiChanged(key, val) {
@@ -5071,6 +5071,15 @@
     if (OB.insert && e.key === 'Escape') { obPlacing(null); e.preventDefault(); e.stopImmediatePropagation(); return; }
     if (!OB.ed || (e.target.closest && e.target.closest('math-field, input, textarea, select'))) return;
     if (OB.ed.key(e) === true) e.stopImmediatePropagation();
+  }, true);
+  // Formel aus Word auf eine PDF-Seite einfügen
+  document.addEventListener('paste', (e) => {
+    if (!V.doc || V.board || V.deck || (OB.ed && OB.ed.edit) || !window.PDFSTIFT_DECK || (e.target.closest && e.target.closest('math-field, input, textarea, [contenteditable="true"]'))) return;
+    const ml = window.PDFSTIFT_DECK.clipMath(e.clipboardData);
+    if (!ml.length) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const P = (OB.ed && OB.P) || obPage(); const ed = P && obActivate(P);
+    if (ed) ed.addMathTex(ml);
   }, true);
   document.addEventListener('paste', (e) => {
     if (!OB.ed || OB.ed.edit || !OB.clip || (e.target.closest && e.target.closest('math-field, input, textarea, [contenteditable="true"]'))) return;
