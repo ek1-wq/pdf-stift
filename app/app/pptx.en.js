@@ -194,7 +194,7 @@
   }
 
   // ================================================================== Einlesen
-  async function importPptx(file, progress) {
+  async function importPptx(file, progress, opt = {}) {
     const u8 = new Uint8Array(await file.arrayBuffer());
     let z;
     try { z = window.fflate.unzipSync(u8); } catch (e) { throw new Error("This is not a valid PowerPoint file (.pptx). Please save older .ppt files as .pptx in PowerPoint first."); }
@@ -1579,6 +1579,98 @@
       if (tree) for (const c of tree.children) { if (/^(sp|pic|cxnSp|grpSp|graphicFrame)$/.test(c.localName) && !phOf(c)) await convert(c, { ...ctx, rels: relsOf(docPath) }, ID, out); }
       return (decoCache[ck] = out);
     }
+    // ---- Folienmaster: alle Layouts des ersten Masters (Hintergrund, feste Gestaltung, Platzhalter, Fußzeilenfelder)
+    // Platzhaltertext: eigener Hinweistext der Vorlage bleibt, sonst kurz „Titel“, „Untertitel“, „Text“
+    function promptHtml(html, txt) {
+      const t = document.createElement('template');
+      t.innerHTML = html;
+      const root = t.content;
+      // nur den ersten Absatz (bzw. ersten Listenpunkt) behalten
+      const blocks = [...root.children];
+      blocks.slice(1).forEach((n) => n.remove());
+      const b0 = root.firstElementChild;
+      if (b0 && /^(UL|OL)$/.test(b0.tagName)) [...b0.children].slice(1).forEach((n) => n.remove());
+      const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const nodes = []; while (tw.nextNode()) nodes.push(tw.currentNode);
+      if (!nodes.length) return `<div>${txt}</div>`;
+      nodes.forEach((n, i) => { n.nodeValue = i ? '' : txt; });
+      root.querySelectorAll('br').forEach((n) => n.remove());
+      // leere Absätze und Listenpunkte (tiefere Ebenen der Vorlage) entfernen
+      [...root.querySelectorAll('li, ul, ol, div, p')].reverse().forEach((n) => { if (!n.textContent.trim()) n.remove(); });
+      const d = document.createElement('div'); d.appendChild(root.cloneNode(true));
+      return d.innerHTML;
+    }
+    const plainOf = (h) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    async function buildMaster(theme) {
+      if (!firstMaster) return null;
+      const mPath = firstMaster.target, T0m = themeOf(mPath);
+      const mDoc = T0m.master;
+      if (!mDoc) return null;
+      const mrels = relsOf(mPath);
+      const lays = all(path(mDoc.documentElement, 'sldLayoutIdLst'), 'sldLayoutId').map((n) => mrels[rid(n, 'id')]).filter((r) => r && !r.ext).map((r) => r.target);
+      const layouts = [];
+      for (const [li, lp] of lays.entries()) {
+        const ld = xml(lp);
+        if (!ld) continue;
+        const map = { ...T0m.map };
+        const o = all(ld, 'overrideClrMapping')[0]; if (o) for (const a of o.attributes) map[a.name] = a.value;
+        const T = { ...T0m, map };
+        const ctx = { T, layout: ld, rels: relsOf(lp), deckFont };
+        const L = { id: 'L' + (li + 1), name: (at(all(ld, 'cSld')[0], 'name') || 'Layout ' + (li + 1)).slice(0, 80), deco: [], ph: [], hf: {} };
+        if (at(ld.documentElement, 'showMasterSp') !== '0') for (const e of await deco(mPath, { T, layout: null, deckFont })) L.deco.push(JSON.parse(JSON.stringify(e)));
+        for (const e of await deco(lp, ctx)) L.deco.push(JSON.parse(JSON.stringify(e)));
+        const gmap = {};
+        L.deco.forEach((e, i) => { e.id = 'm' + (li + 1) + '_' + i; delete e._spid; delete e._grp; delete e.an; delete e.ao; if (e.g) e.g = gmap[e.g] || (gmap[e.g] = 'mg' + (li + 1) + '_' + i); });
+        const tree = all(ld, 'spTree')[0];
+        if (tree) for (const c of tree.children) {
+          const p = phOf(c);
+          if (!p) continue;
+          const t = phType(p);
+          if (/^(pic|chart|tbl|dgm|media|clipArt|sldImg)$/.test(t)) continue;
+          const out = [];
+          try { await convert(c, ctx, ID, out); } catch (er) { continue; }
+          const e = out.find((x) => x.html);
+          if (!e) continue;
+          delete e._spid; delete e._grp; delete e.an; delete e.ao; delete e.g;
+          if (t === 'sldNum' || t === 'ftr' || t === 'dt') { L.hf[{ sldNum: 'num', ftr: 'foot', dt: 'date' }[t]] = { ...e, id: 'hf' + t, txt: plainOf(e.html) }; continue; }
+          const raw = all(c, 't').map((x) => x.textContent).join(' ').replace(/\s+/g, ' ').trim();
+          const mt = masterType(t);
+          // Großbuchstaben aus der Vorlage (cap="all"): auch eigener Text wird groß geschrieben
+          const capAttr = (() => { for (const r of all(c, 'rPr')) { const v = at(r, 'cap'); if (v) return v; } for (const st of styleChain(c, ctx)) { const dr = path(st, 'lvl1pPr', 'defRPr'); const v = dr && at(dr, 'cap'); if (v) return v; } return ''; })();
+          const cap = /^(all|small)$/.test(capAttr) || (/[a-zäöü]/.test(raw) && plainOf(e.html) === raw.split('ß').map((x) => x.toLocaleUpperCase('de-DE')).join('ß'));
+          if (cap) e.cap = 1;
+          const generic = at(p, 'hasCustomPrompt') !== '1' || /master\w*format|click to edit|zum bearbeiten|textformat bearbeiten/i.test(raw);
+          if (!generic) { const t0 = document.createElement('template'); t0.innerHTML = e.html; [...t0.content.querySelectorAll('li, ul, ol, div, p')].reverse().forEach((n) => { if (!n.textContent.trim()) n.remove(); }); const d0 = document.createElement('div'); d0.appendChild(t0.content.cloneNode(true)); e.html = d0.innerHTML; }
+          if (generic) { const pr = t === 'ctrTitle' || mt === 'title' ? "Title" : t === 'subTitle' ? "Subtitle" : 'Text'; e.html = promptHtml(e.html, cap ? pr.toLocaleUpperCase('de-DE') : pr); }
+          e.ph = 1; e.pt = plainOf(e.html); e.pk = mt === 'title' ? 'title' : t === 'subTitle' ? 'sub' : 'body';
+          L.ph.push(e);
+        }
+        const bg = await bgOfDoc(ld, relsOf(lp), T, lp);
+        if (bg && !(bg.bg && !bg.bgGrad && !bg.bgImg && bg.bg === theme.bg)) Object.assign(L, bg);
+        // Textfarbe dieses Layouts (z. B. weiß auf dunklem Hintergrund) für Folien ohne eigene Farbe
+        const tph = L.ph.find((x) => x.pk === 'title') || L.ph[0];
+        if (tph && tph.c && tph.c !== theme.fg) L.fg = tph.c;
+        layouts.push(L);
+      }
+      if (!layouts.length) return null;
+      // Inhaltslayout: größter Textplatzhalter neben dem Titel; daraus „Zwei Inhalte“ und „Leer“, falls die Vorlage sie nicht hat
+      const area = (L) => Math.max(0, ...L.ph.filter((x) => x.pk === 'body').map((x) => x.w * x.h));
+      const content = layouts.slice(1).reduce((a, b) => (area(b) > area(a) ? b : a), layouts[layouts.length > 1 ? 1 : 0]);
+      const hasTwo = layouts.some((L) => L.ph.filter((x) => x.pk === 'body' && x.w * x.h > area(content) * 0.25).length >= 2);
+      const body = content.ph.filter((x) => x.pk === 'body').sort((a, b) => b.w * b.h - a.w * a.h)[0];
+      if (!hasTwo && body && body.w > 300) {
+        const gap = 24, w2 = Math.round((body.w - gap) / 2);
+        const two = { ...JSON.parse(JSON.stringify(content)), id: 'L2col', name: "Two content", derived: 1 };
+        two.ph = two.ph.filter((x) => x !== body && !(x.pk === 'body' && x.x === body.x && x.y === body.y)).concat([{ ...JSON.parse(JSON.stringify(body)), w: w2 }, { ...JSON.parse(JSON.stringify(body)), x: body.x + w2 + gap, w: w2 }]);
+        layouts.push(two);
+      }
+      if (!layouts.some((L) => !L.ph.length)) layouts.push({ ...JSON.parse(JSON.stringify(content)), id: 'Lblank', name: "Blank", ph: [], derived: 1 });
+      const hf = {};
+      for (const L of layouts) { if (L.hf.foot && !hf.foot) hf.foot = L.hf.foot.txt; if (L.hf.date && !hf.dateText) hf.dateText = L.hf.date.txt; }
+      const stem = String(file.name || "Template").replace(/\.[^.]+$/, '').replace(/_/g, ' ').replace(/\bf r\b/g, 'für').trim();
+      const name = stem.replace(/\b(PowerPoint|Vorlage|Template|Master)\b/gi, ' ').replace(/\s+/g, ' ').trim() || stem || "Template";
+      return { name: name.slice(0, 120), layouts, title: layouts[0].id, content: content.id, hf };
+    }
     const TR = { fade: 'fade', dissolve: 'fade', push: 'push', wipe: 'wipe', split: 'wipe', zoom: 'zoom', cover: 'cover', pull: 'cover', randomBar: 'wipe', morph: 'fade' };
     // Original-Datei auf dem Server ablegen (nebenher), damit Folien später als Bild übernommen werden können
     const srcUp = (async () => {
@@ -1608,8 +1700,8 @@
       const ctx = { T, layout, rels, deckFont, ink: inkAcc };
       const els = [];
       const showMaster = at(d.documentElement, 'showMasterSp') !== '0' && (!layout || at(layout.documentElement, 'showMasterSp') !== '0');
-      if (mR && showMaster) for (const e of await deco(mR.target, { T, layout: null, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid() });
-      if (layR && at(d.documentElement, 'showMasterSp') !== '0') for (const e of await deco(layR.target, { T, layout, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid() });
+      if (mR && showMaster) for (const e of await deco(mR.target, { T, layout: null, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid(), md: 1 });
+      if (layR && at(d.documentElement, 'showMasterSp') !== '0') for (const e of await deco(layR.target, { T, layout, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid(), md: 1 });
       const tree = all(d, 'spTree')[0];
       const nDeco = els.length;
       if (tree) for (const c of tree.children) await convert(c, { ...ctx, anim: true }, ID, els);
@@ -1644,6 +1736,10 @@
       s.sn = i; // Nummer in der PowerPoint-Datei (für „Folie als Bild übernehmen“)
       slides.push(s);
     }
+    let master = null;
+    try { progress && progress("Importing slide master …"); master = await buildMaster(theme); } catch (er) { /* ohne Master */ }
+    // Vorlagendatei (.potx) ohne Folien: eine Titelfolie aus dem Master
+    if (!slides.length && master) { const L0 = master.layouts[0]; slides.push({ id: X().uid(), lay: L0.id, els: L0.ph.map((e) => ({ ...JSON.parse(JSON.stringify(e)), id: X().uid() })) }); }
     if (!slides.length) throw new Error("No slides were found in this PowerPoint file.");
     let title = '';
     const core = xml('docProps/core.xml');
@@ -1652,6 +1748,8 @@
     const stem0 = String(file.name || '').replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim();
     title = (stem0 && stem0 !== 'x' ? stem0 : title || "Presentation").trim().slice(0, 200);
     const deck = { v: 1, w: W, h: H, title, theme, slides };
+    // Layouts der Vorlage für „Neue Folie“ (und als eigene Vorlage)
+    if (master) deck.master = master;
     // auf das Hochladen der Original-Datei nicht lange warten (große Dateien, langsame Leitung): sonst wird es nachgetragen
     const src = await Promise.race([srcUp, new Promise((r) => setTimeout(() => r(undefined), 1500))]);
     if (src) deck.src = src;
@@ -1840,7 +1938,7 @@
           sl.background = { data: await svgToPng(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="${dir[0]}" y1="${dir[1]}" x2="${dir[2]}" y2="${dir[3]}"><stop offset="0" stop-color="${esc(bg.grad.a)}"/><stop offset="1" stop-color="${esc(bg.grad.b)}"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/></svg>`, W, H, 1) };
         } else sl.background = { color: toHex(bg.color) };
       } catch (e) { sl.background = { color: toHex(bg.color || '#FFFFFF') }; }
-      const els = [...s.els.filter((e) => !P.isPh(e)), ...(opt.hf ? opt.hf(si) : [])];
+      const els = [...(opt.under ? opt.under(si) : []), ...(opt.els ? opt.els(s) : s.els).filter((e) => !P.isPh(e)), ...(opt.hf ? opt.hf(si) : [])];
       for (let e of els) {
         try {
           const boxO = { x: inch(e.x), y: inch(e.y), w: inch(e.w), h: inch(e.h) };
@@ -1972,7 +2070,7 @@
           const pts = [];
           for (let i = 0; i + 1 < p.length; i += 2) pts.push({ x: (p[i] - x0) / IN, y: (p[i + 1] - y0) / IN, ...(i ? {} : { moveTo: true }) });
           if (pts.length === 1) pts.push({ x: pts[0].x + 0.001, y: pts[0].y });
-          sl.addText('', { objectName: k.hl ? 'ink-hl' : 'ink', x: x0 / IN, y: y0 / IN, w: bw / IN, h: bh / IN, shape: 'custGeom', points: pts, fill: { type: 'none' }, line: { color: noHash(k.c || '#1A1A1A'), width: Math.max(0.25, k.w || 2), ...(k.hl ? { transparency: 62 } : {}) }, lineCap: 'round' });
+          sl.addText('', { objectName: k.hl ? 'ink-hl' : 'ink', x: x0 / IN, y: y0 / IN, w: bw / IN, h: bh / IN, shape: 'custGeom', points: pts, fill: { type: 'none' }, line: { color: noHash(k.c || '#1A1A1A'), width: Math.max(0.25, k.pr && k.pr.length ? (k.w || 2) * (0.6 + 0.8 * k.pr.reduce((a, b) => a + b, 0) / k.pr.length) : k.w || 2), ...(k.hl ? { transparency: 62 } : {}) }, lineCap: 'round' });
         } catch (err) { skipped++; }
       }
       if (s.notes) sl.addNotes(s.notes);

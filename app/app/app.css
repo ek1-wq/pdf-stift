@@ -1278,7 +1278,7 @@ body[data-demo] #btnShortcut, body[data-demo] #btnBackup, body[data-demo] #btnLo
 .dk-tx > div:last-child, .dk-tx li:last-child, .dk-cell > div:last-child { margin-bottom: 0; }
 .dk-tx ul, .dk-tx ol, .dk-cell ul, .dk-cell ol { margin: 0 0 .3em; padding-left: 1.2em; }
 .dk-tx ul ul, .dk-tx ol ol { margin: .3em 0 0; }
-.dk-live .dk-ph .dk-tx { color: #8A93A6 !important; }
+.dk-live .dk-ph:not(.dk-pt) .dk-tx { color: #8A93A6 !important; }
 .dk-img img { width: 100%; height: 100%; display: block; object-fit: fill; pointer-events: none; -webkit-user-drag: none; }
 .dk-shape svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .dk-table table { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -1618,3 +1618,32 @@ body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--hpr, 0px)); }
 .dk-el li[data-bs]::before { transform: scale(var(--bs, 1)); transform-origin: 0 75%; } /* Größe wie in PowerPoint, auf der Grundlinie */
 /* Zeichen ohne Einzug (PowerPoint: Einzug 0): direkt vor dem Text, Folgezeilen beginnen links */
 .dk-el li[data-bi="0"]::before { position: static; display: inline-block; width: 0.75em; }
+/* Folien: Lasso für Freihandstriche */
+.dk-ink .dk-lasso { fill: rgba(30, 47, 110, .06); stroke: #1E2F6E; stroke-width: 1.2; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
+.dk-lsel { position: absolute; border: 1.5px dashed #1F4FD6; border-width: calc(1.5px * var(--k, 1)); background: rgba(31, 79, 214, .04); cursor: move; z-index: 9; touch-action: none; }
+.dk-lsel .dk-lh { position: absolute; width: calc(14px * var(--k, 1)); height: calc(14px * var(--k, 1)); background: #fff; border: calc(2px * var(--k, 1)) solid #1F4FD6; border-radius: 50%; transform: translate(-50%, -50%); }
+.dk-lsel .dk-lh[data-c=nw] { left: 0; top: 0; cursor: nwse-resize; } .dk-lsel .dk-lh[data-c=ne] { left: 100%; top: 0; cursor: nesw-resize; }
+.dk-lsel .dk-lh[data-c=sw] { left: 0; top: 100%; cursor: nesw-resize; } .dk-lsel .dk-lh[data-c=se] { left: 100%; top: 100%; cursor: nwse-resize; }
+.dk-lbar { position: absolute; z-index: 10; display: flex; gap: 4px; align-items: center; padding: 5px 6px; background: #fff; color: #1A1A1A; border: 1px solid rgba(0, 0, 0, .15); border-radius: 10px; box-shadow: 0 4px 14px rgba(0, 0, 0, .18); white-space: nowrap; }
+.dk-lbar .dk-lc { width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .25); background: var(--c); cursor: pointer; }
+.dk-lbar .dk-lb { width: 28px; height: 28px; padding: 3px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; color: inherit; }
+.dk-lbar .dk-lb:hover { background: rgba(0, 0, 0, .07); }
+.dk-lbar .dk-lb svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.dk-inking .dk-stage .dk-lsel { cursor: move !important; }
+.dk-inking .dk-stage .dk-lsel .dk-lh[data-c=nw], .dk-inking .dk-stage .dk-lsel .dk-lh[data-c=se] { cursor: nwse-resize !important; }
+.dk-inking .dk-stage .dk-lsel .dk-lh[data-c=ne], .dk-inking .dk-stage .dk-lsel .dk-lh[data-c=sw] { cursor: nesw-resize !important; }
+.dk-inking .dk-stage .dk-lbar, .dk-inking .dk-stage .dk-lbar * { cursor: pointer !important; }
+/* Vorlagen */
+.card .thumb { position: relative; }
+.dk-tplbadge { position: absolute; left: 6px; top: 6px; background: #1F4FD6; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; }
+.dk-newdlg form { min-width: min(560px, 92vw); }
+.dk-newname { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 14px; font-weight: 600; }
+.dk-newname input { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--line, #ccd); border-radius: 8px; background: var(--bg, #fff); color: inherit; }
+.dk-tpls { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 10px; margin: 6px 0 16px; max-height: 50vh; overflow: auto; padding: 2px; }
+.dk-tpl { display: flex; flex-direction: column; gap: 6px; align-items: stretch; padding: 4px; border: 2px solid transparent; border-radius: 10px; background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit; }
+.dk-tpl.on { border-color: #1F4FD6; background: rgba(31, 79, 214, .07); }
+.dk-tplth { display: block; width: 168px; height: 94.5px; border-radius: 4px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); background: #fff; }
+.dk-tplblank { display: block; width: 100%; height: 100%; background: #fff; }
+.dk-tpln { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Platzhalter aus einer Vorlage: in der eigenen Farbe, nur blasser */
+.dk-live .dk-ph.dk-pt .dk-tx { opacity: .6; }

@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.98.1';
+  const VERSION = '1.99.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -5190,11 +5190,22 @@
     try {
       const M = await pptxMod();
       const { deck, warn, srcUp } = await M.importPptx(file, o.quiet ? o.progress : (t) => toast(t, 120000));
+      if (o.tpl) {
+        if (!deck.master) throw new Error('In dieser Datei wurde kein Folienmaster gefunden.');
+        // je Layout eine Musterfolie, damit man die Vorlage sieht; als Vorlage angeboten
+        const m = deck.master;
+        deck.slides = m.layouts.map((L) => ({ id: uid(), lay: L.id, els: L.ph.map((e) => ({ r: 0, ...JSON.parse(JSON.stringify(e)), id: uid() })) }));
+        deck.hf = { num: true, ...(m.hf.foot ? { foot: m.hf.foot } : {}), ...(m.hf.dateText ? { date: true, dateText: m.hf.dateText } : {}) };
+        deck.tpl = 1;
+        deck.title = 'Vorlage ' + m.name;
+        delete deck.src;
+      }
       const r = await apiJson('decknew', { method: 'POST', body: { title: deck.title } });
       await apiJson('deck', { method: 'POST', body: { path: r.path, deck, rev: r.rev } });
       // Original-Datei noch unterwegs: nach dem Hochladen an der Präsentation vermerken (für „Folie als Bild“)
       if (srcUp) srcUp.then((src) => (src ? apiJson('decksrc', { method: 'POST', body: { path: r.path, src } }) : null)).catch(() => {});
-      S.decks = [{ path: r.path, title: deck.title, slides: deck.slides.length, mtime: Date.now() / 1000 }, ...(S.decks || [])];
+      S.decks = [{ path: r.path, title: deck.title, slides: deck.slides.length, mtime: Date.now() / 1000, ...(deck.tpl ? { tpl: true } : {}) }, ...(S.decks || [])];
+      if (o.tpl) { toast(`Vorlage „${deck.master.name}“ übernommen (${deck.master.layouts.length} Layouts). Sie steht jetzt bei „Neue Präsentation“ zur Wahl.`, 7000); openDoc(r.path); return { name: file.name, title: deck.title, slides: deck.slides.length, path: r.path }; }
       const miss = warn.emf + warn.other;
       if (!o.quiet) toast(`„${deck.title}“ übernommen: ${deck.slides.length} ${deck.slides.length === 1 ? 'Folie' : 'Folien'}.` + (miss ? ` ${miss} Bild(er) in einem Format, das der Browser nicht anzeigen kann (z. B. EMF), wurden ausgelassen.` : ''), miss ? 9000 : 5000);
       track('tool', 'PowerPoint öffnen');
@@ -5223,11 +5234,60 @@
     void bad;
     return res;
   }
-  async function newDeck() {
-    const title = await askText('Neue Präsentation', 'Name der Präsentation', '', 'Anlegen');
-    if (title === null || title === undefined) return;
+  // Präsentation als Vorlage anbieten (oder nicht mehr)
+  async function deckTpl(d, on) {
     try {
-      const r = await apiJson('decknew', { method: 'POST', body: { title: title || 'Neue Präsentation' } });
+      const { deck } = await apiJson('deck', { params: { path: d.path } });
+      if (on && !deck.master) { toast('Nur Präsentationen mit Folienmaster (aus PowerPoint übernommen) können Vorlage sein.', 6000); return; }
+      if (on) deck.tpl = 1; else delete deck.tpl;
+      await apiJson('deck', { method: 'POST', body: { path: d.path, deck, rev: deck.rev || 0 } });
+      toast(on ? `„${d.title}“ steht jetzt bei „Neue Präsentation“ als Vorlage zur Wahl.` : 'Keine Vorlage mehr.', 4000);
+      loadDecks();
+    } catch (e) { toast(e.message); }
+  }
+  // PowerPoint-Vorlage (.pptx/.potx) übernehmen: Layouts als Folien zum Ansehen, als Vorlage angeboten
+  function pptxPickTpl() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.pptx,.potx,.pptm,application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) pptxImport(f, { tpl: true }); };
+    inp.click();
+  }
+  // Name und Vorlage wählen
+  function newDeckDlg(tpls) {
+    return new Promise((res) => {
+      const last = ls('dkTpl');
+      let sel = tpls.some((t) => t.path === last) || last === '' ? last : tpls[0].path;
+      const d = document.createElement('dialog');
+      d.className = 'dk-dlg dk-newdlg';
+      d.innerHTML = `<form method="dialog"><h3>Neue Präsentation</h3>
+        <label class="dk-newname">Name <input id="newDeckName" maxlength="200" placeholder="Neue Präsentation"></label>
+        <div class="muted small">Vorlage</div>
+        <div class="dk-tpls">${[{ path: '', title: 'Leer' }, ...tpls].map((t) => `<button type="button" class="dk-tpl" data-p="${esc(t.path)}"><span class="dk-tplth">${t.path ? '' : '<span class="dk-tplblank"></span>'}</span><span class="dk-tpln">${esc(t.title)}</span></button>`).join('')}</div>
+        <div class="dk-dlg-btns"><button value="cancel" class="btn">Abbrechen</button><button value="ok" class="btn primary" id="newDeckOk">Anlegen</button></div></form>`;
+      document.body.appendChild(d);
+      const mark = () => d.querySelectorAll('.dk-tpl').forEach((b) => b.classList.toggle('on', b.dataset.p === sel));
+      d.querySelectorAll('.dk-tpl').forEach((b) => { b.onclick = () => { sel = b.dataset.p; mark(); }; b.ondblclick = () => { sel = b.dataset.p; d.close('ok'); }; });
+      mark();
+      deckCore().then(() => tpls.forEach((t) => { const b = d.querySelector(`.dk-tpl[data-p="${CSS.escape(t.path)}"] .dk-tplth`); if (b && t.first) b.appendChild(window.PDFSTIFT_DECK.preview(t.first, t.theme, 168, t.master)); })).catch(() => {});
+      d.addEventListener('close', () => {
+        const ok = d.returnValue === 'ok';
+        const title = d.querySelector('#newDeckName').value.trim();
+        d.remove();
+        if (ok) ls('dkTpl', sel);
+        res(ok ? { title, tpl: sel } : null);
+      }, { once: true });
+      d.showModal();
+      d.querySelector('#newDeckName').focus();
+    });
+  }
+  async function newDeck() {
+    const tpls = (S.decks || []).filter((x) => x.tpl);
+    let title, tpl = '';
+    if (tpls.length) { const r0 = await newDeckDlg(tpls); if (!r0) return; ({ title, tpl } = r0); }
+    else { title = await askText('Neue Präsentation', 'Name der Präsentation', '', 'Anlegen'); if (title === null || title === undefined) return; }
+    try {
+      const r = await apiJson('decknew', { method: 'POST', body: { title: title || 'Neue Präsentation', ...(tpl ? { tpl } : {}) } });
       S.decks = [{ path: r.path, title: r.title, slides: 1, mtime: Date.now() / 1000 }, ...(S.decks || [])];
       openDoc(r.path);
     } catch (e) { toast(e.message); }
@@ -5251,7 +5311,7 @@
       return c;
     };
     if (!q) card('dk-new', '+', 'Neue Präsentation', 'Folien bauen, vortragen, als PDF speichern', newDeck, null);
-    if (!q) card('dk-new dk-imp', '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="12" rx="1.5"/><path d="M8 20h8M12 17v3"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg>', 'PowerPoint öffnen', 'Eine oder mehrere .pptx-Dateien als bearbeitbare Präsentationen übernehmen', () => pptxPick(false), [['fold', 'Ganzen Ordner übernehmen …', () => pptxPick(true)]]);
+    if (!q) card('dk-new dk-imp', '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="12" rx="1.5"/><path d="M8 20h8M12 17v3"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg>', 'PowerPoint öffnen', 'Eine oder mehrere .pptx-Dateien als bearbeitbare Präsentationen übernehmen', () => pptxPick(false), [['fold', 'Ganzen Ordner übernehmen …', () => pptxPick(true)], ['tpl', 'Als Vorlage übernehmen (Folienmaster) …', () => pptxPickTpl()]]);
     const list = (S.decks || []).filter((d) => !q || d.title.toLowerCase().includes(q));
     for (const d of list) {
       const c = card('dk-card', '<span class="ph nb-ph">' + DK_TAB + '</span>', d.title, `${d.slides} ${d.slides === 1 ? 'Folie' : 'Folien'} · ${fmtDate(d.mtime)}`, () => openDoc(d.path), [
@@ -5260,6 +5320,7 @@
           if (!t) return;
           try { const r = await apiJson('deck', { params: { path: d.path } }); r.deck.title = t; await apiJson('deck', { method: 'POST', body: { path: d.path, deck: r.deck, rev: r.deck.rev } }); d.title = t; renderDecks(); renderTabs(); } catch (e) { toast(e.message); }
         }],
+        ...(d.master || d.tpl ? [['tpl', d.tpl ? 'Nicht mehr als Vorlage anbieten' : 'Als Vorlage für neue Präsentationen anbieten', () => deckTpl(d, !d.tpl)]] : []),
         ['cp', 'Duplizieren', async () => { try { await apiJson('decknew', { method: 'POST', body: { title: d.title + ' (Kopie)', copy: d.path } }); loadDecks(); } catch (e) { toast(e.message); } }],
         ['del', 'Löschen …', async () => {
           if (!(await confirmDlg('Präsentation löschen', `„${d.title}“ wirklich löschen?`))) return;
@@ -5267,7 +5328,7 @@
         }],
       ]);
       if (d.first) {
-        deckCore().then(() => { const th = c.querySelector('.thumb'); th.innerHTML = ''; th.appendChild(window.PDFSTIFT_DECK.preview(d.first, d.theme, th.clientWidth || 200)); }).catch(() => {});
+        deckCore().then(() => { const th = c.querySelector('.thumb'); th.innerHTML = ''; th.appendChild(window.PDFSTIFT_DECK.preview(d.first, d.theme, th.clientWidth || 200, d.master)); if (d.tpl) th.insertAdjacentHTML('beforeend', '<span class="dk-tplbadge">Vorlage</span>'); }).catch(() => {});
       }
     }
     empty.hidden = !!(list.length || !q);
@@ -10989,7 +11050,7 @@
   // Präsentation offen: Stift, Textmarker und Radierer der Werkzeugleiste zeichnen auf der Folie (Auswahl/Hand = Objekte bearbeiten)
   function deckInk() {
     if (!V.deck || !window.PDFSTIFT_DECK || !window.PDFSTIFT_DECK.inkSet) return;
-    const t = S.tool === 'pen' || S.tool === 'hl' || S.tool === 'er' ? S.tool : S.tool === 'sel' || S.tool === 'hand' ? '' : null;
+    const t = S.tool === 'pen' || S.tool === 'hl' || S.tool === 'er' || S.tool === 'la' ? S.tool : S.tool === 'sel' || S.tool === 'hand' ? '' : null;
     if (t === null) return;
     window.PDFSTIFT_DECK.inkSet(t, t === 'pen' || t === 'hl' ? S.color[t] : null, t === 'pen' || t === 'hl' ? S.wi[t] : null);
   }

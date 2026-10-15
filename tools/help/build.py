@@ -150,7 +150,12 @@ DE = {
         ('ul', [
             'Bearbeiten wie in PowerPoint: Folien und Layouts, Design, Textfelder, Formen, Bilder, Tabellen und Diagramme; Animationen im Reiter „Animationen“.',
             '<b>Auf Folien zeichnen</b>: Reiter <b>Zeichnen</b> → Stift, Textmarker oder Radierer (oder dieselben Werkzeuge in der Werkzeugleiste) – geschrieben wird direkt auf die Folie, wie in PDFs. '
-            '„Auswählen“ oder Esc schaltet zurück zum Bearbeiten. Die Striche bleiben beim Speichern als PDF und als PowerPoint erhalten; Freihand aus PowerPoint wird übernommen.',
+            '„Auswählen“ oder Esc schaltet zurück zum Bearbeiten. Die Striche bleiben beim Speichern als PDF und als PowerPoint erhalten; Freihand aus PowerPoint wird übernommen. '
+            'Mit einem Eingabestift wird die Linie je nach Druck dünner oder dicker. Der <b>Radierer</b> nimmt wahlweise nur die berührten Teile oder ganze Striche weg; '
+            'mit dem <b>Lasso</b> kreisen Sie Striche ein und verschieben sie, ziehen sie an den Ecken größer oder kleiner, färben sie um oder löschen sie.',
+            '<b>Vorlagen (Folienmaster)</b>: Bei „PowerPoint öffnen“ über ⋯ → <b>Als Vorlage übernehmen</b> die PowerPoint-Vorlage Ihrer Einrichtung wählen. '
+            'Danach bietet „Neue Präsentation“ diese Vorlage an: Hintergrund, Logo, Fußzeile und Schriften kommen aus der Vorlage, „Neue Folie“ zeigt deren Layouts. '
+            'Eine vorhandene Präsentation bekommt das Aussehen über Entwurf → <b>Vorlage übernehmen</b>. Fußzeilentext, Foliennummer und Feld rechts unten: Einfügen → Fußzeile.',
             '<b>Formeln</b>: Einfügen → <b>Formel</b> oder ein Knopf im Reiter <b>Formel</b> (auch auf PDF-Seiten), dann direkt an Ort und Stelle tippen. Der Reiter enthält Struktur '
             '(Bruch, Hochzahl, Wurzel, Summe, Integral …), Symbolen, Vorlagen wie Kapitalwert, Farbe, Größe und LaTeX. Beim Tippen ergibt / einen Bruch, ^ eine Hochzahl, '
             '_ einen Index. Fertig: daneben klicken oder „Fertig“; Doppelklick bearbeitet die Formel wieder.',
@@ -345,7 +350,12 @@ EN = {
         ('ul', [
             'Edit as in PowerPoint: slides and layouts, design, text boxes, shapes, pictures, tables and charts; animations on the “Animations” tab.',
             '<b>Drawing on slides</b>: <b>Drawing</b> tab → pen, highlighter or eraser (or the same tools in the toolbar) – you write straight onto the slide, as in PDFs. '
-            '“Select” or Esc switches back to editing. The strokes are kept when saving as PDF and as PowerPoint; ink from PowerPoint files is imported.',
+            '“Select” or Esc switches back to editing. The strokes are kept when saving as PDF and as PowerPoint; ink from PowerPoint files is imported. '
+            'With a stylus the line gets thinner or thicker depending on pressure. The <b>eraser</b> removes either just the touched parts or whole strokes; '
+            'with the <b>lasso</b> you circle strokes and then move them, drag the corners to resize, recolor or delete them.',
+            '<b>Templates (slide master)</b>: under “Open PowerPoint” choose ⋯ → <b>Import as template</b> and pick your organization’s PowerPoint template. '
+            'From then on “New presentation” offers it: background, logo, footer and fonts come from the template, and “New slide” lists its layouts. '
+            'An existing presentation gets the look via Design → <b>Apply template</b>. Footer text, slide number and the bottom-right field: Insert → Footer.',
             '<b>Equations</b>: Insert → <b>Equation</b> or any button on the <b>Equation</b> tab (also on PDF pages), then type right in place. The tab has structures '
             '(fraction, superscript, root, sum, integral …), symbols, templates such as net present value, colour, size and LaTeX. While typing, / makes a fraction, '
             '^ a superscript, _ a subscript. Done: click elsewhere or “Done”; double-click edits the equation again.',

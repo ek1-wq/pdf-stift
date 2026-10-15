@@ -840,7 +840,8 @@ switch ($a) {
         }
         $b = body();
         $src = (string) ($b['copy'] ?? '');
-        json_out(deck_new((string) ($b['title'] ?? ''), $src !== '' ? deck_read($src) : null));
+        $tpl = (string) ($b['tpl'] ?? '');
+        json_out(deck_new((string) ($b['title'] ?? ''), $tpl !== '' ? deck_from_tpl($tpl) : ($src !== '' ? deck_read($src) : null)));
 
     case 'deckdel':
         if ($method !== 'POST') {

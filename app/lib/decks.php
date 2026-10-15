@@ -39,6 +39,17 @@ function deck_list(): array
         if (!is_array($d)) {
             continue;
         }
+        // für das Vorschaubild: nur das Layout der ersten Folie (der ganze Master wäre zu groß für die Liste)
+        $lay = null;
+        $first = $d['slides'][0] ?? null;
+        if (is_array($first) && isset($first['lay']) && isset($d['master']['layouts']) && is_array($d['master']['layouts'])) {
+            foreach ($d['master']['layouts'] as $L) {
+                if (is_array($L) && ($L['id'] ?? '') === $first['lay']) {
+                    $lay = ['name' => (string) ($d['master']['name'] ?? ''), 'layouts' => [$L]];
+                    break;
+                }
+            }
+        }
         $out[] = [
             'path' => '@dk/' . basename($f, '.json'),
             'title' => (string) ($d['title'] ?? 'Präsentation'),
@@ -47,10 +58,26 @@ function deck_list(): array
             'rev' => (int) ($d['rev'] ?? 0),
             'first' => $d['slides'][0] ?? null,
             'theme' => $d['theme'] ?? null,
+            'master' => $lay,
+            'tpl' => !empty($d['tpl']) && isset($d['master']),
         ];
     }
     usort($out, fn ($a, $b) => $b['mtime'] <=> $a['mtime']);
     return $out;
+}
+
+/** Neue Präsentation aus einer Vorlage: Folienmaster, Design und Fußzeile, aber keine Folien */
+function deck_from_tpl(string $path): array
+{
+    $t = deck_read($path);
+    $d = ['v' => 1];
+    foreach (['w', 'h', 'theme', 'master', 'hf'] as $k) {
+        if (isset($t[$k])) {
+            $d[$k] = $t[$k];
+        }
+    }
+    $d['slides'] = [];
+    return $d;
 }
 
 function deck_new(string $title, ?array $copyOf = null): array
