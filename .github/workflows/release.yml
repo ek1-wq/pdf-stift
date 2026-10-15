@@ -65,7 +65,7 @@ jobs:
           set -e
           V="${{ needs.windows.outputs.version }}"
           mkdir -p wt
-          gh release download "v$V" -p "PDF-Stift-Setup-$V.exe" -O setup.exe
+          curl -sSfL --retry 3 -o setup.exe "https://github.com/${{ github.repository }}/releases/download/v$V/PDF-Stift-Setup-$V.exe"
           SECONDS=0
           powershell -NoProfile -Command "\$p = Start-Process .\setup.exe -ArgumentList '/S' -PassThru; if (-not \$p.WaitForExit(1500000)) { exit 1 }; exit \$p.ExitCode"
           echo "installed in ${SECONDS}s"
