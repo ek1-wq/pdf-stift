@@ -149,7 +149,7 @@ DE = {
         ('h2', 'Bearbeiten, vorführen und speichern'),
         ('ul', [
             'Bearbeiten wie in PowerPoint: Folien und Layouts, Design, Textfelder, Formen, Bilder, Tabellen und Diagramme; Animationen im Reiter „Animationen“.',
-            '<b>Formeln</b>: Einfügen → <b>Formel</b> (auch auf PDF-Seiten) und direkt an Ort und Stelle tippen. Dabei erscheint der Reiter <b>Formel</b> mit Struktur '
+            '<b>Formeln</b>: Einfügen → <b>Formel</b> oder ein Knopf im Reiter <b>Formel</b> (auch auf PDF-Seiten), dann direkt an Ort und Stelle tippen. Der Reiter enthält Struktur '
             '(Bruch, Hochzahl, Wurzel, Summe, Integral …), Symbolen, Vorlagen wie Kapitalwert, Farbe, Größe und LaTeX. Beim Tippen ergibt / einen Bruch, ^ eine Hochzahl, '
             '_ einen Index. Fertig: daneben klicken oder „Fertig“; Doppelklick bearbeitet die Formel wieder.',
             'Vorführen: ' + keys('F5') + ' von Beginn an, ' + keys('Umschalt+F5') + ' ab der aktuellen Folie; dazu die Referentenansicht mit nächster Folie, Stoppuhr und Notizen.',
@@ -337,7 +337,7 @@ EN = {
         ('h2', 'Editing, Presenting and Saving'),
         ('ul', [
             'Edit as in PowerPoint: slides and layouts, design, text boxes, shapes, pictures, tables and charts; animations on the “Animations” tab.',
-            '<b>Equations</b>: Insert → <b>Equation</b> (also on PDF pages) and type right in place. The <b>Equation</b> tab then appears with structures '
+            '<b>Equations</b>: Insert → <b>Equation</b> or any button on the <b>Equation</b> tab (also on PDF pages), then type right in place. The tab has structures '
             '(fraction, superscript, root, sum, integral …), symbols, templates such as net present value, colour, size and LaTeX. While typing, / makes a fraction, '
             '^ a superscript, _ a subscript. Done: click elsewhere or “Done”; double-click edits the equation again.',
             'Present: ' + keys('F5') + ' from the beginning, ' + keys('Shift+F5') + ' from the current slide; the presenter view shows the next slide, a timer and your notes.',

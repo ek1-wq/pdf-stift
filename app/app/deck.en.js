@@ -913,7 +913,7 @@
   // Eingeben mit MathLive (Knöpfe wie in Word, die Formel steht sofort gesetzt da), setzen mit MathJax als Vektorgrafik.
   // Beide Bausteine liegen in vendor/math und werden erst beim ersten Gebrauch geladen. Ein Formel-Objekt speichert
   // den LaTeX-Text (tex), die fertige Grafik (svg = Inhalt, vb = viewBox, 1000 Einheiten je Schriftgröße) und die Farbe (c).
-  let MATH_P = null, MATH_ED = null, MATH_OM = null;
+  let MATH_P = null, MATH_ED = null, MATH_OM = null, MATH_CUR = null; // MATH_CUR: Editor, in dem gerade eine Formel bearbeitet wird
   const mathScript = (f) => new Promise((res, rej) => {
     const sc = document.createElement('script');
     sc.src = 'vendor/math/' + f + '?v=' + C.VERSION;
@@ -1253,9 +1253,8 @@
       const tabs = [['start', 'Start'], ['insert', "Insert"], ...(host.tabs ? host.tabs() : [])];
       // Browser und Tablet: eigener Reiter „Hilfe“ (in der Windows-App steht dafür das Menü Hilfe in der Reiterzeile)
       if (!(window.pdfstiftWin && window.pdfstiftWin.menuPop) && document.querySelector('[data-act="help"]')) tabs.push(['help', "Help"]);
-      // Reiter „Formel“: erscheint nur, wenn eine Formel bearbeitet wird oder gewählt ist (wie in Office), hinter „Ansicht“
-      const mathOn = !!(ED.edit && ED.edit.math) || (list.length === 1 && e.t === 'math');
-      if (mathOn) { const vi = tabs.findIndex((t) => t[0] === 'view'); const hi = tabs.findIndex((t) => t[0] === 'help'); tabs.splice(vi >= 0 ? vi + 1 : hi >= 0 ? hi : tabs.length, 0, ['math', "Equation"]); }
+      // Reiter „Formel“ hinter „Ansicht“, immer da: ein Knopf darin legt eine neue Formel an, wenn keine gewählt ist
+      { const vi = tabs.findIndex((t) => t[0] === 'view'); const hi = tabs.findIndex((t) => t[0] === 'help'); tabs.splice(vi >= 0 ? vi + 1 : hi >= 0 ? hi : tabs.length, 0, ['math', "Equation"]); }
       if (!tabs.some((t) => t[0] === RB.tab)) RB.tab = 'start';
       let h = '';
       if (RB.tab === 'start' && !has && !ED.edit && !ED.painter && host.startIdle) h += host.startIdle(kit, !!(ED.clip || (host.clipboard && host.clipboard())));
@@ -1311,7 +1310,7 @@
         h += grp("Symbols", big('data-ins="math"', "Equation", RI.math) + big('data-menu="sym"', "Special characters", RI.omega, true, true));
         if (host.insertExtra) h += host.insertExtra(kit);
       } else if (RB.tab === 'math') {
-        const editing = !!(ED.edit && ED.edit.math);
+        const editing = !!(MATH_CUR && MATH_CUR.edit && MATH_CUR.edit.math);
         const mst = (x, i) => `<button type="button" class="rb-s rb-mst" data-f="mst" data-v="${i}" title="${esc(x[0])}" aria-label="${esc(x[0])}">${x[2] ? svg(x[2]) : `<span class="rb-mt">${esc(x[3])}</span>`}</button>`;
         const half = Math.ceil(MATH_STRUCT.length / 2);
         h += grp("Structures", rows(MATH_STRUCT.slice(0, half).map((x, i) => mst(x, i)).join(''), MATH_STRUCT.slice(half).map((x, i) => mst(x, i + half)).join('')), 'rb-math');
@@ -1453,7 +1452,7 @@
       if (f === 'mst') { mathPut(MATH_STRUCT[+v][1]); return; }
       if (f === 'msy') { mathPut(MATH_SYM[+v][1]); return; }
       if (f === 'mlatex') { mathLatex(); return; }
-      if (f === 'mdone') { endEdit(); return; }
+      if (f === 'mdone') { if (MATH_CUR && MATH_CUR !== ED) MATH_CUR.endEdit(); else endEdit(); return; }
       // Formeln: Größe über die Schriftgröße, Farbe fürs ganze Objekt
       const mths = ids.map(byId).filter((x) => x && x.t === 'math');
       if (mths.length && (f === 'fs' || f === 'fs+' || f === 'fs-' || f === 'color')) {
@@ -1634,6 +1633,7 @@
       endEdit();
       ED.sel = [id];
       ED.edit = { id, before: fresh ? '' : JSON.stringify(e), snap: host.snap(), cell: null, math: true, fs: mathFs(e), tex0: e.tex || '' };
+      MATH_CUR = ED;
       if (!ED.mf) {
         ED.mf = document.createElement('math-field');
         ED.mf.className = 'dk-mf';
@@ -1643,10 +1643,12 @@
       ED.mf.value = e.tex || '';
       if (RB.tab !== 'math') { ED.prevTab = RB.tab; RB.tab = 'math'; }
       render();
-      setTimeout(() => { if (!ED.mf || !ED.edit || !ED.edit.math) return; ED.mf.focus(); try { ED.mf.executeCommand('moveToMathfieldEnd'); } catch (er) { /* */ } }, 30);
+      try { ED.mf.focus(); ED.mf.executeCommand('moveToMathfieldEnd'); } catch (er) { /* */ }
+      setTimeout(() => { if (ED.mf && ED.edit && ED.edit.math && document.activeElement !== ED.mf) ED.mf.focus(); }, 30);
     }
     // Formel fertig: setzen (MathJax), Größe nach der Schriftgröße; leer = wieder weg
     function endMath(ed) {
+      if (MATH_CUR === ED) MATH_CUR = null;
       const e = byId(ed.id);
       const tex = mfTex();
       if (ED.mf) { try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide(); } catch (er) { /* */ } ED.mf.remove(); }
@@ -1670,11 +1672,22 @@
       render();
     }
     // Knopf im Reiter „Formel“: in die gerade bearbeitete Formel einsetzen (sonst die gewählte öffnen oder eine neue anlegen)
-    async function mathPut(t) {
-      if (!(ED.edit && ED.edit.math)) {
-        const sel = ED.sel.length === 1 && byId(ED.sel[0]);
-        if (sel && sel.t === 'math') await startMath(sel.id); else await addMath();
+    // keine Formel offen: die gewählte öffnen oder eine neue anlegen (auf PDF-Seiten über die Seite, die gerade zu sehen ist)
+    async function mathOpen() {
+      const busy = () => MATH_CUR && MATH_CUR.edit && MATH_CUR.edit.math;
+      if (busy()) return MATH_CUR;
+      const sel = ED.sel.length === 1 && byId(ED.sel[0]);
+      if (sel && sel.t === 'math') { await startMath(sel.id); return ED; }
+      if (host.onIns) {
+        host.onIns('math');
+        for (let i = 0; i < 200 && !busy(); i++) await new Promise((r) => setTimeout(r, 50));
+        return busy() ? MATH_CUR : null;
       }
+      await addMath();
+      return ED;
+    }
+    async function mathPut(t) {
+      if (!(ED.edit && ED.edit.math)) { const o = await mathOpen(); if (o && o !== ED) { o.mathPut(t); return; } }
       if (!ED.mf || !ED.edit || !ED.edit.math) return;
       ED.mf.focus();
       ED.mf.insert(t, { selectionMode: 'placeholder', format: 'latex' });
@@ -1682,7 +1695,7 @@
       if (e) e.tex = mfTex();
     }
     async function mathLatex() {
-      if (!(ED.edit && ED.edit.math)) { const sel = ED.sel.length === 1 && byId(ED.sel[0]); if (sel && sel.t === 'math') await startMath(sel.id); else await addMath(); }
+      if (!(ED.edit && ED.edit.math)) { const o = await mathOpen(); if (o && o !== ED) { o.mathLatex(); return; } }
       if (!ED.edit || !ED.edit.math) return;
       const id = ED.edit.id;
       const v = await C.askText('LaTeX', "The equation as LaTeX:", mfTex(), "Apply");
@@ -2175,7 +2188,7 @@
       return false;
     }
     function select(ids) { endEdit(); ED.sel = ids.filter((id) => byId(id)); render(); }
-    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, fmt, menu });
+    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, mathPut, mathLatex, fmt, menu });
     return ED;
   }
 
