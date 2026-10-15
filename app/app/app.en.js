@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.97.0';
+  const VERSION = '1.97.1';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -121,6 +121,8 @@
     for (const k of ks) { try { ui[k] = JSON.parse(localStorage.getItem('pdfstift.' + k)); } catch (e) { ui[k] = null; } uiT[k] = t[k] || Date.now(); }
     try { await apiJson('prefs', { method: 'POST', body: { ui, uiT } }); } catch (e) { ks.forEach((k) => UIS.dirty.add(k)); }
   }
+  // Klick in eine Formel, die gerade bearbeitet wird: gehört dem Eingabefeld (kein Kommentar, kein Stift, kein Verschieben)
+  const inMathEdit = (e) => !!(e.target && e.target.closest && e.target.closest('math-field, .dk-impop, .dk-mf, .dk-el.editing'));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   // Rechteck (PDF-Koordinaten) → Anzeige; pdf.js 6 hat convertToViewportRectangle nicht mehr
   const vpRect = (vp, r) => { const a = vp.convertToViewportPoint(r[0], r[1]), b = vp.convertToViewportPoint(r[2], r[3]); return [a[0], a[1], b[0], b[1]]; };
@@ -2654,7 +2656,7 @@
     selMove(e);
   });
   pagesEl.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.sel-bar, .fm-field, .im-box, .fb-box, .pe-edit')) return;
+    if (e.target.closest('.sel-bar, .fm-field, .im-box, .fb-box, .pe-edit, math-field, .dk-impop')) return;
     if (e.pointerType === 'touch') touches.add(e.pointerId);
     if (e.pointerType === 'pen') penDown = true;
     if (obDown(e)) { e.stopImmediatePropagation(); return; }
@@ -5060,7 +5062,7 @@
     pagesEl.classList.toggle('ob-hover', on);
   });
   pagesEl.addEventListener('dblclick', (e) => {
-    if (!OB.ed || !OB.P) return;
+    if (!OB.ed || !OB.P || inMathEdit(e)) return;
     const pe = e.target.closest('.page');
     if (!pe || V.pages[+pe.dataset.i] !== OB.P) return;
     const h = obHit(OB.P, ...obLocal(OB.P, e));
@@ -11400,7 +11402,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
     viewer.classList.add('panning');
   }
   viewer.addEventListener('pointerdown', (e) => {
-    if (V.board || e.pointerType === 'touch') return;
+    if (V.board || e.pointerType === 'touch' || inMathEdit(e)) return;
     const hand = (S.tool === 'hand' && e.button === 0) || e.button === 1 || (spaceHand && e.button === 0);
     if (hand && e.target.closest('.page, #pages') && !(e.button === 0 && (noteUnder(e) || snipUnder(e) || obUnder(e)))) { e.stopPropagation(); startPan(e); }
   }, true);
@@ -13228,7 +13230,7 @@ github.com/ek1-wq/pdf-stift`, "Quick guide")) toggleHelp(true);
   }
   // Notizzettel antippen öffnet ihn (mit jedem Werkzeug); Werkzeug „Kommentar“ legt einen neuen an
   pagesEl.addEventListener('pointerdown', (e) => {
-    if (V.board) return;
+    if (V.board || inMathEdit(e)) return;
     if (e.target.closest('.note-pop')) return;
     if (notePop) closeNote(true);
     const pageEl = e.target.closest('.page');
@@ -13245,7 +13247,7 @@ github.com/ek1-wq/pdf-stift`, "Quick guide")) toggleHelp(true);
     if (S.tool === 'nt' && e.button === 0 && (e.pointerType !== 'touch' || S.finger)) { e.stopPropagation(); e.preventDefault(); openNote(P, (e.clientX - r.left) / sc - 4, (e.clientY - r.top) / sc - 4, null); }
   }, true);
   pagesEl.addEventListener('click', (e) => {
-    if (S.tool !== 'nt' || V.board || notePop || e.target.closest('.note-pop')) return;
+    if (S.tool !== 'nt' || V.board || notePop || e.target.closest('.note-pop') || inMathEdit(e)) return;
     if (e.pointerType && e.pointerType !== 'touch') return;
     const pageEl = e.target.closest('.page'); if (!pageEl) return;
     const P = V.pages[+pageEl.dataset.i]; const r = P.el.getBoundingClientRect(), sc = r.width / P.w;

@@ -3386,5 +3386,6 @@
   "“ gespeichert – sie steht jetzt unter „Vorlage“.": "” saved – it is now under “Template”.",
   "Eigene Vorlage löschen …": "Delete own template …",
   "“ gelöscht.": "” deleted.",
-  "<button type=\"button\" class=\"btn small primary\">Fertig</button>": "<button type=\"button\" class=\"btn small primary\">Done</button>"
+  "<button type=\"button\" class=\"btn small primary\">Fertig</button>": "<button type=\"button\" class=\"btn small primary\">Done</button>",
+  "Tipp: Mit Tab oder den Pfeiltasten springen Sie von Kästchen zu Kästchen. Fertig: daneben klicken.": "Tip: use Tab or the arrow keys to move from box to box. Done: click elsewhere."
 }

@@ -1890,6 +1890,7 @@
       ED.mf.value = e.tex || '';
       if (RB.tab !== 'math') { ED.prevTab = RB.tab; RB.tab = 'math'; }
       render();
+      try { const n0 = +C.ls('mathTip') || 0; if (n0 < 3) { C.ls('mathTip', n0 + 1); C.toast("Tip: use Tab or the arrow keys to move from box to box. Done: click elsewhere.", 5000); } } catch (er) { /* */ }
       try { ED.mf.focus(); ED.mf.executeCommand('moveToMathfieldEnd'); } catch (er) { /* */ }
       setTimeout(() => { if (ED.mf && ED.edit && ED.edit.math && document.activeElement !== ED.mf) ED.mf.focus(); }, 30);
     }
@@ -2168,7 +2169,9 @@
       if (ED.edit.math) {
         // dasselbe Eingabefeld wandert in den neu gezeichneten Knoten (Inhalt und Schreibmarke bleiben)
         const mf = ED.mf, had = document.activeElement === mf, v = mf.value;
-        mf.style.fontSize = ED.edit.fs + 'px';
+        // beim Bearbeiten mindestens gut lesbar groß (kleine Formeln auf PDF-Seiten), damit die Kästchen leicht zu treffen sind
+        const kk = host.k ? host.k() || 1 : 1;
+        mf.style.fontSize = Math.max(ED.edit.fs, 30 / kk) + 'px';
         mf.style.color = e.c || host.theme().fg;
         n.appendChild(mf);
         if (mf.value !== v) mf.value = v;
