@@ -2241,13 +2241,44 @@
       }
       return null;
     }
+    // Element unter dem Zeiger wie in PowerPoint: Text vor leeren Formen. Umrisse ohne Füllung (z. B. Kreise eines
+    // Venn-Diagramms) verdecken den Text darunter nicht; gefüllte Flächen und Bilder schon.
+    function pick(x, y) {
+      const list = els();
+      let fallback = null;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const e = list[i];
+        const cx = e.x + e.w / 2, cy = e.y + e.h / 2, a = -(e.r || 0) * Math.PI / 180;
+        const lx = (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), ly = (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a);
+        const tol = isLine(e) ? 6 : 3;
+        if (!(Math.abs(lx) <= e.w / 2 + tol && Math.abs(ly) <= e.h / 2 + tol)) continue;
+        if (isPh(e) && !fallback) { fallback = e; continue; }
+        const hasText = (e.html && plain(e.html)) || ['table', 'math', 'chart'].includes(e.t);
+        if (hasText) return e;
+        if (e.t === 'img') return e;
+        if (e.t === 'shape') {
+          const round = /^(ellipse|circle|oval|donut|pie|arc)$/i.test(e.k || '');
+          const q = round ? Math.hypot(lx / Math.max(1, e.w / 2), ly / Math.max(1, e.h / 2)) : Math.max(Math.abs(lx) / Math.max(1, e.w / 2), Math.abs(ly) / Math.max(1, e.h / 2));
+          const inside = q <= 1.0001;
+          const edge = Math.abs(q - 1) * Math.min(e.w, e.h) / 2 <= Math.max(5, (e.lw || 2));
+          const solid = (e.fill || e.gr) && (e.fo == null || e.fo > 0.35) && (e.op == null || e.op > 0.35);
+          if (solid && inside) return e;
+          if (isLine(e) || isOpen(e) || edge) { if (!fallback) fallback = e; continue; }
+          continue;
+        }
+        if (!fallback) fallback = e;
+      }
+      return fallback;
+    }
     // Zeiger gedrückt; id = getroffenes Element (wenn der Aufrufer es schon kennt). Rückgabe true = erledigt
     function down(ev, id) {
       if (ev.button > 0) return false;
       if (ED.insert) { endEdit(); const kind = ED.insert; ED.insert = null; host.placing(false); ev.preventDefault(); drawInsert(kind, ev); return true; }
       const hEl = ev.target.closest && ev.target.closest('.dk-h');
-      const n = id ? { dataset: { id } } : ev.target.closest && ev.target.closest('.dk-el');
+      let n = id ? { dataset: { id } } : ev.target.closest && ev.target.closest('.dk-el');
       if (ED.edit && n && n.dataset.id === ED.edit.id) return true; // im Text: Schreibmarke setzen, markieren
+      if (!id && !hEl && host.box()) { const pk = pick(...toLocal(ev)); if (pk) n = { dataset: { id: pk.id } }; else if (n && !byId(n.dataset.id)) n = null; }
+      if (ED.edit && n && n.dataset.id === ED.edit.id) return true;
       if (hEl) { ev.preventDefault(); startDrag(ev, hEl.dataset.h); return true; }
       if (!n) {
         const had = ED.edit || ED.sel.length;
@@ -2266,12 +2297,25 @@
         return true;
       }
       if (ev.shiftKey || ev.ctrlKey) { ED.sel = ED.sel.includes(nid) ? ED.sel.filter((x) => x !== nid) : [...ED.sel, nid]; render(); return true; }
+      // Doppelklick selbst erkennen (der Browser meldet ihn nicht, wenn die Folie zwischen den Klicks neu gezeichnet wurde)
+      const now = Date.now(), ld = ED.lastDown;
+      ED.lastDown = { t: now, x: ev.clientX, y: ev.clientY, id: nid };
+      if (ld && ld.id === nid && now - ld.t < 450 && Math.hypot(ev.clientX - ld.x, ev.clientY - ld.y) < 8) {
+        ED.lastDown = null; ED.lastDbl = now;
+        ED.sel = [nid];
+        startEdit(nid, ev);
+        if (!ED.edit) render();
+        return true;
+      }
       const grpOf = (id) => { const g = (byId(id) || {}).g; return g ? els().filter((x) => x.g === g).map((x) => x.id) : [id]; };
+      // Gruppe: erster Klick wählt die ganze Gruppe, der zweite das einzelne Objekt darin (wie in PowerPoint)
+      let clickInGroup = false;
       if (!ED.sel.includes(nid)) ED.sel = grpOf(nid);
+      else if (ED.sel.length > 1 && (byId(nid) || {}).g && grpOf(nid).every((x) => ED.sel.includes(x))) { ED.sel = [nid]; clickInGroup = true; }
       render();
       // Tabellen: ein Klick in eine Zelle setzt gleich die Schreibmarke dorthin (wie in PowerPoint) – Verschieben am Rahmen
       const tblCell = (byId(nid) || {}).t === 'table' && ev.target.closest && ev.target.closest('td');
-      startDrag(ev, 'move', wasSel || tblCell || (host.editOnFirstClick && host.editOnFirstClick(byId(nid))) ? nid : null);
+      startDrag(ev, 'move', !clickInGroup && (wasSel || tblCell || (host.editOnFirstClick && host.editOnFirstClick(byId(nid)))) ? nid : null);
       return true;
     }
     function startDrag(ev, mode, clickEdit) {
@@ -2543,7 +2587,7 @@
       return false;
     }
     function select(ids) { endEdit(); ED.sel = ids.filter((id) => byId(id)); render(); }
-    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, addMathTex, mathPut, mathLatex, imClose, mfTexNow: () => mfTex(), fmt, menu });
+    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, addMathTex, pick, pickEv: (ev) => pick(...toLocal(ev)), mathPut, mathLatex, imClose, mfTexNow: () => mfTex(), fmt, menu });
     return ED;
   }
 
@@ -2802,7 +2846,7 @@
     new ResizeObserver(() => fit()).observe(stage);
     $('.dk-notes textarea', root).oninput = (ev) => { const s0 = slide(); if (!s0) return; if (ev.target.value) s0.notes = ev.target.value; else delete s0.notes; save(); };
     stage.addEventListener('pointerdown', (ev) => { if (!D.deck) return; if (INK.t && inkDown(ev)) return; D.ed.down(ev); });
-    stage.addEventListener('dblclick', (e) => { const n = e.target.closest('.dk-el'); if (n) D.ed.startEdit(n.dataset.id, e); });
+    stage.addEventListener('dblclick', (e) => { if (INK.t || Date.now() - (D.ed.lastDbl || 0) < 700) return; const pk = D.ed.pickEv(e), n = e.target.closest('.dk-el'); const id = pk ? pk.id : n && n.dataset.id; if (id) D.ed.startEdit(id, e); });
   }
 
   // ------------------------------------------------------------------ Laden, Speichern

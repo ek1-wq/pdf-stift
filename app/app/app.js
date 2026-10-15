@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.98.0';
+  const VERSION = '1.98.1';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -5064,7 +5064,8 @@
     if (!OB.ed || !OB.P || inMathEdit(e)) return;
     const pe = e.target.closest('.page');
     if (!pe || V.pages[+pe.dataset.i] !== OB.P) return;
-    const h = obHit(OB.P, ...obLocal(OB.P, e));
+    if (Date.now() - (OB.ed.lastDbl || 0) < 700) return; // schon als Doppelklick erkannt
+    const h = (OB.ed.pickEv && OB.ed.pickEv(e)) || obHit(OB.P, ...obLocal(OB.P, e));
     if (h) { e.preventDefault(); e.stopPropagation(); OB.ed.startEdit(h.id, e); }
   }, true);
   document.addEventListener('keydown', (e) => {
