@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.97.1';
+  const VERSION = '1.97.2';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -121,7 +121,7 @@
     try { await apiJson('prefs', { method: 'POST', body: { ui, uiT } }); } catch (e) { ks.forEach((k) => UIS.dirty.add(k)); }
   }
   // Klick in eine Formel, die gerade bearbeitet wird: gehört dem Eingabefeld (kein Kommentar, kein Stift, kein Verschieben)
-  const inMathEdit = (e) => !!(e.target && e.target.closest && e.target.closest('math-field, .dk-impop, .dk-mf, .dk-el.editing'));
+  const inMathEdit = (e) => !!(e.target && e.target.closest && e.target.closest('math-field, .dk-impop, .dk-mf, .dk-el.editing, .dk-h, .dk-handles'));
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   // Rechteck (PDF-Koordinaten) → Anzeige; pdf.js 6 hat convertToViewportRectangle nicht mehr
   const vpRect = (vp, r) => { const a = vp.convertToViewportPoint(r[0], r[1]), b = vp.convertToViewportPoint(r[2], r[3]); return [a[0], a[1], b[0], b[1]]; };
@@ -13233,10 +13233,11 @@
     }
     const hit = noteAt(P, (e.clientX - r.left) / sc, (e.clientY - r.top) / sc);
     if (hit) { e.stopPropagation(); e.preventDefault(); openNote(P, 0, 0, hit); return; }
+    if (OB.ed || obUnder(e) || (e.target.closest && e.target.closest('.dk-h, .dk-handles'))) return; // Objekt (Formel, Textfeld …) angeklickt oder gerade gewählt: kein neuer Kommentar
     if (S.tool === 'nt' && e.button === 0 && (e.pointerType !== 'touch' || S.finger)) { e.stopPropagation(); e.preventDefault(); openNote(P, (e.clientX - r.left) / sc - 4, (e.clientY - r.top) / sc - 4, null); }
   }, true);
   pagesEl.addEventListener('click', (e) => {
-    if (S.tool !== 'nt' || V.board || notePop || e.target.closest('.note-pop') || inMathEdit(e)) return;
+    if (S.tool !== 'nt' || V.board || notePop || e.target.closest('.note-pop') || inMathEdit(e) || OB.ed || obUnder(e)) return;
     if (e.pointerType && e.pointerType !== 'touch') return;
     const pageEl = e.target.closest('.page'); if (!pageEl) return;
     const P = V.pages[+pageEl.dataset.i]; const r = P.el.getBoundingClientRect(), sc = r.width / P.w;

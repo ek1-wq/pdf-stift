@@ -1401,7 +1401,7 @@
       }
       box.appendChild(sl);
       if (host.rendered) host.rendered();
-      if (ED.sel.length === 1 && !ED.edit) handles(sl);
+      if (ED.sel.length === 1 && (!ED.edit || ED.edit.math)) handles(sl); // Formel: auch beim Bearbeiten an den Ecken größer und kleiner ziehen
       if (ED.edit) { const n = sl.querySelector(`.dk-el[data-id="${ED.edit.id}"]`); if (n) reEdit(n); }
     }
     function handles(sl) {
@@ -2169,6 +2169,7 @@
         // dasselbe Eingabefeld wandert in den neu gezeichneten Knoten (Inhalt und Schreibmarke bleiben)
         const mf = ED.mf, had = document.activeElement === mf, v = mf.value;
         // beim Bearbeiten mindestens gut lesbar groß (kleine Formeln auf PDF-Seiten), damit die Kästchen leicht zu treffen sind
+        ED.edit.fs = e.svg ? mathFs(e) : e.fs || ED.edit.fs; // nach dem Größerziehen die neue Schriftgröße
         const kk = host.k ? host.k() || 1 : 1;
         mf.style.fontSize = Math.max(ED.edit.fs, 30 / kk) + 'px';
         mf.style.color = e.c || host.theme().fg;
@@ -2331,13 +2332,14 @@
           const keep = e.t === 'math' || (e.t === 'img' && !m.shiftKey) || (e.t !== 'img' && m.shiftKey && mode.length === 2);
           if (keep && mode.length !== 2 && e.t === 'math') { const a = o.w / o.h; if (mode === 'e' || mode === 'w') nh = nw / a; else nw = nh * a; }
           if (keep && mode.length === 2) { const a = o.w / o.h; if (nw / nh > a) nw = nh * a; else nh = nw / a; }
-          const mn = 8 * u() * 0.5;
+          const mn = e.t === 'math' ? 6 * u() : 8 * u() * 0.5;
           nw = Math.max(mn, nw); nh = Math.max(isLine(e) ? 4 * u() : mn, nh);
           // feste Gegenecke: Position so verschieben, dass sie stehen bleibt
           const ax = mode.includes('w') ? o.w - nw : 0, ay = mode.includes('n') ? o.h - nh : 0;
           const ddx = ax + nw / 2 - o.w / 2, ddy = ay + nh / 2 - o.h / 2;
           const gx = ddx * cs - ddy * sn, gy = ddx * sn + ddy * cs;
           Object.assign(e, { x: r1(o.x + o.w / 2 + gx - nw / 2), y: r1(o.y + o.h / 2 + gy - nh / 2), w: r1(nw), h: r1(nh) });
+          if (e.t === 'math') e.fs = r1(((o.svg ? mathFs(o) : o.fs) || 32) * nh / o.h); // Formel: Schriftgröße wächst mit
         }
         place(list);
       };

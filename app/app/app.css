@@ -1402,6 +1402,7 @@ body.ob-placing .page { cursor: crosshair !important; }
 .dk-math.editing > .dk-mrow { visibility: hidden; }
 /* Formel direkt auf der Folie bearbeiten; Werkzeuge im Reiter „Formel“ */
 .dk-math.editing { overflow: visible; z-index: 5; }
+.dk-live .dk-handles { z-index: 8; } /* Griffe liegen über dem Eingabefeld einer Formel */
 .dk-math.editing > svg { visibility: hidden; }
 .dk-mf { position: absolute; left: 0; top: 50%; transform: translateY(-50%); min-width: 100%; box-sizing: border-box; padding: 2px 4px; border: 0; border-radius: 4px;
   background: rgba(255, 255, 255, .92); outline: 1.5px dashed #1E2F6E; --caret-color: #1E2F6E; --selection-background-color: #DDE5FB; --primary: #1E2F6E; --contains-highlight-background-color: rgba(30, 47, 110, .06); }
