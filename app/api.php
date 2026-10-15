@@ -893,6 +893,11 @@ switch ($a) {
         }
         json_out(['src' => $src]);
 
+    case 'decksrc':
+        $b = body();
+        $p = (string) ($b['path'] ?? '');
+        json_out(['ok' => deck_set_src($p, (string) ($b['src'] ?? ''))]);
+
     case 'pptxpdf':
         if (soffice_path() === '') {
             fail('Dafür wird LibreOffice gebraucht – es ist hier nicht installiert.', 501);

@@ -3083,6 +3083,7 @@
     return { drawEl };
   }
   // Hintergrund in die PDF: Farbe, Verlauf (feine Streifen) oder Bild (füllend)
+  const BG_IMG = new WeakMap();
   async function drawBg(doc, pg, s, th, K) {
     const b = bgOf(s, th);
     pg.drawRectangle({ x: 0, y: -H * K, width: W * K, height: H * K, color: hexRgb(b.color) });
@@ -3101,8 +3102,10 @@
     }
     if (b.img) {
       try {
-        const bin = new Uint8Array(await (await fetch(imgUrl(b.img), { credentials: 'same-origin' })).arrayBuffer());
-        const im = /\.png$/i.test(b.img) ? await doc.embedPng(bin) : await doc.embedJpg(bin);
+        // dasselbe Hintergrundbild nur einmal in die PDF einbetten (oft auf allen Folien gleich)
+        let cache = BG_IMG.get(doc); if (!cache) BG_IMG.set(doc, (cache = new Map()));
+        if (!cache.has(b.img)) cache.set(b.img, (async () => { const bin = new Uint8Array(await (await fetch(imgUrl(b.img), { credentials: 'same-origin' })).arrayBuffer()); return /\.png$/i.test(b.img) ? doc.embedPng(bin) : doc.embedJpg(bin); })());
+        const im = await cache.get(b.img);
         const a = im.width / im.height, sa = W / H;
         const w = a > sa ? H * a : W, h = a > sa ? H : W / a;
         pg.pushOperators(PDFLib.pushGraphicsState(), PDFLib.rectangle(0, -H * K, W * K, H * K), PDFLib.clip(), PDFLib.endPath());

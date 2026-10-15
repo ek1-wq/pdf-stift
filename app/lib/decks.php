@@ -97,6 +97,10 @@ function deck_save(string $path, array $deck, int $baseRev): array
             @unlink($old);
         }
     }
+    // Verweis auf die Original-PowerPoint-Datei behalten, auch wenn ein älterer Stand ihn noch nicht kennt
+    if (!isset($deck['src']) && is_array($cur) && isset($cur['src'])) {
+        $deck['src'] = $cur['src'];
+    }
     $deck['rev'] = $rev + 1;
     $deck['title'] = trim(mb_substr((string) ($deck['title'] ?? ($cur['title'] ?? 'Präsentation')), 0, 200)) ?: 'Präsentation';
     ftruncate($fp, 0);
@@ -107,4 +111,28 @@ function deck_save(string $path, array $deck, int $baseRev): array
     fclose($fp);
     clearstatcache();
     return ['ok' => true, 'rev' => $deck['rev'], 'mtime' => filemtime($f)];
+}
+
+/** Original-PowerPoint-Datei an einer Präsentation vermerken, ohne den Bearbeitungsstand (rev) zu ändern */
+function deck_set_src(string $path, string $src): bool
+{
+    $f = deck_file($path);
+    if (!is_file($f) || !preg_match('/^[a-f0-9]{40}\.pptx$/', $src)) {
+        return false;
+    }
+    $fp = fopen($f, 'c+');
+    if (!$fp || !flock($fp, LOCK_EX)) {
+        return false;
+    }
+    $cur = json_decode((string) stream_get_contents($fp), true);
+    if (is_array($cur)) {
+        $cur['src'] = $src;
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, (string) json_encode($cur, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        fflush($fp);
+    }
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return is_array($cur);
 }

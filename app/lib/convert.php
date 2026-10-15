@@ -134,12 +134,25 @@ function vector_to_svg(array $f): array
         $ins[(int) $i] = $in;
     }
     $out = array_fill(0, count($names), null);
+    // schon einmal umgewandelte Grafiken (gleicher Inhalt) aus dem Zwischenspeicher – LibreOffice zu starten dauert Sekunden
+    $cdir = storage('cache/svg');
+    $keys = [];
+    foreach ($ins as $i => $in) {
+        $keys[$i] = sha1_file($in);
+        $c = $cdir . '/' . $keys[$i] . '.svg';
+        if (is_file($c)) {
+            $out[$i] = (string) file_get_contents($c);
+            @touch($c);
+            unset($ins[$i]);
+        }
+    }
     if ($ins) {
         soffice_run(array_merge(['--convert-to', 'svg', '--outdir', $dir . '/svg'], array_values($ins)), $dir, 240);
         foreach ($ins as $i => $in) {
             $svg = $dir . '/svg/' . pathinfo($in, PATHINFO_FILENAME) . '.svg';
             if (is_file($svg) && filesize($svg) < 15 * 1024 * 1024) {
                 $out[$i] = (string) file_get_contents($svg);
+                @copy($svg, $cdir . '/' . $keys[$i] . '.svg');
             }
         }
     }

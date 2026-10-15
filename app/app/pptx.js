@@ -1465,8 +1465,10 @@
     const stem0 = String(file.name || '').replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim();
     title = (stem0 && stem0 !== 'x' ? stem0 : title || 'Präsentation').trim().slice(0, 200);
     const deck = { v: 1, w: W, h: H, title, theme, slides };
-    const src = await srcUp; if (src) deck.src = src;
-    return { deck, warn };
+    // auf das Hochladen der Original-Datei nicht lange warten (große Dateien, langsame Leitung): sonst wird es nachgetragen
+    const src = await Promise.race([srcUp, new Promise((r) => setTimeout(() => r(undefined), 1500))]);
+    if (src) deck.src = src;
+    return { deck, warn, srcUp: src === undefined ? srcUp : null };
   }
 
   // ================================================================== Speichern als .pptx

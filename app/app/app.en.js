@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.91.0';
+  const VERSION = '1.92.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -5177,9 +5177,11 @@
     if (!o.quiet) toast("Reading PowerPoint file …", 120000);
     try {
       const M = await pptxMod();
-      const { deck, warn } = await M.importPptx(file, o.quiet ? o.progress : (t) => toast(t, 120000));
+      const { deck, warn, srcUp } = await M.importPptx(file, o.quiet ? o.progress : (t) => toast(t, 120000));
       const r = await apiJson('decknew', { method: 'POST', body: { title: deck.title } });
       await apiJson('deck', { method: 'POST', body: { path: r.path, deck, rev: r.rev } });
+      // Original-Datei noch unterwegs: nach dem Hochladen an der Präsentation vermerken (für „Folie als Bild“)
+      if (srcUp) srcUp.then((src) => (src ? apiJson('decksrc', { method: 'POST', body: { path: r.path, src } }) : null)).catch(() => {});
       S.decks = [{ path: r.path, title: deck.title, slides: deck.slides.length, mtime: Date.now() / 1000 }, ...(S.decks || [])];
       const miss = warn.emf + warn.other;
       if (!o.quiet) toast(`“${deck.title}” imported: ${deck.slides.length} ${deck.slides.length === 1 ? 'Folie' : "slides"}.` + (miss ? ` ${miss} picture(s) in a format the browser cannot show (e.g. EMF) were left out.` : ''), miss ? 9000 : 5000);
