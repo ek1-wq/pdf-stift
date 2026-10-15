@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.94.0';
+  const VERSION = '1.95.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -3756,7 +3756,7 @@
   };
   $('#presentPanel').addEventListener('pointerdown', wakePanel);
   document.addEventListener('keydown', (e) => {
-    if (!PR.on || e.target.matches('input, textarea')) return;
+    if (!PR.on || e.target.matches('math-field, input, textarea')) return;
     if (e.key === 'Escape') setPresent(false);
     // Präsentations-Fernbedienungen senden „Bild ab/auf“
     if (['PageDown', 'ArrowRight', 'ArrowDown', ' '].includes(e.key)) { e.preventDefault(); presentScrollTo(currentPageIndex() + 1); }
@@ -5069,11 +5069,11 @@
     if (!OB.ed && !OB.insert) return;
     if (document.querySelector('dialog[open]')) return;
     if (OB.insert && e.key === 'Escape') { obPlacing(null); e.preventDefault(); e.stopImmediatePropagation(); return; }
-    if (!OB.ed || (e.target.closest && e.target.closest('input, textarea, select'))) return;
+    if (!OB.ed || (e.target.closest && e.target.closest('math-field, input, textarea, select'))) return;
     if (OB.ed.key(e) === true) e.stopImmediatePropagation();
   }, true);
   document.addEventListener('paste', (e) => {
-    if (!OB.ed || OB.ed.edit || !OB.clip || (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]'))) return;
+    if (!OB.ed || OB.ed.edit || !OB.clip || (e.target.closest && e.target.closest('math-field, input, textarea, [contenteditable="true"]'))) return;
     const items = [...(e.clipboardData ? e.clipboardData.items : [])];
     if (items.some((i) => i.type.startsWith('image/'))) return;
     e.preventDefault(); e.stopImmediatePropagation();
@@ -9870,7 +9870,7 @@
   }
   document.addEventListener('paste', (e) => {
     if (!V.path || !S.started) return;
-    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable=true]')) return;
+    if (e.target.closest && e.target.closest('math-field, input, textarea, select, [contenteditable=true]')) return;
     if (editor || B.ed || document.querySelector('dialog[open]') || !$('#toolsView').hidden || !$('#overview').hidden) return;
     const dt = e.clipboardData;
     if (!dt) return;
@@ -10792,7 +10792,7 @@
   $('#undo').onclick = undo;
   $('#redo').onclick = redo;
   document.addEventListener('keydown', (e) => {
-    if (!V.path || (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]'))) return;
+    if (!V.path || (e.target.closest && e.target.closest('math-field, input, textarea, [contenteditable="true"]'))) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
   });
@@ -11712,7 +11712,7 @@
 
   // ---- Tastenkürzel
   document.addEventListener('keydown', (e) => {
-    if (e.target.closest && e.target.closest('input, textarea, [contenteditable], dialog')) return;
+    if (e.target.closest && e.target.closest('math-field, input, textarea, [contenteditable], dialog')) return;
     const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (e.key === ' ' && !ctrl && V.path && !V.board && !spaceHand && S.tool !== 'tt') { spaceHand = true; viewer.classList.add('hand-temp'); }
     if (!ctrl) {
@@ -11750,7 +11750,7 @@
   document.addEventListener('keyup', (e) => { if (e.key === ' ' && spaceHand) { spaceHand = false; viewer.classList.remove('hand-temp'); } });
   // Bild ab / Bild auf: ganze Seiten weiter, wenn nichts anderes den Fokus hat
   document.addEventListener('keydown', (e) => {
-    if (!V.path || V.board || PR.on || e.ctrlKey || e.altKey || (e.target.closest && e.target.closest('input, textarea, [contenteditable], dialog'))) return;
+    if (!V.path || V.board || PR.on || e.ctrlKey || e.altKey || (e.target.closest && e.target.closest('math-field, input, textarea, [contenteditable], dialog'))) return;
     if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); goToPage(clamp(currentPageIndex() + (e.key === 'PageDown' ? 1 : -1), 0, V.pages.length - 1)); }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); viewer.scrollTop += e.key === 'ArrowDown' ? 60 : -60; }
     if (e.key === ' ') e.preventDefault();
@@ -11851,7 +11851,7 @@
     if (c === 'split') { splitToggle(); return; }
     if (SPLIT.frame && (SPLIT.act === 'r' || document.activeElement === SPLIT.frame) && splitPane() && !['split', 'presenter', 'library', 'settings', 'nextTab', 'prevTab', 'close'].includes(c)) { splitPane().cmd(c); return; }
     const ae = document.activeElement;
-    const typing = ae && ae.matches && ae.matches('input, textarea, [contenteditable]');
+    const typing = ae && ae.matches && ae.matches('math-field, input, textarea, [contenteditable]');
     const needDoc = () => { if (!V.path) { toast('Bitte zuerst eine PDF öffnen.'); return false; } return true; };
     switch (c) {
       case 'upload': showLibrary(); $('#btnUpload').click(); break;
@@ -12124,7 +12124,7 @@
   window.addEventListener('resize', () => splitPlace());
   // Werkzeug-Kürzel: V = Auswählen, H = Hand, P = Stift, M = Marker, U = Text markieren, T = Textfeld, E = Radierer
   document.addEventListener('keydown', (e) => {
-    if (!V.path || V.board || e.ctrlKey || e.metaKey || e.altKey || (e.target.closest && e.target.closest('input, textarea, [contenteditable], dialog'))) return;
+    if (!V.path || V.board || e.ctrlKey || e.metaKey || e.altKey || (e.target.closest && e.target.closest('math-field, input, textarea, [contenteditable], dialog'))) return;
     const t = { v: 'sel', h: 'hand', p: 'pen', m: 'hl', u: 'tx', t: 'tt', e: 'er' }[e.key.toLowerCase()];
     if (t && !e.repeat) { S.tool = t; persistTools(); renderToolbar(); }
   });

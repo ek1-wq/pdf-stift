@@ -577,7 +577,7 @@
     rowAdd: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M12 16.5v5M9.5 19h5"/>', rowDel: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M9.5 19h5"/>',
     colAdd: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5M19 9.5v5"/>', colDel: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5"/>',
     newslide: '<rect x="3.5" y="5" width="13" height="10" rx="1"/><path d="M19 13v6M16 16h6"/>', layout: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9h17M10 9v10.5"/>',
-    math: '<path d="M17 4H7l5 8-5 8h10"/>', mathEdit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+    math: '<path d="M17 4H7l5 8-5 8h10"/>', latex: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 5l-4 14"/>', done: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', mathEdit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
     chart: '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="7"/><rect x="10.5" y="6" width="3" height="12"/><rect x="15.5" y="9" width="3" height="9"/>',
     omega: '<path d="M5 19h4.5v-2.2A6.5 6.5 0 1 1 14.5 16.8V19H19"/>', crop: '<path d="M7 3v14h14"/><path d="M3 7h14v14"/>', link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
     date: '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>', hf: '<rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M7 16.5h10M7 7h10" stroke-dasharray="2 1.5"/>',
@@ -988,12 +988,12 @@
     const raw = sv.innerHTML.replace(/ data-[a-z-]+="[^"]*"/g, '').replace(/(\d+\.\d)\d+/g, '$1');
     return { svg: mathSafe(raw), vb, err: er ? er.getAttribute('data-mjx-error') || 'Fehler' : '' };
   }
-  const mathFs = (e) => (e && e.vb && e.vb[3] ? (e.h * 1000) / e.vb[3] : 32);
+  const mathFs = (e) => (e && e.svg && e.vb && e.vb[3] ? (e.h * 1000) / e.vb[3] : (e && e.fs) || 32);
   // Größe ändern: Schriftgröße fs, die linke Kante und die Mitte senkrecht bleiben
   function mathScale(e, fs) {
     if (!e.vb) return;
     const cy = e.y + e.h / 2;
-    e.w = r1((e.vb[2] / 1000) * fs); e.h = r1((e.vb[3] / 1000) * fs);
+    e.w = r1((e.vb[2] / 1000) * fs); e.h = r1((e.vb[3] / 1000) * fs); e.fs = r1(fs);
     e.y = r1(cy - e.h / 2);
   }
   // Formel als eigenständige SVG-Datei (für die PowerPoint-Ausgabe als Ersatzbild)
@@ -1057,69 +1057,6 @@
     ["Mean", '\\bar{x}=\\frac{1}{n}\\sum_{i=1}^{n}x_i'],
     ["Quadratic formula", 'x_{1,2}=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}'],
   ];
-  // Fenster „Formel“: liefert { tex, svg, vb, c, fs } oder null
-  async function mathDialog(e, th, fs0) {
-    let slow = setTimeout(() => C.toast("Loading the equation component …", 3000), 400);
-    try { await mathLib(true); } catch (err) { clearTimeout(slow); C.toast(err.message, 6000); return null; }
-    clearTimeout(slow);
-    th = th || DEF_TH;
-    const cols = ['', '#1A1A1A', th.accent, '#1F4FD6', '#1B8A3A', '#D6262B', '#E8590C', '#7048E8'].filter((c, i, a) => a.indexOf(c) === i);
-    const c0 = (e && e.c) || '';
-    fs0 = Math.round(fs0 || 32);
-    const sizes = [...new Set([...SIZES.filter((x) => x >= 12), fs0])].sort((a, b) => a - b);
-    const icon = (x) => (x[2] ? `<svg viewBox="0 0 24 24">${x[2]}</svg>` : `<span>${esc(x[3])}</span>`);
-    const html = `<div class="mf-tools">
-      <div class="mf-grp"><div class="mf-struct">${MATH_STRUCT.map((x, i) => `<button type="button" class="mf-b" data-st="${i}" title="${esc(x[0])}" aria-label="${esc(x[0])}">${icon(x)}</button>`).join('')}</div><span class="mf-cap">Structure</span></div>
-      <div class="mf-grp"><div class="mf-sym">${MATH_SYM.map((x, i) => `<button type="button" class="mf-b mf-s" data-sy="${i}" title="${esc(x[1])}">${esc(x[0])}</button>`).join('')}</div><span class="mf-cap">Symbols</span></div>
-      <div class="mf-grp mf-side"><label>Template<select class="mf-tpl"><option value="">– insert –</option>${MATH_TPL.map((x, i) => `<option value="${i}">${esc(x[0])}</option>`).join('')}</select></label></div>
-    </div>
-    <div class="mf-box"></div>
-    <p class="mf-hint muted small">Just type: / makes a fraction, ^ a superscript, _ a subscript; the arrow keys move between the fields.</p>
-    <details class="mf-tex"><summary>Edit as LaTeX</summary><textarea rows="2" spellcheck="false" autocomplete="off"></textarea></details>
-    <div class="mf-opts"><span>Colour</span>${cols.map((c) => `<button type="button" class="mf-col${c === c0 ? ' on' : ''}" data-c="${c}" title="${c ? c : "like the text"}" aria-label="${c ? "Colour " + c : "Colour like the text"}" style="--c:${c || th.fg}">${c ? '' : 'A'}</button>`).join('')}
-      <label>Size <select class="mf-fs">${sizes.map((x) => `<option value="${x}"${x === fs0 ? ' selected' : ''}>${x} pt</option>`).join('')}</select></label></div>
-    <p class="mf-err" hidden></p>`;
-    let res = null, col = c0;
-    const d0 = await modalEl(e ? "Edit equation" : "Equation", html, e ? "Apply" : "Insert", (d) => {
-      d.classList.add('mf-dlg');
-      const mf = document.createElement('math-field');
-      mf.className = 'mf-field';
-      d.querySelector('.mf-box').appendChild(mf);
-      const ta = d.querySelector('.mf-tex textarea'), err = d.querySelector('.mf-err');
-      try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.container = d; } catch (er) { /* */ }
-      mf.value = (e && e.tex) || '';
-      ta.value = mf.value;
-      mf.addEventListener('input', () => { ta.value = mf.value; err.hidden = true; });
-      ta.addEventListener('input', () => { mf.value = ta.value; err.hidden = true; });
-      const put = (t) => { mf.focus(); mf.insert(t, { selectionMode: 'placeholder', format: 'latex' }); ta.value = mf.value; };
-      d.querySelector('.mf-tools').onclick = (ev) => {
-        const b = ev.target.closest('button'); if (!b) return;
-        if (b.dataset.st != null) put(MATH_STRUCT[+b.dataset.st][1]);
-        if (b.dataset.sy != null) put(MATH_SYM[+b.dataset.sy][1]);
-      };
-      d.querySelector('.mf-tools').onmousedown = (ev) => { if (ev.target.closest('button')) ev.preventDefault(); }; // Schreibmarke bleibt in der Formel
-      d.querySelector('.mf-tpl').onchange = (ev) => { const i = ev.target.value; ev.target.value = ''; if (i !== '') put(MATH_TPL[+i][1]); };
-      d.querySelector('.mf-opts').onclick = (ev) => {
-        const b = ev.target.closest('[data-c]'); if (!b) return;
-        col = b.dataset.c;
-        d.querySelectorAll('.mf-col').forEach((x) => x.classList.toggle('on', x === b));
-      };
-      d.querySelector('form').onsubmit = (ev) => {
-        ev.preventDefault();
-        const tex = (mf.getValue ? mf.getValue('latex-without-placeholders') : mf.value).trim();
-        if (!tex) { d.close('no'); return; }
-        try {
-          const r = texSvg(tex);
-          if (r.err) { err.textContent = "The equation contains an error: " + r.err; err.hidden = false; return; }
-          res = { tex, svg: r.svg, vb: r.vb, c: col, fs: +d.querySelector('.mf-fs').value || 32 };
-          d.close('yes');
-        } catch (er) { err.textContent = "The equation cannot be typeset."; err.hidden = false; }
-      };
-      setTimeout(() => mf.focus(), 60);
-    });
-    try { if (window.mathVirtualKeyboard) { window.mathVirtualKeyboard.hide(); window.mathVirtualKeyboard.container = document.body; } } catch (er) { /* */ }
-    return d0 ? res : null;
-  }
   // ================================================================== Sonderzeichen
   const SYMBOLS = [
     ["Greek", 'α β γ δ ε ζ η θ ι κ λ μ ν ξ π ρ σ τ υ φ χ ψ ω Γ Δ Θ Λ Ξ Π Σ Φ Ψ Ω'],
@@ -1316,6 +1253,9 @@
       const tabs = [['start', 'Start'], ['insert', "Insert"], ...(host.tabs ? host.tabs() : [])];
       // Browser und Tablet: eigener Reiter „Hilfe“ (in der Windows-App steht dafür das Menü Hilfe in der Reiterzeile)
       if (!(window.pdfstiftWin && window.pdfstiftWin.menuPop) && document.querySelector('[data-act="help"]')) tabs.push(['help', "Help"]);
+      // Reiter „Formel“: erscheint nur, wenn eine Formel bearbeitet wird oder gewählt ist (wie in Office), hinter „Ansicht“
+      const mathOn = !!(ED.edit && ED.edit.math) || (list.length === 1 && e.t === 'math');
+      if (mathOn) { const vi = tabs.findIndex((t) => t[0] === 'view'); const hi = tabs.findIndex((t) => t[0] === 'help'); tabs.splice(vi >= 0 ? vi + 1 : hi >= 0 ? hi : tabs.length, 0, ['math', "Equation"]); }
       if (!tabs.some((t) => t[0] === RB.tab)) RB.tab = 'start';
       let h = '';
       if (RB.tab === 'start' && !has && !ED.edit && !ED.painter && host.startIdle) h += host.startIdle(kit, !!(ED.clip || (host.clipboard && host.clipboard())));
@@ -1370,6 +1310,20 @@
         h += grp('Text', big('data-ins="text"', "Text box", ICON.textbox) + rows(sb('date', "Insert today's date", RI.date, { label: "Date" }), sb('link', "Link: select text in a text box first", RI.link, { label: 'Link', en: !!ED.edit }), ...(host.insertText ? [host.insertText(kit)] : [])));
         h += grp("Symbols", big('data-ins="math"', "Equation", RI.math) + big('data-menu="sym"', "Special characters", RI.omega, true, true));
         if (host.insertExtra) h += host.insertExtra(kit);
+      } else if (RB.tab === 'math') {
+        const editing = !!(ED.edit && ED.edit.math);
+        const mst = (x, i) => `<button type="button" class="rb-s rb-mst" data-f="mst" data-v="${i}" title="${esc(x[0])}" aria-label="${esc(x[0])}">${x[2] ? svg(x[2]) : `<span class="rb-mt">${esc(x[3])}</span>`}</button>`;
+        const half = Math.ceil(MATH_STRUCT.length / 2);
+        h += grp("Structures", rows(MATH_STRUCT.slice(0, half).map((x, i) => mst(x, i)).join(''), MATH_STRUCT.slice(half).map((x, i) => mst(x, i + half)).join('')), 'rb-math');
+        const per = Math.ceil(MATH_SYM.length / 3);
+        h += grp("Symbols", rows(...[0, 1, 2].map((r) => MATH_SYM.slice(r * per, r * per + per).map((x, i) => `<button type="button" class="rb-s rb-msy" data-f="msy" data-v="${r * per + i}" title="${esc(x[1])}">${esc(x[0])}</button>`).join(''))), 'rb-math');
+        h += grp("Templates", big('data-menu="mtpl"', "Template", RI.math, true, true));
+        const em = e && e.t === 'math' ? e : null;
+        const fsM = em ? Math.round(mathFs(em) / u()) : 32;
+        const szs = [...new Set([...SIZES.filter((x) => x >= 10), fsM])].sort((a, b) => a - b);
+        h += grp("Equation", rows(cb('color', "Equation colour", (em && em.c) || host.theme().fg, false, '<span class="cb-a">A</span>', !!em),
+          `<select data-f="fs" class="rb-size" title="Equation size"${dis(!!em)}>${szs.map((x) => `<option value="${x}"${x === fsM ? ' selected' : ''}>${x}</option>`).join('')}</select>`) +
+          big('data-f="mlatex"', 'LaTeX', RI.latex) + big('data-f="mdone"', "Done", RI.done, editing));
       } else if (host.tabContent) h += host.tabContent(RB.tab, kit);
       if (RB.tab === 'help') {
         const hb = (act, label, ic, title) => `<button type="button" class="rb-big" data-hact="${act}" title="${esc(title || label)}">${svg(ic)}<span>${esc(label)}</span></button>`;
@@ -1422,6 +1376,7 @@
     function menu(m, btn) {
       const r = btn.getBoundingClientRect(), x = r.left, y = r.bottom + 4;
       const n = ED.sel.length;
+      if (m === 'mtpl') { popMenu(x, y, MATH_TPL.map((t, i) => ['t' + i, t[0], () => mathPut(t[1])])); return; }
       if (m === 'arrange') {
         const word = host.alignWord ? "page" : 'Folie';
         popMenu(x, y, [
@@ -1493,8 +1448,12 @@
       if (f === 'selall') { select(els().map((x) => x.id)); return; }
       if (f === 'rot90') { each((x) => { x.r = ((x.r || 0) + 90) % 360; }); return; }
       if (f === 'rot0') { each((x) => { x.r = 0; }); return; }
-      if ((f === 'fs' || f === 'fs+' || f === 'fs-') && ED.edit && sizeSelection(f, v)) return;
-      if (f === 'mathedit') { if (ids[0]) openMath(ids[0]); return; }
+      if ((f === 'fs' || f === 'fs+' || f === 'fs-') && ED.edit && !ED.edit.math && sizeSelection(f, v)) return;
+      if (f === 'mathedit') { if (ids[0]) startMath(ids[0]); return; }
+      if (f === 'mst') { mathPut(MATH_STRUCT[+v][1]); return; }
+      if (f === 'msy') { mathPut(MATH_SYM[+v][1]); return; }
+      if (f === 'mlatex') { mathLatex(); return; }
+      if (f === 'mdone') { endEdit(); return; }
       // Formeln: Größe über die Schriftgröße, Farbe fürs ganze Objekt
       const mths = ids.map(byId).filter((x) => x && x.t === 'math');
       if (mths.length && (f === 'fs' || f === 'fs+' || f === 'fs-' || f === 'color')) {
@@ -1503,6 +1462,7 @@
           const c = mathFs(x) / u();
           const t = f === 'fs' ? +v : f === 'fs+' ? (SIZES.find((z) => z > c + 0.1) || c + 8) : ([...SIZES].reverse().find((z) => z < c - 0.1) || Math.max(6, c - 2));
           mathScale(x, t * u());
+          if (ED.edit && ED.edit.math && ED.edit.id === x.id) ED.edit.fs = x.fs;
         }), true);
         if (mths.length === ids.length) return;
       }
@@ -1654,32 +1614,81 @@
       const r = await chartDialog(e);
       if (r) change(() => { const t = byId(id); if (t) Object.assign(t, r); }, true);
     }
+    // ---------------------------------------------------------------- Formeln: direkt auf der Folie tippen, die Werkzeuge stehen im Reiter „Formel“
+    const mfTex = () => (ED.mf ? (ED.mf.getValue ? ED.mf.getValue('latex-without-placeholders') : ED.mf.value).trim() : '');
     async function addMath() {
       endEdit();
-      const q = u();
-      const r = await mathDialog(null, host.theme(), 32);
-      if (!r) return;
+      try { await mathLib(true); } catch (err) { C.toast(err.message, 6000); return; }
+      const fs = 32 * u();
       const [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
-      let w = (r.vb[2] / 1000) * r.fs * q, h = (r.vb[3] / 1000) * r.fs * q;
-      const mx = host.W() * 0.9;
-      if (w > mx) { h *= mx / w; w = mx; }
-      const e = { id: uid(), r: 0, t: 'math', tex: r.tex, svg: r.svg, vb: r.vb, x: r1(cx - w / 2), y: r1(cy - h / 2), w: r1(w), h: r1(h) };
-      if (r.c) e.c = r.c;
+      const e = { id: uid(), r: 0, t: 'math', tex: '', svg: '', vb: [0, -1000, 3000, 1500], fs: r1(fs), x: r1(cx - fs * 1.5), y: r1(cy - fs * 0.75), w: r1(fs * 3), h: r1(fs * 1.5) };
       change(() => { els().push(e); ED.sel = [e.id]; }, true);
+      await startMath(e.id, true);
     }
-    async function openMath(id) {
+    async function startMath(id, fresh) {
+      if (ED.edit && ED.edit.id === id) return;
+      let slow = setTimeout(() => C.toast("Loading the equation component …", 3000), 400);
+      try { await mathLib(true); } catch (err) { C.toast(err.message, 6000); return; } finally { clearTimeout(slow); }
       const e = byId(id);
       if (!e) return;
       endEdit();
-      const r = await mathDialog(e, host.theme(), mathFs(e) / u());
-      if (!r) return;
-      change(() => {
-        const t = byId(id);
-        if (!t) return;
-        Object.assign(t, { tex: r.tex, svg: r.svg, vb: r.vb });
-        if (r.c) t.c = r.c; else delete t.c;
-        mathScale(t, r.fs * u());
-      }, true);
+      ED.sel = [id];
+      ED.edit = { id, before: fresh ? '' : JSON.stringify(e), snap: host.snap(), cell: null, math: true, fs: mathFs(e), tex0: e.tex || '' };
+      if (!ED.mf) {
+        ED.mf = document.createElement('math-field');
+        ED.mf.className = 'dk-mf';
+        ED.mf.addEventListener('input', () => { const t = ED.edit && ED.edit.math && byId(ED.edit.id); if (t) t.tex = mfTex(); });
+        ED.mf.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      }
+      ED.mf.value = e.tex || '';
+      if (RB.tab !== 'math') { ED.prevTab = RB.tab; RB.tab = 'math'; }
+      render();
+      setTimeout(() => { if (!ED.mf || !ED.edit || !ED.edit.math) return; ED.mf.focus(); try { ED.mf.executeCommand('moveToMathfieldEnd'); } catch (er) { /* */ } }, 30);
+    }
+    // Formel fertig: setzen (MathJax), Größe nach der Schriftgröße; leer = wieder weg
+    function endMath(ed) {
+      const e = byId(ed.id);
+      const tex = mfTex();
+      if (ED.mf) { try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide(); } catch (er) { /* */ } ED.mf.remove(); }
+      if (RB.tab === 'math') RB.tab = ED.prevTab && ED.prevTab !== 'math' ? ED.prevTab : 'start';
+      let changed = false;
+      if (e && !tex) { host.setEls(els().filter((x) => x.id !== e.id)); ED.sel = []; changed = !!ed.before; }
+      else if (e) {
+        if (tex !== ed.tex0 || !e.svg) {
+          try {
+            const r = texSvg(tex);
+            const was = !e.svg, cx = e.x + e.w / 2;
+            Object.assign(e, { tex, svg: r.svg, vb: r.vb });
+            mathScale(e, ed.fs);
+            if (was) e.x = r1(cx - e.w / 2);
+            if (r.err) C.toast("The equation contains an error: " + r.err, 6000);
+          } catch (er) { e.tex = ed.tex0; C.toast("The equation cannot be typeset.", 5000); }
+        }
+        changed = JSON.stringify(e) !== ed.before;
+      }
+      if (changed) host.commit(ed.snap);
+      render();
+    }
+    // Knopf im Reiter „Formel“: in die gerade bearbeitete Formel einsetzen (sonst die gewählte öffnen oder eine neue anlegen)
+    async function mathPut(t) {
+      if (!(ED.edit && ED.edit.math)) {
+        const sel = ED.sel.length === 1 && byId(ED.sel[0]);
+        if (sel && sel.t === 'math') await startMath(sel.id); else await addMath();
+      }
+      if (!ED.mf || !ED.edit || !ED.edit.math) return;
+      ED.mf.focus();
+      ED.mf.insert(t, { selectionMode: 'placeholder', format: 'latex' });
+      const e = byId(ED.edit.id);
+      if (e) e.tex = mfTex();
+    }
+    async function mathLatex() {
+      if (!(ED.edit && ED.edit.math)) { const sel = ED.sel.length === 1 && byId(ED.sel[0]); if (sel && sel.t === 'math') await startMath(sel.id); else await addMath(); }
+      if (!ED.edit || !ED.edit.math) return;
+      const id = ED.edit.id;
+      const v = await C.askText('LaTeX', "The equation as LaTeX:", mfTex(), "Apply");
+      if (v == null || !ED.edit || ED.edit.id !== id) return;
+      ED.mf.value = v; const e = byId(id); if (e) e.tex = mfTex();
+      ED.mf.focus();
     }
     async function addChart() {
       const q = u(), [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
@@ -1770,7 +1779,7 @@
     function startEdit(id, ev) {
       const e = byId(id);
       if (e && e.t === 'chart') { openChart(id); return; }
-      if (e && e.t === 'math') { openMath(id); return; }
+      if (e && e.t === 'math') { startMath(id); return; }
       if (!e || e.t === 'img' || isLine(e) || isOpen(e)) return;
       if (ED.edit && ED.edit.id === id) return;
       endEdit();
@@ -1796,6 +1805,16 @@
       const e = byId(ED.edit.id);
       if (!e) return;
       n.classList.add('editing', 'sel');
+      if (ED.edit.math) {
+        // dasselbe Eingabefeld wandert in den neu gezeichneten Knoten (Inhalt und Schreibmarke bleiben)
+        const mf = ED.mf, had = document.activeElement === mf, v = mf.value;
+        mf.style.fontSize = ED.edit.fs + 'px';
+        mf.style.color = e.c || host.theme().fg;
+        n.appendChild(mf);
+        if (mf.value !== v) mf.value = v;
+        if (had) mf.focus();
+        return;
+      }
       if (e.t === 'table') {
         n.querySelectorAll('.dk-cell').forEach((c) => {
           c.contentEditable = 'true';
@@ -1824,6 +1843,7 @@
       if (!ED.edit) return;
       const ed = ED.edit;
       ED.edit = null;
+      if (ed.math) { endMath(ed); return; }
       let e = byId(ed.id);
       let changed = !e;
       if (e) {
@@ -2647,7 +2667,7 @@
     D.ed.act(a, b);
   }
   function onPaste(ev) {
-    if (!D.root || D.root.hidden || D.ed.edit || ev.target.closest('input, textarea, [contenteditable="true"]')) return;
+    if (!D.root || D.root.hidden || D.ed.edit || ev.target.closest('math-field, input, textarea, [contenteditable="true"]')) return;
     const items = [...(ev.clipboardData ? ev.clipboardData.items : [])];
     const img = items.find((i) => i.type.startsWith('image/'));
     if (img) { ev.preventDefault(); D.ed.addImage(img.getAsFile()); return; }
@@ -2655,10 +2675,10 @@
   }
   function keys(ev) {
     if (!D.root || D.root.hidden || !D.deck || document.querySelector('dialog[open]') || D.show) return;
-    const inField = ev.target.closest && ev.target.closest('input, textarea, select');
+    const inField = ev.target.closest && ev.target.closest('math-field, input, textarea, select');
     const mod = ev.ctrlKey || ev.metaKey;
     if (D.ed.edit) {
-      if (mod && ev.key.toLowerCase() === 'z') { ev.preventDefault(); undo(); return; }
+      if (mod && ev.key.toLowerCase() === 'z' && !D.ed.edit.math) { ev.preventDefault(); undo(); return; }
       D.ed.key(ev);
       return; // sonst gehört die Taste dem Text
     }
@@ -2876,7 +2896,7 @@
     });
     const setBlack = (v) => { P.black = v; const bl = mounted && mounted.wrap.querySelector('.pr-black'); if (bl) bl.className = 'pr-black ' + v; send({ t: 'black', v }); };
     const kd = (ev) => {
-      if (ev.target.closest && ev.target.closest('input, textarea')) return;
+      if (ev.target.closest && ev.target.closest('math-field, input, textarea')) return;
       const k = ev.key;
       ev.stopPropagation();
       if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter', 'n'].includes(k)) { ev.preventDefault(); go2(pos + 1); }

@@ -1392,33 +1392,18 @@ body.ob-placing .page { cursor: crosshair !important; }
 /* Diagramme, Sonderzeichen, Dialoge der Präsentationen */
 .dk-chart svg text { font-family: inherit; }
 .dk-math > svg { display: block; width: 100%; height: 100%; overflow: visible; }
-/* Fenster „Formel“ */
-.mf-dlg { width: min(860px, 96vw); }
-.mf-tools { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; }
-.mf-grp { display: flex; flex-direction: column; gap: 4px; }
-.mf-cap { font-size: 11px; color: var(--muted); text-align: center; }
-.mf-struct { display: grid; grid-template-columns: repeat(9, 38px); gap: 4px; }
-.mf-sym { display: grid; grid-template-columns: repeat(12, 30px); gap: 3px; }
-.mf-b { height: 38px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--fg); display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; font-family: 'Times New Roman', 'Tinos', serif; font-size: 18px; }
-.mf-b svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
-.mf-b span { font-size: 15px; font-style: italic; white-space: nowrap; }
-.mf-s { height: 30px; font-size: 16px; }
-.mf-b:hover { border-color: var(--accent); background: var(--accent-soft); }
-.mf-side { justify-content: flex-start; }
-.mf-side label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-.mf-box { min-height: 130px; border: 2px solid var(--accent); border-radius: 10px; display: flex; align-items: center; background: #fff; color: #151A2E; }
-.mf-field { flex: 1; font-size: 34px; padding: 18px 16px; border: 0; background: transparent; outline: none; --caret-color: #1E2F6E; --selection-background-color: #E6EBFA; --primary: #1E2F6E; color: #151A2E; }
-.mf-field::part(container) { justify-content: center; }
-.mf-hint { margin: 0; }
-.mf-tex summary { cursor: pointer; color: var(--accent); font-size: 13px; }
-.mf-tex textarea { width: 100%; box-sizing: border-box; margin-top: 6px; font: 13px 'JetBrains Mono', ui-monospace, monospace; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--desk); color: var(--fg); resize: vertical; }
-.mf-opts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
-.mf-opts > span { margin-right: 2px; }
-.mf-col { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line); background: var(--c); color: #fff; font: 700 12px var(--font); cursor: pointer; padding: 0; }
-.mf-col[data-c=""] { background: var(--surface); color: var(--fg); }
-.mf-col.on { box-shadow: 0 0 0 2px var(--bar), 0 0 0 4px var(--accent); }
-.mf-opts label { margin-left: 14px; display: flex; align-items: center; gap: 6px; }
-.mf-err { margin: 0; color: var(--bad); font-size: 13px; }
+/* Formel direkt auf der Folie bearbeiten; Werkzeuge im Reiter „Formel“ */
+.dk-math.editing { overflow: visible; z-index: 5; }
+.dk-math.editing > svg { visibility: hidden; }
+.dk-mf { position: absolute; left: 0; top: 50%; transform: translateY(-50%); min-width: 100%; box-sizing: border-box; padding: 2px 4px; border: 0; border-radius: 4px;
+  background: rgba(255, 255, 255, .92); outline: 1.5px dashed #1E2F6E; --caret-color: #1E2F6E; --selection-background-color: #DDE5FB; --primary: #1E2F6E; --contains-highlight-background-color: rgba(30, 47, 110, .06); }
+.dk-mf::part(menu-toggle) { display: none; }
+.rb-math .rb-row { gap: 1px; }
+.rb-mst svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.3; }
+.rb-mt, .rb-msy { font-family: 'Times New Roman', 'Tinos', serif; }
+.rb-mt { font-size: 14px; font-style: italic; white-space: nowrap; }
+.rb-msy { min-width: 24px; font-size: 15px !important; padding: 0 2px; }
+.rb-tab[data-tab="math"] { color: var(--accent); font-weight: 700; }
 .dk-hf { pointer-events: none !important; }
 .dk-tx a, .dk-cell a { color: #1F4FD6; text-decoration: underline; }
 .dk-sym { width: 360px; }

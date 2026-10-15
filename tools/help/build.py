@@ -149,8 +149,9 @@ DE = {
         ('h2', 'Bearbeiten, vorführen und speichern'),
         ('ul', [
             'Bearbeiten wie in PowerPoint: Folien und Layouts, Design, Textfelder, Formen, Bilder, Tabellen und Diagramme; Animationen im Reiter „Animationen“.',
-            '<b>Formeln</b>: Einfügen → <b>Formel</b> (auch auf PDF-Seiten). Knöpfe für Bruch, Hochzahl, Wurzel, Summe, Integral und Symbole, dazu Vorlagen wie Kapitalwert; '
-            'beim Tippen ergibt / einen Bruch, ^ eine Hochzahl, _ einen Index. Doppelklick bearbeitet die Formel; LaTeX geht auch.',
+            '<b>Formeln</b>: Einfügen → <b>Formel</b> (auch auf PDF-Seiten) und direkt an Ort und Stelle tippen. Dabei erscheint der Reiter <b>Formel</b> mit Struktur '
+            '(Bruch, Hochzahl, Wurzel, Summe, Integral …), Symbolen, Vorlagen wie Kapitalwert, Farbe, Größe und LaTeX. Beim Tippen ergibt / einen Bruch, ^ eine Hochzahl, '
+            '_ einen Index. Fertig: daneben klicken oder „Fertig“; Doppelklick bearbeitet die Formel wieder.',
             'Vorführen: ' + keys('F5') + ' von Beginn an, ' + keys('Umschalt+F5') + ' ab der aktuellen Folie; dazu die Referentenansicht mit nächster Folie, Stoppuhr und Notizen.',
             'Speichern: als PDF oder wieder als PowerPoint-Datei – Animationen, Einzüge, Farben der Aufzählungszeichen, Diagramme und Formeln (in PowerPoint weiter bearbeitbar) bleiben erhalten.',
         ]),
@@ -336,8 +337,9 @@ EN = {
         ('h2', 'Editing, Presenting and Saving'),
         ('ul', [
             'Edit as in PowerPoint: slides and layouts, design, text boxes, shapes, pictures, tables and charts; animations on the “Animations” tab.',
-            '<b>Equations</b>: Insert → <b>Equation</b> (also on PDF pages). Buttons for fraction, superscript, root, sum, integral and symbols, plus templates such as net present value; '
-            'while typing, / makes a fraction, ^ a superscript, _ a subscript. Double-click edits the equation; LaTeX works too.',
+            '<b>Equations</b>: Insert → <b>Equation</b> (also on PDF pages) and type right in place. The <b>Equation</b> tab then appears with structures '
+            '(fraction, superscript, root, sum, integral …), symbols, templates such as net present value, colour, size and LaTeX. While typing, / makes a fraction, '
+            '^ a superscript, _ a subscript. Done: click elsewhere or “Done”; double-click edits the equation again.',
             'Present: ' + keys('F5') + ' from the beginning, ' + keys('Shift+F5') + ' from the current slide; the presenter view shows the next slide, a timer and your notes.',
             'Save as PDF or back as a PowerPoint file – animations, indents, bullet colours, charts and equations (still editable in PowerPoint) are kept.',
         ]),

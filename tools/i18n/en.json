@@ -3308,5 +3308,10 @@
   "Dafür wird LibreOffice gebraucht – es ist hier nicht installiert.": "This needs LibreOffice – it is not installed here.",
   "Die Folien konnten nicht umgewandelt werden.": "The slides could not be converted.",
   "Auf dem Server ist kein LibreOffice installiert.": "LibreOffice is not installed on the server.",
-  "Keine oder zu viele Grafiken.": "No graphics or too many graphics."
+  "Keine oder zu viele Grafiken.": "No graphics or too many graphics.",
+  "Struktur": "Structures",
+  "Vorlagen": "Templates",
+  "Vorlage": "Template",
+  "<select data-f=\"fs\" class=\"rb-size\" title=\"Größe der Formel\"": "<select data-f=\"fs\" class=\"rb-size\" title=\"Equation size\"",
+  "Die Formel als LaTeX-Text:": "The equation as LaTeX:"
 }
