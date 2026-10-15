@@ -449,6 +449,9 @@
         tx.innerHTML = clean(e.html);
         n.appendChild(tx);
       }
+    } else if (e.t === 'math') {
+      n.style.color = e.c || th.fg;
+      n.innerHTML = `<svg viewBox="${(e.vb || [0, 0, 1, 1]).join(' ')}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(e.tex || '')}">${mathSafe(e.svg)}</svg>`;
     } else if (e.t === 'chart') {
       n.innerHTML = chartSvg(e, th);
       if (e.fill) n.style.background = e.fill;
@@ -574,6 +577,7 @@
     rowAdd: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M12 16.5v5M9.5 19h5"/>', rowDel: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M9.5 19h5"/>',
     colAdd: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5M19 9.5v5"/>', colDel: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5"/>',
     newslide: '<rect x="3.5" y="5" width="13" height="10" rx="1"/><path d="M19 13v6M16 16h6"/>', layout: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9h17M10 9v10.5"/>',
+    math: '<path d="M17 4H7l5 8-5 8h10"/>', mathEdit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
     chart: '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="7"/><rect x="10.5" y="6" width="3" height="12"/><rect x="15.5" y="9" width="3" height="9"/>',
     omega: '<path d="M5 19h4.5v-2.2A6.5 6.5 0 1 1 14.5 16.8V19H19"/>', crop: '<path d="M7 3v14h14"/><path d="M3 7h14v14"/>', link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
     date: '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>', hf: '<rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M7 16.5h10M7 7h10" stroke-dasharray="2 1.5"/>',
@@ -600,6 +604,7 @@
       `<div class="rb-shapes" role="group" aria-label="Shapes">${SHAPES.map(([k, l]) => `<button type="button" class="rb-sh" data-ins="shape:${k}" title="${esc(l)} – click or drag" aria-label="${esc(l)}"><svg viewBox="0 0 24 24">${SHAPE_IC[k]}</svg></button>`).join('')}</div>` +
       `<button type="button" class="rb-big" data-ins="img" title="Insert image"><svg viewBox="0 0 24 24">${ICON.img}</svg><span>Bild</span></button>` +
       `<button type="button" class="rb-big" data-ins="table" title="Insert table"><svg viewBox="0 0 24 24">${ICON.table}</svg><span>Tabelle</span></button>` +
+      `<button type="button" class="rb-big" data-ins="math" title="Insert equation"><svg viewBox="0 0 24 24">${RI.math}</svg><span>Formel</span></button>` +
       `<span class="rb-cap">Insert</span></div>`;
   }
 
@@ -904,6 +909,217 @@
     read(d0);
     return { labels, series: ser, ct: d0.querySelector('[name=ct]').value, title: d0.querySelector('[name=title]').value.trim(), legend: d0.querySelector('[name=legend]').checked ? 1 : 0 };
   }
+  // ================================================================== Formeln
+  // Eingeben mit MathLive (Knöpfe wie in Word, die Formel steht sofort gesetzt da), setzen mit MathJax als Vektorgrafik.
+  // Beide Bausteine liegen in vendor/math und werden erst beim ersten Gebrauch geladen. Ein Formel-Objekt speichert
+  // den LaTeX-Text (tex), die fertige Grafik (svg = Inhalt, vb = viewBox, 1000 Einheiten je Schriftgröße) und die Farbe (c).
+  let MATH_P = null, MATH_ED = null, MATH_OM = null;
+  const mathScript = (f) => new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = 'vendor/math/' + f + '?v=' + C.VERSION;
+    sc.onload = res; sc.onerror = () => { sc.remove(); rej(new Error("The equation component could not be loaded.")); };
+    document.head.appendChild(sc);
+  });
+  function mathLib(editor) {
+    if (!MATH_P) {
+      window.MathJax = {
+        startup: { typeset: false },
+        loader: { load: [] },
+        options: { enableMenu: false },
+        tex: { macros: { differentialD: '\\mathrm{d}', exponentialE: '\\mathrm{e}', imaginaryI: '\\mathrm{i}', mleft: '\\left', mright: '\\right', placeholder: ['\\square', 1] } },
+        svg: { fontCache: 'none' },
+      };
+      MATH_P = mathScript('tex-svg-full.js').then(() => window.MathJax.startup.promise);
+      MATH_P.catch(() => { MATH_P = null; });
+    }
+    if (!editor) return MATH_P;
+    if (!MATH_ED) {
+      MATH_ED = mathScript('mathlive.min.js').then(() => {
+        const MF = window.MathfieldElement;
+        MF.fontsDirectory = new URL('vendor/math/fonts/', location.href).href;
+        MF.soundsDirectory = null;
+        try { MF.locale = C.LANG === 'en' ? 'en' : 'de'; } catch (er) { /* */ }
+        try { if (C.LANG !== 'en') MF.decimalSeparator = ','; } catch (er) { /* */ }
+      });
+      MATH_ED.catch(() => { MATH_ED = null; });
+    }
+    return Promise.all([MATH_P, MATH_ED]);
+  }
+  // nur ungefährliche SVG-Bausteine durchlassen (die Grafik kommt aus der gespeicherten Datei)
+  const MATH_TAGS = new Set(['g', 'path', 'rect', 'line', 'polygon', 'svg', 'text']);
+  const MATH_ATTR = new Set(['d', 'transform', 'x', 'y', 'width', 'height', 'x1', 'y1', 'x2', 'y2', 'points', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 'font-family', 'font-size', 'font-weight', 'font-style', 'preserveAspectRatio']);
+  const MATH_SAFE = new Map();
+  function mathSafe(svg) {
+    svg = String(svg || '');
+    if (MATH_SAFE.has(svg)) return MATH_SAFE.get(svg);
+    let out = '';
+    try {
+      const doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${svg}</svg>`, 'image/svg+xml');
+      const root = doc.documentElement;
+      if (root.localName === 'svg' && !doc.querySelector('parsererror')) {
+        const walk = (n) => {
+          for (const ch of n.childNodes) {
+            if (ch.nodeType === 3) { if (n.localName === 'text') out += esc(ch.nodeValue); continue; }
+            if (ch.nodeType !== 1 || !MATH_TAGS.has(ch.localName)) continue;
+            out += '<' + ch.localName;
+            for (const a of ch.attributes) if (MATH_ATTR.has(a.name) && !/url\(|script|expression|[<>"&]/i.test(a.value)) out += ` ${a.name}="${a.value}"`;
+            out += '>';
+            walk(ch);
+            out += `</${ch.localName}>`;
+          }
+        };
+        walk(root);
+      }
+    } catch (er) { out = ''; }
+    if (MATH_SAFE.size > 300) MATH_SAFE.clear();
+    MATH_SAFE.set(svg, out);
+    return out;
+  }
+  // LaTeX → { svg, vb, err }
+  // Schreibweisen von MathLive, die MathJax nicht kennt
+  const texFix = (t) => String(t).replace(/\\euro\b ?/g, '€').replace(/\\textendash\b ?/g, '–').replace(/\\textemdash\b ?/g, '—');
+  function texSvg(tex) {
+    const MJ = window.MathJax;
+    const box = MJ.tex2svg(texFix(tex), { display: true });
+    const sv = box.querySelector('svg');
+    if (!sv) throw new Error("Equation");
+    const er = sv.querySelector('[data-mjx-error]');
+    const vb = sv.getAttribute('viewBox').split(/[\s,]+/).map((v) => Math.round(+v * 10) / 10);
+    const raw = sv.innerHTML.replace(/ data-[a-z-]+="[^"]*"/g, '').replace(/(\d+\.\d)\d+/g, '$1');
+    return { svg: mathSafe(raw), vb, err: er ? er.getAttribute('data-mjx-error') || 'Fehler' : '' };
+  }
+  const mathFs = (e) => (e && e.vb && e.vb[3] ? (e.h * 1000) / e.vb[3] : 32);
+  // Größe ändern: Schriftgröße fs, die linke Kante und die Mitte senkrecht bleiben
+  function mathScale(e, fs) {
+    if (!e.vb) return;
+    const cy = e.y + e.h / 2;
+    e.w = r1((e.vb[2] / 1000) * fs); e.h = r1((e.vb[3] / 1000) * fs);
+    e.y = r1(cy - e.h / 2);
+  }
+  // Formel als eigenständige SVG-Datei (für die PowerPoint-Ausgabe als Ersatzbild)
+  function mathSvgDoc(e, th) {
+    const c = e.c || (th || DEF_TH).fg;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${(e.vb || [0, 0, 1, 1]).join(' ')}" width="${e.w}" height="${e.h}" preserveAspectRatio="xMidYMid meet">${mathSafe(e.svg).replace(/currentColor/g, c)}</svg>`;
+  }
+  // LaTeX → Office-Formel (OMML), damit sie in PowerPoint als echte, änderbare Formel ankommt
+  async function texOmml(tex) {
+    await mathLib();
+    if (!window.MML2OMML) { MATH_OM = MATH_OM || mathScript('mml2omml.min.js'); await MATH_OM; }
+    const mml = window.MathJax.tex2mml(texFix(tex), { display: true });
+    let om = window.MML2OMML(mml);
+    // Summen und Integrale: der Ausdruck dahinter gehört (wie in Word) in den Körper des Zeichens
+    try {
+      const NS = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
+      const doc = new DOMParser().parseFromString(om, 'application/xml');
+      for (const n of [...doc.getElementsByTagNameNS(NS, 'nary')]) {
+        const body = [...n.childNodes].find((x) => x.localName === 'e');
+        if (!body || body.childNodes.length) continue;
+        while (n.nextSibling) {
+          const nx = n.nextSibling;
+          if (nx.localName === 'r' && /^[+\-−=<>≤≥±,;]/.test(nx.textContent.trim())) break;
+          body.appendChild(nx);
+        }
+      }
+      om = new XMLSerializer().serializeToString(doc);
+    } catch (er) { /* wie geliefert */ }
+    return om.replace(/<w:[^>]*\/>|<w:[^>]*>[\s\S]*?<\/w:[^>]*>/g, '').replace(/\s+xmlns:w="[^"]*"/g, '');
+  }
+  const MATH_STRUCT = [
+    ["Fraction", '\\frac{#@}{#?}', '<rect x="8" y="2.5" width="8" height="7" stroke-dasharray="2 1.4"/><path d="M5 12h14" stroke-width="1.6"/><rect x="8" y="14.5" width="8" height="7" stroke-dasharray="2 1.4"/>'],
+    ["Superscript (power)", '#@^{#?}', '<rect x="3" y="9" width="10" height="11" stroke-dasharray="2 1.4"/><rect x="15" y="3" width="6" height="6" stroke-dasharray="2 1.4"/>'],
+    ["Subscript", '#@_{#?}', '<rect x="3" y="4" width="10" height="11" stroke-dasharray="2 1.4"/><rect x="15" y="15" width="6" height="6" stroke-dasharray="2 1.4"/>'],
+    ["Square root", '\\sqrt{#@}', '<path d="M2 13l2.5-1 3 8L11 4h11"/><rect x="12" y="8" width="8" height="9" stroke-dasharray="2 1.4"/>'],
+    ["n-th root", '\\sqrt[#?]{#@}', '<path d="M2 13l2.5-1 3 8L11 4h11"/><rect x="2" y="3" width="5" height="5" stroke-dasharray="2 1.4"/><rect x="12" y="8" width="8" height="9" stroke-dasharray="2 1.4"/>'],
+    ["Brackets", '\\left(#@\\right)', '<path d="M7 3Q3 12 7 21M17 3q4 9 0 18"/><rect x="9" y="8" width="6" height="8" stroke-dasharray="2 1.4"/>'],
+    ["Absolute value", '\\left|#@\\right|', '<path d="M5 3v18M19 3v18"/><rect x="8" y="8" width="8" height="8" stroke-dasharray="2 1.4"/>'],
+    ["Sum", '\\sum_{#?}^{#?}', null, '∑'],
+    ["Product", '\\prod_{#?}^{#?}', null, '∏'],
+    ['Integral', '\\int_{#?}^{#?}', null, '∫'],
+    ["Limit", '\\lim_{#?\\to #?}', null, 'lim'],
+    ["Derivative", '\\frac{d#?}{d#?}', null, 'd/dx'],
+    ["Partial derivative", '\\frac{\\partial #?}{\\partial #?}', null, '∂/∂x'],
+    ["Bar (mean)", '\\overline{#@}', '<path d="M6 4h12"/><rect x="7" y="8" width="10" height="12" stroke-dasharray="2 1.4"/>'],
+    ["Hat", '\\hat{#@}', '<path d="M8 6l4-3 4 3"/><rect x="7" y="8" width="10" height="12" stroke-dasharray="2 1.4"/>'],
+    ["Vector", '\\vec{#@}', '<path d="M6 4h12M15 2l3 2-3 2"/><rect x="7" y="8" width="10" height="12" stroke-dasharray="2 1.4"/>'],
+    ['Matrix 2×2', '\\begin{pmatrix}#?&#?\\\\#?&#?\\end{pmatrix}', '<path d="M5 3Q2 12 5 21M19 3q3 9 0 18"/><rect x="7" y="5" width="4" height="5" stroke-dasharray="2 1.4"/><rect x="13" y="5" width="4" height="5" stroke-dasharray="2 1.4"/><rect x="7" y="14" width="4" height="5" stroke-dasharray="2 1.4"/><rect x="13" y="14" width="4" height="5" stroke-dasharray="2 1.4"/>'],
+    ["Cases", "\\begin{cases}#?&\\text{if }#?\\\\#?&\\text{otherwise}\\end{cases}", '<path d="M8 3Q5 3 5 7v3l-2 2 2 2v3q0 4 3 4"/><rect x="10" y="4" width="10" height="5" stroke-dasharray="2 1.4"/><rect x="10" y="15" width="10" height="5" stroke-dasharray="2 1.4"/>'],
+  ];
+  const MATH_SYM = [['α', '\\alpha'], ['β', '\\beta'], ['γ', '\\gamma'], ['δ', '\\delta'], ['ε', '\\varepsilon'], ['η', '\\eta'], ['θ', '\\theta'], ['λ', '\\lambda'], ['μ', '\\mu'], ['π', '\\pi'], ['ρ', '\\rho'], ['σ', '\\sigma'], ['τ', '\\tau'], ['φ', '\\varphi'], ['ω', '\\omega'], ['Δ', '\\Delta'], ['Σ', '\\Sigma'], ['Ω', '\\Omega'], ['∂', '\\partial'], ['∞', '\\infty'],
+    ['±', '\\pm'], ['·', '\\cdot'], ['×', '\\times'], ['÷', '\\div'], ['≤', '\\le'], ['≥', '\\ge'], ['≠', '\\ne'], ['≈', '\\approx'], ['→', '\\to'], ['⇒', '\\Rightarrow'], ['⇔', '\\Leftrightarrow'], ['∈', '\\in'], ['∀', '\\forall'], ['∃', '\\exists'], ['∅', '\\emptyset'], ['°', '^{\\circ}']];
+  const MATH_TPL = [
+    ["Net present value", 'C_0=-I_0+\\sum_{t=1}^{n}\\frac{CF_t}{(1+i)^t}'],
+    ["Annuity", 'A=K_0\\cdot\\frac{i\\,(1+i)^n}{(1+i)^n-1}'],
+    ["Profit", "\\pi(x)=R(x)-C(x)"],
+    ["Cost function", "C(x)=C_f+c_v\\cdot x"],
+    ["Marginal cost", "C'(x)=\\frac{dC(x)}{dx}"],
+    ["Price elasticity", '\\varepsilon=\\frac{\\Delta x/x}{\\Delta p/p}'],
+    ['Cobb-Douglas', 'Y=A\\cdot K^{\\alpha}\\cdot L^{1-\\alpha}'],
+    ["Mean", '\\bar{x}=\\frac{1}{n}\\sum_{i=1}^{n}x_i'],
+    ["Quadratic formula", 'x_{1,2}=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}'],
+  ];
+  // Fenster „Formel“: liefert { tex, svg, vb, c, fs } oder null
+  async function mathDialog(e, th, fs0) {
+    let slow = setTimeout(() => C.toast("Loading the equation component …", 3000), 400);
+    try { await mathLib(true); } catch (err) { clearTimeout(slow); C.toast(err.message, 6000); return null; }
+    clearTimeout(slow);
+    th = th || DEF_TH;
+    const cols = ['', '#1A1A1A', th.accent, '#1F4FD6', '#1B8A3A', '#D6262B', '#E8590C', '#7048E8'].filter((c, i, a) => a.indexOf(c) === i);
+    const c0 = (e && e.c) || '';
+    fs0 = Math.round(fs0 || 32);
+    const sizes = [...new Set([...SIZES.filter((x) => x >= 12), fs0])].sort((a, b) => a - b);
+    const icon = (x) => (x[2] ? `<svg viewBox="0 0 24 24">${x[2]}</svg>` : `<span>${esc(x[3])}</span>`);
+    const html = `<div class="mf-tools">
+      <div class="mf-grp"><div class="mf-struct">${MATH_STRUCT.map((x, i) => `<button type="button" class="mf-b" data-st="${i}" title="${esc(x[0])}" aria-label="${esc(x[0])}">${icon(x)}</button>`).join('')}</div><span class="mf-cap">Structure</span></div>
+      <div class="mf-grp"><div class="mf-sym">${MATH_SYM.map((x, i) => `<button type="button" class="mf-b mf-s" data-sy="${i}" title="${esc(x[1])}">${esc(x[0])}</button>`).join('')}</div><span class="mf-cap">Symbols</span></div>
+      <div class="mf-grp mf-side"><label>Template<select class="mf-tpl"><option value="">– insert –</option>${MATH_TPL.map((x, i) => `<option value="${i}">${esc(x[0])}</option>`).join('')}</select></label></div>
+    </div>
+    <div class="mf-box"></div>
+    <p class="mf-hint muted small">Just type: / makes a fraction, ^ a superscript, _ a subscript; the arrow keys move between the fields.</p>
+    <details class="mf-tex"><summary>Edit as LaTeX</summary><textarea rows="2" spellcheck="false" autocomplete="off"></textarea></details>
+    <div class="mf-opts"><span>Colour</span>${cols.map((c) => `<button type="button" class="mf-col${c === c0 ? ' on' : ''}" data-c="${c}" title="${c ? c : "like the text"}" aria-label="${c ? "Colour " + c : "Colour like the text"}" style="--c:${c || th.fg}">${c ? '' : 'A'}</button>`).join('')}
+      <label>Size <select class="mf-fs">${sizes.map((x) => `<option value="${x}"${x === fs0 ? ' selected' : ''}>${x} pt</option>`).join('')}</select></label></div>
+    <p class="mf-err" hidden></p>`;
+    let res = null, col = c0;
+    const d0 = await modalEl(e ? "Edit equation" : "Equation", html, e ? "Apply" : "Insert", (d) => {
+      d.classList.add('mf-dlg');
+      const mf = document.createElement('math-field');
+      mf.className = 'mf-field';
+      d.querySelector('.mf-box').appendChild(mf);
+      const ta = d.querySelector('.mf-tex textarea'), err = d.querySelector('.mf-err');
+      try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.container = d; } catch (er) { /* */ }
+      mf.value = (e && e.tex) || '';
+      ta.value = mf.value;
+      mf.addEventListener('input', () => { ta.value = mf.value; err.hidden = true; });
+      ta.addEventListener('input', () => { mf.value = ta.value; err.hidden = true; });
+      const put = (t) => { mf.focus(); mf.insert(t, { selectionMode: 'placeholder', format: 'latex' }); ta.value = mf.value; };
+      d.querySelector('.mf-tools').onclick = (ev) => {
+        const b = ev.target.closest('button'); if (!b) return;
+        if (b.dataset.st != null) put(MATH_STRUCT[+b.dataset.st][1]);
+        if (b.dataset.sy != null) put(MATH_SYM[+b.dataset.sy][1]);
+      };
+      d.querySelector('.mf-tools').onmousedown = (ev) => { if (ev.target.closest('button')) ev.preventDefault(); }; // Schreibmarke bleibt in der Formel
+      d.querySelector('.mf-tpl').onchange = (ev) => { const i = ev.target.value; ev.target.value = ''; if (i !== '') put(MATH_TPL[+i][1]); };
+      d.querySelector('.mf-opts').onclick = (ev) => {
+        const b = ev.target.closest('[data-c]'); if (!b) return;
+        col = b.dataset.c;
+        d.querySelectorAll('.mf-col').forEach((x) => x.classList.toggle('on', x === b));
+      };
+      d.querySelector('form').onsubmit = (ev) => {
+        ev.preventDefault();
+        const tex = (mf.getValue ? mf.getValue('latex-without-placeholders') : mf.value).trim();
+        if (!tex) { d.close('no'); return; }
+        try {
+          const r = texSvg(tex);
+          if (r.err) { err.textContent = "The equation contains an error: " + r.err; err.hidden = false; return; }
+          res = { tex, svg: r.svg, vb: r.vb, c: col, fs: +d.querySelector('.mf-fs').value || 32 };
+          d.close('yes');
+        } catch (er) { err.textContent = "The equation cannot be typeset."; err.hidden = false; }
+      };
+      setTimeout(() => mf.focus(), 60);
+    });
+    try { if (window.mathVirtualKeyboard) { window.mathVirtualKeyboard.hide(); window.mathVirtualKeyboard.container = document.body; } } catch (er) { /* */ }
+    return d0 ? res : null;
+  }
   // ================================================================== Sonderzeichen
   const SYMBOLS = [
     ["Greek", 'α β γ δ ε ζ η θ ι κ λ μ ν ξ π ρ σ τ υ φ χ ψ ω Γ Δ Θ Λ Ξ Π Σ Φ Ψ Ω'],
@@ -1084,7 +1300,7 @@
       const line = !!e && isLine(e), open = !!e && isOpen(e);
       const textish = !!e && (e.t === 'text' || e.t === 'table' || (e.t === 'shape' && !line && !open));
       const shapeish = !!e && (e.t === 'shape' || e.t === 'text' || e.t === 'img');
-      const fontish = textish || (!!e && e.t === 'chart');
+      const fontish = textish || (!!e && (e.t === 'chart' || e.t === 'math'));
       const dis = (en) => (en ? '' : ' disabled');
       const svg = (ic) => `<svg viewBox="0 0 24 24">${ic}</svg>`;
       // kleiner Knopf (Symbol, optional Text), großer Knopf, Farbknopf mit ▾, Auswahlmenü mit ▾
@@ -1110,11 +1326,11 @@
         h += grp("Clipboard", big('data-f="paste"', "Insert", RI.paste, canPaste) + rows(sb('cut', "Cut (Ctrl+X)", RI.cut, { en: has, label: "Cut" }), sb('copy', "Copy (Ctrl+C)", ICON.dup, { en: has, label: "Copy" }),
           sb('painter', "Format painter: select an object, click here, then click the target", RI.painter, { en: has, label: "Format painter", on: !!ED.painter })));
         // Schriftart
-        const fs0 = e ? Math.round(e.fs || 24) : '';
+        const fs0 = e ? Math.round(e.t === 'math' ? mathFs(e) / u() : e.fs || 24) : '';
         const sizes = !e || SIZES.includes(fs0) ? SIZES : [...SIZES, fs0].sort((x, y) => x - y);
         const ff0 = (e && e.ff) || host.theme().font || 'sans';
         h += grp("Font", rows(
-          fontSelect(ff0, fontish) +
+          fontSelect(ff0, fontish && e.t !== 'math') +
           `<select data-f="fs" class="rb-size" title="Font size"${dis(fontish)}>${e ? '' : '<option></option>'}${sizes.map((x) => `<option value="${x}"${x === fs0 ? ' selected' : ''}>${x}</option>`).join('')}</select>` +
           sb('fs+', "Increase font size", RI.grow, { en: fontish }) + sb('fs-', "Decrease font size", RI.shrink, { en: fontish }) + sb('clear', "Clear formatting", RI.clear, { en: textish }),
           `<button type="button" class="rb-s rb-t" data-f="bold" title="Bold (Ctrl+B)"${dis(textish)}><b>B</b></button><button type="button" class="rb-s rb-t" data-f="italic" title="Italic (Ctrl+I)"${dis(textish)}><i>I</i></button><button type="button" class="rb-s rb-t" data-f="underline" title="Underline (Ctrl+U)"${dis(textish)}><u>U</u></button>` +
@@ -1141,6 +1357,7 @@
             rows(sb('mergeR', "Merge cell with the cell to the right (click into a cell first)", RI.mergeR, { label: "Merge right", en: !!(ED.edit && ED.edit.cell) }), sb('mergeD', "Merge cell with the cell below (click into a cell first)", RI.mergeD, { label: "Merge down", en: !!(ED.edit && ED.edit.cell) }), sb('unmerge', "Split merged cell", RI.unmerge, { label: "Split", en: !!(e.mg && e.mg.length) })), 'ctx');
         }
         if (e && e.t === 'img') h += grp("image", big('data-f="imgreset"', "Original shape", ICON.img, true), 'ctx');
+        if (e && e.t === 'math') h += grp("Equation", big('data-f="mathedit"', "Editing", RI.mathEdit) + rows(cb('color', "Equation colour", e.c || host.theme().fg, false, '<span class="cb-a">A</span>', true)), 'ctx');
         if (e && e.t === 'chart') h += grp("Chart", big('data-f="chartdata"', "Edit data", RI.chart) + rows(mb('ctype', "Chart type", RI.chart, true, (CHART_TYPES.find((c) => c[0] === e.ct) || CHART_TYPES[0])[1]), sb('legend', "Legend on/off", RI.legend, { label: "Legend", on: e.legend !== 0 })), 'ctx');
         // Bearbeiten
         h += grp("Editing", rows(sb('replace', "Find and replace", RI.replace, { label: "Replace …", en: true }), sb('selall', "Select all (Ctrl+A)", RI.selall, { label: "Select All", en: els().length > 0 }), sb('x:del', "Delete (Del)", ICON.del, { label: "Delete", en: has })));
@@ -1151,7 +1368,7 @@
         h += grp("Illustrations", big('data-ins="chart"', "Chart", RI.chart));
         h += grp("Shapes", `<div class="rb-gal rb-gal-all">${SHAPES.map(([k, l]) => shBtn(k, l)).join('')}</div>`);
         h += grp('Text', big('data-ins="text"', "Text box", ICON.textbox) + rows(sb('date', "Insert today's date", RI.date, { label: "Date" }), sb('link', "Link: select text in a text box first", RI.link, { label: 'Link', en: !!ED.edit }), ...(host.insertText ? [host.insertText(kit)] : [])));
-        h += grp("Symbols", big('data-menu="sym"', "Special characters", RI.omega, true, true));
+        h += grp("Symbols", big('data-ins="math"', "Equation", RI.math) + big('data-menu="sym"', "Special characters", RI.omega, true, true));
         if (host.insertExtra) h += host.insertExtra(kit);
       } else if (host.tabContent) h += host.tabContent(RB.tab, kit);
       if (RB.tab === 'help') {
@@ -1277,6 +1494,18 @@
       if (f === 'rot90') { each((x) => { x.r = ((x.r || 0) + 90) % 360; }); return; }
       if (f === 'rot0') { each((x) => { x.r = 0; }); return; }
       if ((f === 'fs' || f === 'fs+' || f === 'fs-') && ED.edit && sizeSelection(f, v)) return;
+      if (f === 'mathedit') { if (ids[0]) openMath(ids[0]); return; }
+      // Formeln: Größe über die Schriftgröße, Farbe fürs ganze Objekt
+      const mths = ids.map(byId).filter((x) => x && x.t === 'math');
+      if (mths.length && (f === 'fs' || f === 'fs+' || f === 'fs-' || f === 'color')) {
+        change(() => mths.forEach((x) => {
+          if (f === 'color') { if (v) x.c = v; else delete x.c; return; }
+          const c = mathFs(x) / u();
+          const t = f === 'fs' ? +v : f === 'fs+' ? (SIZES.find((z) => z > c + 0.1) || c + 8) : ([...SIZES].reverse().find((z) => z < c - 0.1) || Math.max(6, c - 2));
+          mathScale(x, t * u());
+        }), true);
+        if (mths.length === ids.length) return;
+      }
       if (f === 'fs+' || f === 'fs-') { each((x) => { const c = x.fs || 24; x.fs = f === 'fs+' ? (SIZES.find((z) => z > c) || c + 8) : ([...SIZES].reverse().find((z) => z < c) || Math.max(4, c - 2)); }); return; }
       if (f === 'lh') { each((x) => { if (+v === 1.2) delete x.lh; else x.lh = +v; }); return; }
       if (f === 'sh') { const on = !(byId(ids[0]) || {}).sh; each((x) => { if (on) x.sh = 1; else delete x.sh; }); return; }
@@ -1425,6 +1654,33 @@
       const r = await chartDialog(e);
       if (r) change(() => { const t = byId(id); if (t) Object.assign(t, r); }, true);
     }
+    async function addMath() {
+      endEdit();
+      const q = u();
+      const r = await mathDialog(null, host.theme(), 32);
+      if (!r) return;
+      const [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
+      let w = (r.vb[2] / 1000) * r.fs * q, h = (r.vb[3] / 1000) * r.fs * q;
+      const mx = host.W() * 0.9;
+      if (w > mx) { h *= mx / w; w = mx; }
+      const e = { id: uid(), r: 0, t: 'math', tex: r.tex, svg: r.svg, vb: r.vb, x: r1(cx - w / 2), y: r1(cy - h / 2), w: r1(w), h: r1(h) };
+      if (r.c) e.c = r.c;
+      change(() => { els().push(e); ED.sel = [e.id]; }, true);
+    }
+    async function openMath(id) {
+      const e = byId(id);
+      if (!e) return;
+      endEdit();
+      const r = await mathDialog(e, host.theme(), mathFs(e) / u());
+      if (!r) return;
+      change(() => {
+        const t = byId(id);
+        if (!t) return;
+        Object.assign(t, { tex: r.tex, svg: r.svg, vb: r.vb });
+        if (r.c) t.c = r.c; else delete t.c;
+        mathScale(t, r.fs * u());
+      }, true);
+    }
     async function addChart() {
       const q = u(), [cx, cy] = host.center ? host.center() : [host.W() / 2, host.H() / 2];
       const w = Math.min(host.W() * 0.8, 560 * q), h = Math.min(host.H() * 0.7, 340 * q);
@@ -1514,6 +1770,7 @@
     function startEdit(id, ev) {
       const e = byId(id);
       if (e && e.t === 'chart') { openChart(id); return; }
+      if (e && e.t === 'math') { openMath(id); return; }
       if (!e || e.t === 'img' || isLine(e) || isOpen(e)) return;
       if (ED.edit && ED.edit.id === id) return;
       endEdit();
@@ -1687,7 +1944,8 @@
           if (mode.includes('s')) nh = o.h + ly;
           if (mode.includes('w')) nw = o.w - lx;
           if (mode.includes('n')) nh = o.h - ly;
-          const keep = (e.t === 'img' && !m.shiftKey) || (e.t !== 'img' && m.shiftKey && mode.length === 2);
+          const keep = e.t === 'math' || (e.t === 'img' && !m.shiftKey) || (e.t !== 'img' && m.shiftKey && mode.length === 2);
+          if (keep && mode.length !== 2 && e.t === 'math') { const a = o.w / o.h; if (mode === 'e' || mode === 'w') nh = nw / a; else nw = nh * a; }
           if (keep && mode.length === 2) { const a = o.w / o.h; if (nw / nh > a) nw = nh * a; else nh = nw / a; }
           const mn = 8 * u() * 0.5;
           nw = Math.max(mn, nw); nh = Math.max(isLine(e) ? 4 * u() : mn, nh);
@@ -1841,6 +2099,7 @@
       if (kind === 'chart') { addChart(); return; }
       if (kind === 'crop') { addCrop(); return; }
       if (kind === 'table') { addTable(); return; }
+      if (kind === 'math') { addMath(); return; }
       if (ED.insert === kind) { ED.insert = null; host.placing(false); return; }
       startInsert(kind, host.alignWord ? "Click on the page or drag with the mouse button held (Esc = cancel)." : "Click on the slide or drag with the mouse button held (Esc = cancel).");
     }
@@ -1896,7 +2155,7 @@
       return false;
     }
     function select(ids) { endEdit(); ED.sel = ids.filter((id) => byId(id)); render(); }
-    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, fmt, menu });
+    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, fmt, menu });
     return ED;
   }
 
@@ -2822,7 +3081,7 @@
     };
     const F = await famOf(th.font && fontOk(th.font) ? th.font : 'sans');
     let uni = null; // DejaVu für Zeichen außerhalb von WinAnsi (z. B. Pfeile, griechische Buchstaben)
-    const needUni = (allEls || []).some((e) => [(e.html || '').replace(/data-bu="([^"]*)"/g, '>$1<'), ...(e.rows || []).flat().map((x) => String(x).replace(/data-bu="([^"]*)"/g, '>$1<')), e.title || '', ...(e.labels || []), ...(e.series || []).map((x) => x.n || '')].join('').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').split('').some((ch) => !winOk(ch) && ch !== '\n'));
+    const needUni = (allEls || []).some((e) => e.t === 'math' && /<text/.test(e.svg || '')) || (allEls || []).some((e) => [(e.html || '').replace(/data-bu="([^"]*)"/g, '>$1<'), ...(e.rows || []).flat().map((x) => String(x).replace(/data-bu="([^"]*)"/g, '>$1<')), e.title || '', ...(e.labels || []), ...(e.series || []).map((x) => x.n || '')].join('').replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').split('').some((ch) => !winOk(ch) && ch !== '\n'));
     if (needUni) {
       if (!kitOk) { await C.ensureFontkit(); doc.registerFontkit(window.fontkit); kitOk = true; }
       const get = async (n) => new Uint8Array(await (await fetch('vendor/fonts/' + n + '?v=' + C.VERSION)).arrayBuffer());
@@ -3007,6 +3266,90 @@
       }
       pg.pushOperators(popGraphicsState());
     };
+    // Formel: die Pfade der MathJax-Grafik als Vektoren ins PDF (gestochen scharf bei jedem Zoom)
+    const svgTf = (tf) => {
+      let T = [1, 0, 0, 1, 0, 0];
+      for (const m of String(tf || '').matchAll(/(matrix|translate|scale|rotate)\s*\(([^)]*)\)/g)) {
+        const v = m[2].split(/[\s,]+/).filter(Boolean).map(Number);
+        let A = [1, 0, 0, 1, 0, 0];
+        if (m[1] === 'matrix' && v.length === 6) A = v;
+        else if (m[1] === 'translate') A = [1, 0, 0, 1, v[0] || 0, v[1] || 0];
+        else if (m[1] === 'scale') A = [v[0], 0, 0, v[1] != null ? v[1] : v[0], 0, 0];
+        else if (m[1] === 'rotate') { const r = ((v[0] || 0) * Math.PI) / 180; A = [Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), 0, 0]; }
+        T = mmul(A, T);
+      }
+      return T;
+    };
+    let cssCv = null;
+    const cssCol = (c) => {
+      if (!c || c === 'none') return null;
+      if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+      try { cssCv = cssCv || document.createElement('canvas').getContext('2d'); cssCv.fillStyle = '#000000'; cssCv.fillStyle = c; const r = cssCv.fillStyle; return /^#[0-9a-f]{6}$/i.test(r) ? r : '#000000'; } catch (er) { return '#000000'; }
+    };
+    // SVG-Pfad in einfache, absolute Befehle (M, L, Q, C, Z) umschreiben; H, V, T, S und kleine Buchstaben auflösen
+    const absPath = (d) => {
+      const out = [];
+      let x = 0, y = 0, sx = 0, sy = 0, qx = null, qy = null, cx2 = null, cy2 = null;
+      for (const m of String(d).matchAll(/([MmLlHhVvQqTtCcSsZz])([^MmLlHhVvQqTtCcSsZzAa]*)/g)) {
+        const c = m[1], C0 = c.toUpperCase(), rel = c !== C0;
+        const v = (m[2].match(/-?\d*\.?\d+(?:e-?\d+)?/gi) || []).map(Number);
+        const n = { M: 2, L: 2, H: 1, V: 1, Q: 4, T: 2, C: 6, S: 4, Z: 0 }[C0];
+        if (C0 === 'Z') { out.push('Z'); x = sx; y = sy; qx = qy = cx2 = cy2 = null; continue; }
+        for (let i = 0; i + n <= v.length; i += n) {
+          const a = v.slice(i, i + n);
+          const X = (k) => a[k] + (rel ? x : 0), Y = (k) => a[k] + (rel ? y : 0);
+          if (C0 === 'M' && i === 0) { x = X(0); y = Y(1); sx = x; sy = y; out.push(`M${x} ${y}`); qx = qy = cx2 = cy2 = null; continue; }
+          if (C0 === 'M' || C0 === 'L') { x = X(0); y = Y(1); out.push(`L${x} ${y}`); qx = qy = cx2 = cy2 = null; }
+          else if (C0 === 'H') { x = a[0] + (rel ? x : 0); out.push(`L${x} ${y}`); qx = qy = cx2 = cy2 = null; }
+          else if (C0 === 'V') { y = a[0] + (rel ? y : 0); out.push(`L${x} ${y}`); qx = qy = cx2 = cy2 = null; }
+          else if (C0 === 'Q') { qx = X(0); qy = Y(1); const ex = X(2), ey = Y(3); out.push(`Q${qx} ${qy} ${ex} ${ey}`); x = ex; y = ey; cx2 = cy2 = null; }
+          else if (C0 === 'T') { const px = qx == null ? x : 2 * x - qx, py = qy == null ? y : 2 * y - qy; const ex = X(0), ey = Y(1); out.push(`Q${px} ${py} ${ex} ${ey}`); qx = px; qy = py; x = ex; y = ey; cx2 = cy2 = null; }
+          else if (C0 === 'C') { const x1 = X(0), y1 = Y(1); cx2 = X(2); cy2 = Y(3); const ex = X(4), ey = Y(5); out.push(`C${x1} ${y1} ${cx2} ${cy2} ${ex} ${ey}`); x = ex; y = ey; qx = qy = null; }
+          else if (C0 === 'S') { const x1 = cx2 == null ? x : 2 * x - cx2, y1 = cy2 == null ? y : 2 * y - cy2; cx2 = X(0); cy2 = Y(1); const ex = X(2), ey = Y(3); out.push(`C${x1} ${y1} ${cx2} ${cy2} ${ex} ${ey}`); x = ex; y = ey; qx = qy = null; }
+        }
+      }
+      return out.join('');
+    };
+    const drawMath = (pg, e, K) => {
+      const vb = e.vb;
+      if (!vb || !vb[2] || !vb[3] || !e.svg) return;
+      const sc = Math.min(e.w / vb[2], e.h / vb[3]);
+      const root = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${mathSafe(e.svg)}</svg>`, 'image/svg+xml').documentElement;
+      const base = e.c || th.fg;
+      const o = opa();
+      const put = (M, fn) => { pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(M[0], -M[1], -M[2], M[3], M[4] * K, -M[5] * K)); try { fn(); } finally { pg.pushOperators(popGraphicsState()); } };
+      const walk = (node, M, fill, stroke, sw) => {
+        for (const ch of node.children) {
+          const tag = ch.localName;
+          let m = ch.hasAttribute('transform') ? mmul(svgTf(ch.getAttribute('transform')), M) : M;
+          if (tag === 'svg') {
+            m = mmul([1, 0, 0, 1, +ch.getAttribute('x') || 0, +ch.getAttribute('y') || 0], m);
+            const v = (ch.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+            if (v.length === 4 && v[2] > 0 && v[3] > 0) { const a = (+ch.getAttribute('width') || v[2]) / v[2], b = (+ch.getAttribute('height') || v[3]) / v[3]; m = mmul([a, 0, 0, b, -v[0] * a, -v[1] * b], m); }
+          }
+          const f = ch.getAttribute('fill') || fill, st = ch.getAttribute('stroke') || stroke;
+          const w = ch.hasAttribute('stroke-width') ? +ch.getAttribute('stroke-width') : sw;
+          const cOf = (c) => (c === 'currentColor' ? base : cssCol(c));
+          let d = null, open = false;
+          const n = (k) => +ch.getAttribute(k) || 0;
+          if (tag === 'path') d = absPath(ch.getAttribute('d') || '');
+          else if (tag === 'rect' && n('width') > 0 && n('height') > 0) d = `M${n('x')} ${n('y')}H${n('x') + n('width')}V${n('y') + n('height')}H${n('x')}Z`;
+          else if (tag === 'line') { d = `M${n('x1')} ${n('y1')}L${n('x2')} ${n('y2')}`; open = true; }
+          else if (tag === 'polygon') d = 'M' + (ch.getAttribute('points') || '').trim().replace(/\s+/g, ' ') + 'Z';
+          if (d) {
+            const fc = open ? null : cOf(f), scc = w > 0 ? cOf(st) : null;
+            if (fc || scc) put(m, () => pg.drawSvgPath(d, { x: 0, y: 0, scale: K, color: fc ? col(fc) : undefined, borderColor: scc ? col(scc) : undefined, borderWidth: scc ? w * K : 0, ...o }));
+          } else if (tag === 'text') {
+            const t = ch.textContent || '', fs = parseFloat(ch.getAttribute('font-size')) || 1000;
+            const fnt = [...t].every((x) => winOk(x)) ? F.r : uni && uni.r;
+            const fc = cOf(f);
+            if (t && fnt && fc) put(m, () => { try { pg.drawText(t, { x: n('x') * K, y: -n('y') * K, size: fs * K, font: fnt, color: col(fc), ...(o.opacity != null ? { opacity: o.opacity } : {}) }); } catch (er) { /* Zeichen fehlt */ } });
+          }
+          if (tag === 'g' || tag === 'svg') walk(ch, m, f, st, w);
+        }
+      };
+      walk(root, [sc, 0, 0, sc, (e.w - vb[2] * sc) / 2 - vb[0] * sc, (e.h - vb[3] * sc) / 2 - vb[1] * sc], 'currentColor', 'none', 0);
+    };
     async function drawEl(pg, e, K, base) {
       FF = await famOf(e.ff);
       const B0 = base || [1, 0, 0, 1, 0, 0];
@@ -3054,6 +3397,8 @@
           if (e.html) drawTextBox(pg, e.html, 0, 0, e.w, e.h, e.fs || 20, e.c || (e.fill ? '#FFFFFF' : th.fg), e.va || 'm', e.pad != null ? e.pad : 10, K, e.lh);
         }
         for (const hd of arrowHeads(e, sw)) pg.drawSvgPath(hd, { ...opt, borderColor: col(stroke), borderWidth: sw * K, borderLineCap: 1 });
+      } else if (e.t === 'math') {
+        drawMath(pg, e, K);
       } else if (e.t === 'chart') {
         if (SH) { box('#000000', null); return; }
         if (e.fill) box(e.fill, null);
@@ -3209,5 +3554,5 @@
   FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'F1' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); ev.stopImmediatePropagation(); rbCollapse(); } }, true);
   window.PDFSTIFT_DECK = { open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
-    PX: { mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
+    PX: { mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH, mathSvgDoc, texOmml, mathFs, mathLib, texSvg }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();

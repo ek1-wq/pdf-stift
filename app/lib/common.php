@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const PDFSTIFT_VERSION = '1.93.0';
+const PDFSTIFT_VERSION = '1.94.0';
 
 /**
  * Freie Ausgabe („local“): Die Windows-App startet einen eigenen kleinen PHP-Server nur für sich selbst.
@@ -239,10 +239,40 @@ function stroke_link(array $s): array
         ? ['ln' => ['path' => $s['ln']['path'], 'pg' => max(0, min(100000, (int) ($s['ln']['pg'] ?? 0)))]] : [];
 }
 
+/** SVG einer Formel: nur g, path, rect, line, polygon, svg, text mit harmlosen Merkmalen */
+function math_svg_ok(string $svg): bool
+{
+    if (preg_match('/url\s*\(|<\s*script|expression\s*\(|<!|<\?/i', $svg)) {
+        return false;
+    }
+    if (!preg_match_all('/<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[a-zA-Z][a-zA-Z0-9-]*="[^"<>]*")*)\s*\/?>/', $svg, $m, PREG_SET_ORDER)) {
+        return $svg === '';
+    }
+    $rest = preg_replace('/<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[a-zA-Z][a-zA-Z0-9-]*="[^"<>]*")*)\s*\/?>/', '', $svg);
+    if (str_contains($rest, '<') || str_contains($rest, '>')) {
+        return false;
+    }
+    $tags = ['g', 'path', 'rect', 'line', 'polygon', 'svg', 'text'];
+    $attrs = ['d', 'transform', 'x', 'y', 'width', 'height', 'x1', 'y1', 'x2', 'y2', 'points', 'viewBox', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 'font-family', 'font-size', 'font-weight', 'font-style', 'preserveAspectRatio'];
+    foreach ($m as $t) {
+        if (!in_array($t[1], $tags, true)) {
+            return false;
+        }
+        if (preg_match_all('/([a-zA-Z][a-zA-Z0-9-]*)="/', $t[2], $am)) {
+            foreach ($am[1] as $a) {
+                if (!in_array($a, $attrs, true)) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 /** Inhalt eines Objekts prüfen (nur bekannte Felder, Längen begrenzt; Text wird beim Anzeigen zusätzlich gesäubert) */
 function stroke_obj($e): ?array
 {
-    if (!is_array($e) || !in_array($e['t'] ?? '', ['text', 'img', 'shape', 'table', 'chart'], true)) {
+    if (!is_array($e) || !in_array($e['t'] ?? '', ['text', 'img', 'shape', 'table', 'chart', 'math'], true)) {
         return null;
     }
     $t = $e['t'];
@@ -308,6 +338,17 @@ function stroke_obj($e): ?array
         foreach (['nc', 'nv', 'ng', 'd3'] as $k) if (!empty($e[$k])) $o[$k] = 1;
         $o['title'] = mb_substr((string) ($e['title'] ?? ''), 0, 300);
         $o['legend'] = empty($e['legend']) ? 0 : 1;
+    }
+    if ($t === 'math') {
+        // Formel: LaTeX-Text und die fertige Vektorgrafik (nur einfache SVG-Bausteine, keine Verweise oder Skripte)
+        $svg = is_string($e['svg'] ?? null) ? $e['svg'] : '';
+        $vb = array_values((array) ($e['vb'] ?? []));
+        if (strlen($svg) > 400000 || count($vb) !== 4 || !math_svg_ok($svg)) {
+            return null;
+        }
+        $o['tex'] = mb_substr((string) ($e['tex'] ?? ''), 0, 5000);
+        $o['svg'] = $svg;
+        $o['vb'] = array_map(static fn ($v) => is_numeric($v) ? round((float) $v, 1) : 0.0, $vb);
     }
     if ($t === 'shape') {
         $o['k'] = preg_match('/^[A-Za-z0-9]{2,12}$/', (string) ($e['k'] ?? '')) ? (string) $e['k'] : 'rect';

@@ -11,6 +11,9 @@ compatible with distribution alongside GPL-3.0 software.
 | [fontkit](https://github.com/foliojs/fontkit) | Embedding fonts | MIT |
 | [fflate](https://github.com/101arrowz/fflate) | ZIP / compression | MIT |
 | [PptxGenJS](https://github.com/gitbrent/PptxGenJS) | Export to PowerPoint | MIT |
+| [MathLive](https://github.com/arnog/mathlive) (with KaTeX fonts) | Equation editor (input) | MIT (includes the KaTeX fonts, MIT), see `app/vendor/math/LICENSE-mathlive.txt` |
+| [MathJax](https://github.com/mathjax/MathJax) | Typesetting equations as vector graphics | Apache-2.0, see `app/vendor/math/LICENSE-mathjax.txt` |
+| [mathml2omml](https://github.com/fiduswriter/mathml2omml) (Fidus Writer) | Equations as editable Office equations in PowerPoint export | GNU LGPL 3.0 or later, see `app/vendor/math/LICENSE-mathml2omml.txt`; bundled unmodified as `mml2omml.min.js` (minified with esbuild); source code: https://github.com/fiduswriter/mathml2omml |
 | [QR Code Generator](https://github.com/kazuhikoarase/qrcode-generator) (Kazuhiko Arase) | QR codes | MIT |
 | [Tesseract.js](https://github.com/naptha/tesseract.js) and language data (`eng`, `deu`) | Text recognition (OCR) in the browser part | Apache-2.0 |
 | [DejaVu fonts](https://dejavu-fonts.github.io/) | Fonts for text you add to PDFs | Bitstream Vera / DejaVu license (free), see `app/vendor/fonts/LICENSE-DejaVu.txt` |

@@ -788,6 +788,33 @@
       }
       // neuere Inhalte (z. B. Formeln) mit Ersatzdarstellung: die Ersatzdarstellung nehmen (meist ein Bild)
       if (ln === 'AlternateContent') {
+        // eigene Formel aus PDF-Stift (LaTeX steht im Alternativtext): wieder als änderbare Formel übernehmen,
+        // solange sie in PowerPoint nicht verändert wurde (sonst das Ersatzbild)
+        const fb = kid(sp, 'Fallback'), ch = kid(sp, 'Choice');
+        const fpic = fb && [...fb.children].find((c) => c.localName === 'pic');
+        const dsc = (fpic && at(path(fpic, 'nvPicPr', 'cNvPr'), 'descr')) || '';
+        if (ch && fpic && dsc.startsWith('LaTeX: ')) {
+          try {
+            const P = X(), tex = dsc.slice(7);
+            const mt = (root) => [...root.getElementsByTagNameNS('*', 't')].filter((n) => /math/.test(n.namespaceURI || '')).map((n) => n.textContent).join('');
+            const om = await P.texOmml(tex);
+            if (mt(new DOMParser().parseFromString(om, 'application/xml')) === mt(ch)) {
+              const n0 = out.length;
+              await convert(fpic, ctx, M, out, gid);
+              const im = out[n0];
+              if (im && out.length === n0 + 1) {
+                const r = P.texSvg(tex);
+                const clr = [...ch.getElementsByTagNameNS('*', 'srgbClr')][0];
+                const e = { id: im.id, t: 'math', tex, svg: r.svg, vb: r.vb, x: im.x, y: im.y, w: im.w, h: im.h, r: im.r || 0 };
+                if (im.g) e.g = im.g;
+                if (clr && /^[0-9A-F]{6}$/i.test(at(clr, 'val') || '')) e.c = '#' + at(clr, 'val').toUpperCase();
+                for (const k of ['_spid', '_grp']) if (im[k] != null) e[k] = im[k];
+                out[n0] = e;
+              }
+              return;
+            }
+          } catch (er) { /* dann das Ersatzbild */ }
+        }
         const alt = kid(sp, 'Fallback') || kid(sp, 'Choice');
         if (alt) for (const c of alt.children) await convert(c, ctx, M, out, gid);
         return;
@@ -1728,6 +1755,13 @@
             }).filter(Boolean));
             if (Object.keys(cellFx).length) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, cells: cellFx, cols: n }); }
             mark(e); sl.addTable(rows, { ...nm(e), x: inch(e.x), y: inch(e.y), w: inch(e.w), colW: cw.map((f) => inch(f * e.w)), rowH: P.tblRows(e, true).map((f) => inch(f * e.h)), fontFace: face, fontSize: e.fs || 18, valign: 'middle', border: { type: 'solid', pt: 1, color: noHash(e.line || '#868E96') }, margin: e.cm ? [e.cm[0], e.cm[1], e.cm[0], e.cm[1]] : Math.max(1, Math.round((e.fs || 18) / 3)) });
+          } else if (e.t === 'math') {
+            // Formel: in PowerPoint als echte Formel (änderbar), für ältere Programme ein Bild als Ersatz
+            const png = await svgToPng(P.mathSvgDoc(e, th), Math.max(1, e.w), Math.max(1, e.h), 4);
+            let om = null;
+            try { om = e.tex ? await P.texOmml(e.tex) : null; } catch (er) { om = null; }
+            if (om) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, math: om, fs: P.mathFs(e), c: e.c || th.fg }); }
+            mark(e); sl.addImage({ ...boxO, data: png, altText: 'LaTeX: ' + (e.tex || ''), ...(tr ? { transparency: tr } : {}), ...nm(e) });
           } else if (e.t === 'chart') {
             const T = { col: 'bar', bar: 'bar', line: 'line', pie: 'pie' }[e.ct] || 'bar';
             const ser = (e.series || []).filter((x) => x && Array.isArray(x.v));
@@ -1797,6 +1831,7 @@
         for (const f of FX[i]) {
           const at0 = x.indexOf(`name="ps-${f.id}"`);
           if (at0 < 0) continue;
+          if (f.math) { x = mathXml(x, at0, f); continue; }
           const endTag = f.cells ? '</p:graphicFrame>' : '</p:sp>';
           const end = x.indexOf(endTag, at0);
           if (end < 0) continue;
@@ -1823,6 +1858,26 @@
     }
     const blob = new Blob([bin], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
     return { blob, skipped };
+  }
+
+  // ---- Formel: das Ersatzbild in eine Wahlmöglichkeit einpacken (PowerPoint nimmt die echte Formel, andere das Bild)
+  function mathXml(x, at0, f) {
+    const p0 = x.lastIndexOf('<p:pic>', at0), p1 = x.indexOf('</p:pic>', at0);
+    if (p0 < 0 || p1 < 0) return x;
+    const pic = x.slice(p0, p1 + 8);
+    const id = (/<p:cNvPr id="(\d+)"/.exec(pic) || [])[1] || '1000';
+    const nmx = (/<p:cNvPr [^>]*?name="([^"]*)"/.exec(pic) || [])[1] || "Equation";
+    const descr = (/<p:cNvPr [^>]*?descr="([^"]*)"/.exec(pic) || [])[1];
+    const xf = (/<a:xfrm[\s\S]*?<\/a:xfrm>/.exec(pic) || [''])[0];
+    const sz = Math.max(100, Math.round(f.fs) * 100);
+    const clr = String(f.c || '#000000').replace('#', '').toUpperCase();
+    const rpr = `<a:rPr lang="de-DE" sz="${sz}" b="0" i="0"><a:solidFill><a:srgbClr val="${clr}"/></a:solidFill><a:latin typeface="Cambria Math" panose="02040503050406030204" pitchFamily="18" charset="0"/></a:rPr>`;
+    // Buchstaben kursiv wie Variablen, Zahlen, Zeichen und Namen (sin, lim …) gerade
+    const om = f.math.replace(/<m:r>(<m:rPr>[\s\S]*?<\/m:rPr>)?(<m:t\b[^>]*>)([^<]*)/g, (all, rp, tt, tx) => '<m:r>' + (rp || '') + (!/m:sty m:val="[pb]"/.test(rp || '') && /^[A-Za-zα-ω]+$/.test(tx) ? rpr.replace(' i="0"', ' i="1"') : rpr) + tt + tx).replace(/<m:ctrlPr\/>/g, `<m:ctrlPr>${rpr.replace(' b="0" i="0"', ' i="1"')}</m:ctrlPr>`);
+    const sp = `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${nmx}"${descr ? ` descr="${descr}"` : ''}/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xf}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
+      `<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/><a:p><a:pPr algn="ctr"/><a14:m><m:oMathPara xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:oMathParaPr><m:jc m:val="centerGroup"/></m:oMathParaPr>${om}</m:oMathPara></a14:m><a:endParaRPr lang="de-DE" sz="${sz}" dirty="0"/></a:p></p:txBody></p:sp>`;
+    const alt = `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14">${sp}</mc:Choice><mc:Fallback>${pic}</mc:Fallback></mc:AlternateContent>`;
+    return x.slice(0, p0) + alt + x.slice(p1 + 8);
   }
 
   // ---- Übergang und Animationen einer Folie als PowerPoint-XML
