@@ -590,6 +590,7 @@
     rowAdd: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M12 16.5v5M9.5 19h5"/>', rowDel: '<rect x="3.5" y="4" width="17" height="10" rx="1"/><path d="M3.5 9h17"/><path d="M9.5 19h5"/>',
     colAdd: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5M19 9.5v5"/>', colDel: '<rect x="4" y="3.5" width="10" height="17" rx="1"/><path d="M9 3.5v17"/><path d="M16.5 12h5"/>',
     newslide: '<rect x="3.5" y="5" width="13" height="10" rx="1"/><path d="M19 13v6M16 16h6"/>', layout: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9h17M10 9v10.5"/>',
+    select: '<path d="M6 3l12 9-5.5 1.2L15 19l-2.3 1-2.6-5.7L6 18z"/>', pen: '<path d="M4 20l1.5-5L16 4.5a2.1 2.1 0 0 1 3 3L8.5 18z"/><path d="M14 6.5l3 3"/>', eraser: '<path d="M8 20h12"/><path d="M5.5 15.5l9-9a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L13 18H8.5z"/><path d="M10 11l5 5"/>',
     math: '<path d="M17 4H7l5 8-5 8h10"/>', latex: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 5l-4 14"/>', abbr: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h2M11 10h2M15 10h2M7 14h10"/>', done: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', mathEdit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
     chart: '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="7"/><rect x="10.5" y="6" width="3" height="12"/><rect x="15.5" y="9" width="3" height="9"/>',
     omega: '<path d="M5 19h4.5v-2.2A6.5 6.5 0 1 1 14.5 16.8V19H19"/>', crop: '<path d="M7 3v14h14"/><path d="M3 7h14v14"/>', link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
@@ -2617,9 +2618,20 @@
     ribbonPre: ({ grp, rows, big, mb }) => grp("slides", big('data-menu="newslide"', "New slide", RI.newslide, true, true) +
       rows(mb('layout', "Layout of this slide", RI.layout, true, 'Layout'), mb('bg', "Background", RI.bg, true, "Background"), mb('design', "Design of all slides", RI.design, true, 'Design'))),
     act: (a) => { if (a === 'hf') { hfDialog(); return true; } return false; },
-    tabs: () => [['design', "Design"], ['anim', "Animations"], ['show', "Slide show"], ['view', "View"]],
+    tabs: () => [['draw', "Drawing"], ['design', "Design"], ['anim', "Animations"], ['show', "Slide show"], ['view', "View"]],
     tabContent: (tab, { grp, rows, big, sb, mb }) => {
       const th = theme();
+      if (tab === 'draw') {
+        // Freihand auf der Folie: wie in PDFs mit Stift, Textmarker und Radierer
+        const t = INK.t, s0 = slide() || {};
+        const tb = (k, l, ic, title) => big(`data-f="ink:t" data-v="${k}"`, l, ic).replace('class="rb-big"', `class="rb-big${t === k ? ' on' : ''}"`).replace(`title="${esc(l)}"`, `title="${esc(title)}"`);
+        const tool = t === 'hl' ? 'hl' : 'pen';
+        const cols = tool === 'hl' ? INK_HL : INK_PEN;
+        return grp("Tools", tb('', "Select", RI.select, "Select and edit objects (Esc)") + tb('pen', "Pen", RI.pen, "Write on the slide with the pen") + tb('hl', "Highlighter", RI.marker, "Highlight with the highlighter") + tb('er', "Eraser", RI.eraser, "Erase strokes")) +
+          grp(tool === 'hl' ? "Highlighter colour" : "Pen colour", `<div class="rb-inkcols">${cols.map((c) => `<button type="button" class="rb-inksw${INK.c[tool] === c ? ' on' : ''}" data-f="ink:c" data-v="${c}" style="--c:${c}" title="${c}" aria-label="Colour ${c}"></button>`).join('')}</div>`) +
+          grp("Width", [0, 1, 2].map((i) => `<button type="button" class="rb-s rb-inkw${INK.wi[tool] === i ? ' on' : ''}" data-f="ink:w" data-v="${i}" title="${["Fine", "Medium", "Bold"][i]}" aria-label="${["Fine", "Medium", "Bold"][i]}"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke-width="${[1.5, 3, 5.5][i]}"/></svg></button>`).join('')) +
+          grp("Ink", rows(sb('ink:clear', "Delete the ink on this slide", ICON.del, { label: "Clear this slide", en: !!(s0.ink && s0.ink.length) }), sb('ink:all', "Delete the ink on all slides", ICON.del, { label: "Clear all slides", en: D.deck.slides.some((x) => x.ink && x.ink.length) })));
+      }
       if (tab === 'design') {
         return grp("Themes", `<div class="dk-themes">${THEMES.map(([n, t]) => themeTile(n, t)).join('')}</div>`) +
           grp("Customize", rows(mb('accent', "Accent colour (table header, new shapes)", RI.design, true, "Colours"), fontSelect(th.font || 'sans', true).replace('data-f="ff"', 'data-f="thfont"').replace('title="Schriftart"', "title=\"Font of all slides\""), mb('bgfmt', "Background", RI.bg, true, "Background"))) +
@@ -2655,6 +2667,16 @@
       if (f === 'theme') { const t = (THEMES.find((x) => x[0] === v) || [])[1]; if (t) change(() => { const sz = theme().size; D.deck.theme = { ...clone(t), ...(sz ? { size: sz } : {}) }; D.deck.slides.forEach((s0) => { delete s0.bg; delete s0.bgGrad; delete s0.bgImg; }); }); return true; }
       if (f === 'thfont') { if (fontOk(v)) change(() => { theme().font = v; }); return true; }
       if (f.startsWith('an:')) { animAct(f.slice(3), v); return true; }
+      if (f.startsWith('ink:')) {
+        const a = f.slice(4), tool = INK.t === 'hl' ? 'hl' : 'pen';
+        if (a === 't') inkTool(v);
+        if (a === 'c') { INK.c[tool] = v; if (!INK.t || INK.t === 'er') inkTool(tool); inkSave(); }
+        if (a === 'w') { INK.wi[tool] = +v; if (!INK.t || INK.t === 'er') inkTool(tool); inkSave(); }
+        if (a === 'clear') change(() => { delete slide().ink; });
+        if (a === 'all') C.confirmDlg("Delete ink", "Delete the ink on all slides?", "Delete").then((ok) => { if (ok) change(() => { D.deck.slides.forEach((x) => delete x.ink); }); });
+        D.ed.renderFmt();
+        return true;
+      }
       if (f.startsWith('vw:')) { viewAct(f.slice(3)); return true; }
       if (f.startsWith('pr:')) {
         const a = f.slice(3);
@@ -2692,6 +2714,69 @@
     },
   };
 
+  // ================================================================== Freihand auf Folien (im Bearbeiten, wie in PDFs)
+  const INK_PEN = ['#1A1A1A', '#1F4FD6', '#D6262B', '#1B8A3A', '#E8590C', '#7048E8', '#1E2F6E', '#FFFFFF'];
+  const INK_HL = ['#FFD43B', '#8CE99A', '#74C0FC', '#FFA8A8', '#FFC078', '#D0BFFF'];
+  const INK_W = { pen: [1.5, 2.6, 4.5], hl: [12, 20, 32] };
+  const INK = Object.assign({ t: '', c: { pen: '#D6262B', hl: '#FFD43B' }, wi: { pen: 1, hl: 1 } }, (() => { try { const o = C.ls('dkInk'); return o && typeof o === 'object' ? { c: { pen: '#D6262B', hl: '#FFD43B', ...(o.c || {}) }, wi: { pen: 1, hl: 1, ...(o.wi || {}) } } : {}; } catch (er) { return {}; } })());
+  const inkSave = () => { try { C.ls('dkInk', { c: INK.c, wi: INK.wi }); } catch (er) { /* */ } };
+  function inkTool(t) {
+    INK.t = t || '';
+    if (INK.t && D.ed) { D.ed.endEdit(); if (D.ed.sel.length) { D.ed.sel = []; D.ed.render(); } }
+    if (D.root) D.root.classList.toggle('dk-inking', !!INK.t);
+  }
+  // Strich zeichnen bzw. radieren; true = Ereignis gehört dem Freihandwerkzeug
+  function inkDown(ev) {
+    if (ev.button > 0) return false;
+    if (ev.pointerType === 'touch' && !(C.finger && C.finger())) return false; // mit dem Finger wird geblättert
+    const sl = D.root && $('.dk-box .dk-slide', D.root);
+    if (!sl || !sl.contains(ev.target) && !ev.target.closest('.dk-box')) return false;
+    ev.preventDefault();
+    const stage = ev.currentTarget;
+    try { stage.setPointerCapture(ev.pointerId); } catch (er) { /* */ }
+    const toL = (e) => { const r = sl.getBoundingClientRect(), k = r.width / W; return [r1((e.clientX - r.left) / k), r1((e.clientY - r.top) / k)]; };
+    let svg = sl.querySelector('.dk-ink');
+    if (!svg) { const tmp = document.createElement('div'); tmp.innerHTML = inkSvg({ ink: [] }); svg = tmp.firstChild; sl.appendChild(svg); }
+    const s0 = slide();
+    const done = (fn) => { stage.removeEventListener('pointermove', mv); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); fn(); };
+    let mv, up;
+    if (INK.t === 'er') {
+      let ink = (s0.ink || []).slice();
+      const erase = (e2) => {
+        const [x, y] = toL(e2);
+        const n0 = ink.length;
+        ink = ink.filter((k) => { for (let i = 0; i + 1 < k.p.length; i += 2) if (Math.hypot(k.p[i] - x, k.p[i + 1] - y) < 8 + k.w / 2) return false; return true; });
+        if (ink.length !== n0) { const tmp = document.createElement('div'); tmp.innerHTML = inkSvg({ ink }); svg.replaceWith(tmp.firstChild); svg = sl.querySelector('.dk-ink'); }
+      };
+      erase(ev);
+      mv = (m) => erase(m);
+      up = () => done(() => { if (ink.length !== (s0.ink || []).length) change(() => { if (ink.length) slide().ink = ink; else delete slide().ink; }); });
+    } else {
+      const hl = INK.t === 'hl', tool = hl ? 'hl' : 'pen';
+      const st = { c: INK.c[tool], w: INK_W[tool][INK.wi[tool]] || INK_W[tool][1], p: toL(ev) };
+      if (hl) st.hl = 1;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('fill', 'none'); path.setAttribute('stroke', st.c); path.setAttribute('stroke-width', st.w); path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round');
+      if (hl) { path.setAttribute('stroke-opacity', '.38'); path.style.mixBlendMode = 'multiply'; }
+      path.setAttribute('d', inkPath(st.p));
+      svg.appendChild(path);
+      mv = (m) => {
+        for (const e2 of m.getCoalescedEvents ? m.getCoalescedEvents() : [m]) {
+          const q = toL(e2), L2 = st.p.length;
+          if (Math.hypot(q[0] - st.p[L2 - 2], q[1] - st.p[L2 - 1]) < 0.8) continue;
+          if (hl && st.p.length >= 4 && m.shiftKey) { st.p.splice(2); } // Umschalt: gerade Linie
+          st.p.push(...q);
+        }
+        path.setAttribute('d', inkPath(st.p));
+      };
+      up = () => done(() => { change(() => { const t0 = slide(); (t0.ink = t0.ink || []).push(st); }); });
+    }
+    stage.addEventListener('pointermove', mv);
+    stage.addEventListener('pointerup', up);
+    stage.addEventListener('pointercancel', up);
+    return true;
+  }
+
   function build(root) {
     root.innerHTML = `
       <div class="dk-top">
@@ -2716,7 +2801,7 @@
     const stage = $('.dk-stage', root);
     new ResizeObserver(() => fit()).observe(stage);
     $('.dk-notes textarea', root).oninput = (ev) => { const s0 = slide(); if (!s0) return; if (ev.target.value) s0.notes = ev.target.value; else delete s0.notes; save(); };
-    stage.addEventListener('pointerdown', (ev) => { if (D.deck) D.ed.down(ev); });
+    stage.addEventListener('pointerdown', (ev) => { if (!D.deck) return; if (INK.t && inkDown(ev)) return; D.ed.down(ev); });
     stage.addEventListener('dblclick', (e) => { const n = e.target.closest('.dk-el'); if (n) D.ed.startEdit(n.dataset.id, e); });
   }
 
@@ -2725,6 +2810,7 @@
     close();
     D.root = root; D.path = path; D.undo = []; D.redo = [];
     D.ed = makeEditor(deckHost);
+    INK.t = '';
     build(root);
     const r = await C.apiJson('deck', { params: { path } });
     if (D.path !== path) return;
@@ -3046,6 +3132,7 @@
     if (!D.root || D.root.hidden || !D.deck || document.querySelector('dialog[open]') || D.show) return;
     const inField = ev.target.closest && ev.target.closest('math-field, input, textarea, select');
     const mod = ev.ctrlKey || ev.metaKey;
+    if (INK.t && ev.key === 'Escape' && !D.ed.edit) { ev.preventDefault(); inkTool(''); D.ed.renderFmt(); return; }
     if (D.ed.edit) {
       if (mod && ev.key.toLowerCase() === 'z' && !D.ed.edit.math) { ev.preventDefault(); undo(); return; }
       D.ed.key(ev);
@@ -3957,6 +4044,16 @@
 
   FM.ready.then(() => { if (D.root && D.deck) renderAll(); if (C.fontsReady) C.fontsReady(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'F1' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); ev.stopImmediatePropagation(); rbCollapse(); } }, true);
-  window.PDFSTIFT_DECK = { clipMath, open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
+  // Werkzeugleiste (Stift, Textmarker, Radierer) → Freihand auf der Folie
+  function inkSet(t, c, wi) {
+    if (!D.deck) return;
+    if ((t === 'pen' || t === 'hl') && c) INK.c[t] = c;
+    if ((t === 'pen' || t === 'hl') && wi != null) INK.wi[t] = wi;
+    inkSave();
+    inkTool(t);
+    if (t && RB.tab !== 'draw') RB.tab = 'draw';
+    D.ed.renderFmt();
+  }
+  window.PDFSTIFT_DECK = { inkSet, clipMath, open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
     PX: { mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH, mathSvgDoc, texOmml, mathFs, mathLib, texSvg, ommlTex }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();

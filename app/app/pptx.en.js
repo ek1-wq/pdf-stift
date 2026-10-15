@@ -821,6 +821,9 @@
             }
           } catch (er) { /* dann das Ersatzbild */ }
         }
+        // Freihand (Zeichnen-Reiter in PowerPoint): die Striche statt des Ersatzbilds
+        const cpart = ch && kids(ch, 'contentPart')[0];
+        if (cpart && ctx.ink) { try { if (await inkFromPart(cpart, ctx, M)) return; } catch (er) { /* dann das Ersatzbild */ } }
         // Formel aus PowerPoint (Office-Formel im Textfeld): als änderbare Formel übernehmen
         const csp = ch && kids(ch, 'sp')[0];
         if (csp && all(csp, 'oMath').length) {
@@ -840,11 +843,97 @@
         if (alt) for (const c of alt.children) await convert(c, ctx, M, out, gid);
         return;
       }
+      // Freihand aus PowerPoint (Stift-Zeichnungen): als Freihand der Folie übernehmen
+      if (ln === 'contentPart' && ctx.ink) { try { await inkFromPart(sp, ctx, M); } catch (er) { /* */ } return; }
       if (!/^(sp|pic|cxnSp|graphicFrame)$/.test(ln)) return;
       const outBefore = out.length;
+      // eigene Freihand-Striche aus PDF-Stift (als freie Linien gespeichert) wieder als Freihand
+      if (ln === 'sp' && ctx.ink && /^ink(-hl)?$/.test(at(path(sp, 'nvSpPr', 'cNvPr'), 'name') || '')) {
+        const n0 = out.length;
+        await convertOne(sp, ctx, M, out, gid);
+        const e = out[n0];
+        if (e && out.length === n0 + 1 && e.t === 'shape' && (e.d || e.ds)) {
+          const v = (String(e.d || e.ds).match(/-?\d*\.?\d+/g) || []).map(Number), p = [];
+          for (let i = 0; i + 1 < v.length; i += 2) p.push(r1(e.x + (v[i] * e.w) / 1000), r1(e.y + (v[i + 1] * e.h) / 1000));
+          out.splice(n0, 1);
+          const st = { c: e.line || '#1A1A1A', w: e.lw || 2, p };
+          if (/-hl$/.test(at(path(sp, 'nvSpPr', 'cNvPr'), 'name'))) st.hl = 1;
+          ctx.ink.push(st);
+        }
+        return;
+      }
       try { await convertOne(sp, ctx, M, out, gid); } finally {
         if (ctx.anim) { const cid = at(path(sp, ...[{ sp: 'nvSpPr', pic: 'nvPicPr', cxnSp: 'nvCxnSpPr', graphicFrame: 'nvGraphicFramePr' }[ln], 'cNvPr']), 'id'); for (let i = outBefore; i < out.length; i++) { out[i]._spid = cid; out[i]._grp = ctx.grpIds || []; } }
       }
+    }
+    // PowerPoint-Freihand (InkML): Striche mit Farbe und Breite; Koordinaten in 1/1000 cm, eingepasst in den Rahmen des Objekts
+    async function inkFromPart(cp, ctx, M) {
+      const r = ctx.rels[rid(cp, 'id')];
+      if (!r || r.ext) return false;
+      const doc = xml(r.target);
+      if (!doc) return false;
+      const xf = all(cp, 'xfrm')[0];
+      if (!xf) return false;
+      const b = box(xf);
+      const brushes = {};
+      for (const br of all(doc, 'brush')) {
+        const id = br.getAttribute('xml:id') || br.getAttribute('id') || '';
+        const o = {};
+        for (const pp of all(br, 'brushProperty')) {
+          const n = pp.getAttribute('name'), v = pp.getAttribute('value') || '', u = pp.getAttribute('units') || '';
+          if (n === 'color') o.c = v;
+          if (n === 'width') o.w = u === 'cm' ? +v * 360000 : u === 'mm' ? +v * 36000 : (+v || 0.05) * 360000; // EMU
+          if (n === 'transparency') o.tr = +v;
+          if (n === 'rasterOp' && /mask/i.test(v)) o.hl = 1;
+          if (n === 'tip' && /rectangle/i.test(v)) o.hl = o.hl || 0;
+        }
+        brushes[id] = o;
+      }
+      // Kanalreihenfolge (X, Y, …) aus dem Spurformat
+      const fmt = all(doc, 'traceFormat')[0];
+      const chans = fmt ? all(fmt, 'channel').map((c) => c.getAttribute('name')) : ['X', 'Y'];
+      const ix = Math.max(0, chans.indexOf('X')), iy = chans.indexOf('Y') >= 0 ? chans.indexOf('Y') : 1;
+      const res = (() => { for (const cp2 of all(doc, 'channelProperty')) if (cp2.getAttribute('channel') === 'X' && cp2.getAttribute('name') === 'resolution') { const v = +cp2.getAttribute('value'), u = cp2.getAttribute('units') || ''; if (v > 0) return /1\/cm/.test(u) ? 360000 / v : /1\/in/.test(u) ? 914400 / v : 360000 / v; } return 360; })(); // EMU je Einheit
+      const traces = [];
+      for (const tr of all(doc, 'trace')) {
+        const nC = chans.length || 2, val = Array(nC).fill(0), vel = Array(nC).fill(0), mode = Array(nC).fill('!');
+        const pts = [];
+        for (const ptS of (tr.textContent || '').split(',')) {
+          const toks = [...ptS.matchAll(/([!'"]?)\s*(-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)/g)];
+          if (!toks.length) continue;
+          toks.slice(0, nC).forEach((m, c) => {
+            if (m[1]) mode[c] = m[1];
+            const x = +m[2];
+            if (mode[c] === '!') { vel[c] = x - val[c]; val[c] = x; }
+            else if (mode[c] === "'") { vel[c] = x; val[c] += x; }
+            else { vel[c] += x; val[c] += vel[c]; }
+          });
+          pts.push([val[ix], val[iy]]);
+        }
+        if (pts.length) traces.push({ pts, br: brushes[(tr.getAttribute('brushRef') || '').replace('#', '')] || Object.values(brushes)[0] || {} });
+      }
+      if (!traces.length) return false;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const t of traces) for (const [x, y] of t.pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      // Mitte der Striche auf die Mitte des Rahmens; Maßstab aus der Auflösung (sonst in den Rahmen eingepasst)
+      let sx = res, sy = res;
+      if (!(sx > 0) || (x1 - x0) * sx > b.w * 3 || (y1 - y0) * sy > b.h * 3) { sx = b.w / Math.max(1, x1 - x0); sy = b.h / Math.max(1, y1 - y0); }
+      const cxE = b.x + b.w / 2, cyE = b.y + b.h / 2, mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+      for (const t of traces) {
+        const p = [];
+        let lx = null, ly = null;
+        for (const [x, y] of t.pts) {
+          const [ex, ey] = M.f(cxE + (x - mx) * sx, cyE + (y - my) * sy);
+          const px2 = r1(OX + (ex / EMU) * K), py2 = r1(OY + (ey / EMU) * K);
+          if (lx != null && Math.hypot(px2 - lx, py2 - ly) < 0.6) continue;
+          p.push(px2, py2); lx = px2; ly = py2;
+        }
+        const br = t.br;
+        const st = { c: /^#[0-9a-f]{6}$/i.test(br.c || '') ? br.c.toUpperCase() : '#1A1A1A', w: r1(Math.max(0.5, ((br.w || 0.053 * 360000) / EMU) * K * (M.s || 1))), p };
+        if (br.hl || (br.tr && br.tr > 0.3)) st.hl = 1;
+        ctx.ink.push(st);
+      }
+      return true;
     }
     // Textfeld, das nur aus Formeln besteht → Formel-Objekt (Lage wie in PowerPoint: Ausrichtung und Innenabstand des Felds)
     async function mathFromSp(sp, ctx, M, out, gid) {
@@ -1515,7 +1604,8 @@
       const map = { ...T0m.map };
       for (const dd of [layout, d]) { const o = dd && all(dd, 'overrideClrMapping')[0]; if (o) for (const a of o.attributes) map[a.name] = a.value; }
       const T = { ...T0m, map };
-      const ctx = { T, layout, rels, deckFont };
+      const inkAcc = []; // Freihand dieser Folie (aus PowerPoint-Freihand oder eigenen Strichen)
+      const ctx = { T, layout, rels, deckFont, ink: inkAcc };
       const els = [];
       const showMaster = at(d.documentElement, 'showMasterSp') !== '0' && (!layout || at(layout.documentElement, 'showMasterSp') !== '0');
       if (mR && showMaster) for (const e of await deco(mR.target, { T, layout: null, deckFont })) els.push({ ...JSON.parse(JSON.stringify(e)), id: X().uid() });
@@ -1537,6 +1627,7 @@
       const gmap = {};
       for (const e of els) if (e.g) e.g = gmap[e.g] || (gmap[e.g] = X().uid());
       const s = { id: X().uid(), els };
+      if (inkAcc.length) s.ink = inkAcc;
       const bg = (await bgOfDoc(d, rels, T, sp)) || (layout && (await bgOfDoc(layout, relsOf(layR.target), T, layR.target))) || (T.master && (await bgOfDoc(T.master, relsOf(mR.target), T, mR.target)));
       if (bg && !(bg.bg && !bg.bgGrad && !bg.bgImg && bg.bg === theme.bg)) Object.assign(s, bg);
       else if (!bg && mR && firstMaster && mR.target !== firstMaster.target) { const mb = await bgOfDoc(T.master, relsOf(mR.target), T); if (mb) Object.assign(s, mb); }
@@ -1870,11 +1961,18 @@
           }
         } catch (err) { skipped++; }
       }
-      // Stiftnotizen auf der Folie als Bild darüber
-      if (s.ink && s.ink.length) {
+      // Freihand: jeder Strich als freie Linie (in PowerPoint einzeln verschieb- und löschbar), Textmarker halb durchsichtig
+      for (const k of s.ink || []) {
         try {
-          const svg = P.inkSvg(s).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
-          sl.addImage({ data: await svgToPng(svg, W, H, 2), x: 0, y: 0, w: W / IN, h: H / IN });
+          const p = k.p || [];
+          if (p.length < 2) continue;
+          let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+          for (let i = 0; i + 1 < p.length; i += 2) { x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); y0 = Math.min(y0, p[i + 1]); y1 = Math.max(y1, p[i + 1]); }
+          const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
+          const pts = [];
+          for (let i = 0; i + 1 < p.length; i += 2) pts.push({ x: (p[i] - x0) / IN, y: (p[i + 1] - y0) / IN, ...(i ? {} : { moveTo: true }) });
+          if (pts.length === 1) pts.push({ x: pts[0].x + 0.001, y: pts[0].y });
+          sl.addText('', { objectName: k.hl ? 'ink-hl' : 'ink', x: x0 / IN, y: y0 / IN, w: bw / IN, h: bh / IN, shape: 'custGeom', points: pts, fill: { type: 'none' }, line: { color: noHash(k.c || '#1A1A1A'), width: Math.max(0.25, k.w || 2), ...(k.hl ? { transparency: 62 } : {}) }, lineCap: 'round' });
         } catch (err) { skipped++; }
       }
       if (s.notes) sl.addNotes(s.notes);

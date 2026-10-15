@@ -1402,7 +1402,14 @@ body.ob-placing .page { cursor: crosshair !important; }
 .dk-math.editing > .dk-mrow { visibility: hidden; }
 /* Formel direkt auf der Folie bearbeiten; Werkzeuge im Reiter „Formel“ */
 .dk-math.editing { overflow: visible; z-index: 5; }
-.dk-live .dk-handles { z-index: 8; } /* Griffe liegen über dem Eingabefeld einer Formel */
+.dk-live .dk-handles { z-index: 8; }
+/* Freihand auf Folien */
+.dk-inking .dk-stage, .dk-inking .dk-stage * { cursor: crosshair !important; }
+.dk-inking .dk-stage { touch-action: pan-x pan-y; }
+.rb-inkcols { display: grid; grid-template-columns: repeat(4, 22px); gap: 4px; padding: 2px 4px; }
+.rb-inkcols .rb-inksw { width: 22px !important; height: 22px !important; min-width: 0 !important; border-radius: 50% !important; border: 1px solid rgba(0, 0, 0, .25) !important; background: var(--c) !important; padding: 0 !important; cursor: pointer; }
+.rb-inkcols .rb-inksw.on { box-shadow: 0 0 0 2px var(--bar), 0 0 0 4px var(--accent); }
+.rb-inkw svg { stroke: currentColor; fill: none; stroke-linecap: round; } /* Griffe liegen über dem Eingabefeld einer Formel */
 .dk-math.editing > svg { visibility: hidden; }
 .dk-mf { position: absolute; left: 0; top: 50%; transform: translateY(-50%); min-width: 100%; box-sizing: border-box; padding: 2px 4px; border: 0; border-radius: 4px;
   background: rgba(255, 255, 255, .92); outline: 1.5px dashed #1E2F6E; --caret-color: #1E2F6E; --selection-background-color: #DDE5FB; --primary: #1E2F6E; --contains-highlight-background-color: rgba(30, 47, 110, .06); }
@@ -1412,7 +1419,6 @@ body.ob-placing .page { cursor: crosshair !important; }
 .rb-mt, .rb-msy { font-family: 'Times New Roman', 'Tinos', serif; }
 .rb-mt { font-size: 14px; font-style: italic; white-space: nowrap; }
 .rb-msy { min-width: 24px; font-size: 15px !important; padding: 0 2px; }
-.rb-tab[data-tab="math"] { color: var(--accent); font-weight: 700; }
 .dk-hf { pointer-events: none !important; }
 .dk-tx a, .dk-cell a { color: #1F4FD6; text-decoration: underline; }
 .dk-sym { width: 360px; }

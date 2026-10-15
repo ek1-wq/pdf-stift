@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.97.2';
+  const VERSION = '1.98.0';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -5097,6 +5097,7 @@
     window.PDFSTIFT_CORE = window.PDFSTIFT_CORE || {
       API, VERSION, LANG, esc, ls, apiJson, toast, confirmDlg, askText, prepareImage, uploadImage, downloadBlob,
       pptx: () => pptxMod(),
+      finger: () => !!S.finger,
       ensureFontkit: () => (window.fontkit ? Promise.resolve() : loadScript('vendor/fontkit.min.js?v=' + VERSION)),
       uploadPdf: async (blob, name) => {
         const fd = new FormData();
@@ -10918,7 +10919,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
         b.className = 'swatch' + (S.color[S.tool] === hex ? ' active' : '');
         b.setAttribute('aria-label', label);
         b.innerHTML = `<span style="background:${hex}"></span>`;
-        b.onclick = () => { S.color[S.tool] = hex; persistTools(); renderToolbar(); };
+        b.onclick = () => { S.color[S.tool] = hex; persistTools(); renderToolbar(); deckInk(); };
         cw.appendChild(b);
       });
     }
@@ -10931,7 +10932,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
         b.className = 'width' + (i === S.wi[S.tool] ? ' active' : '');
         b.setAttribute('aria-label', ["Thin", "Medium", "Thick"][i]);
         b.innerHTML = `<span style="width:${px}px;height:${px}px"></span>`;
-        b.onclick = () => { S.wi[S.tool] = i; persistTools(); renderToolbar(); };
+        b.onclick = () => { S.wi[S.tool] = i; persistTools(); renderToolbar(); deckInk(); };
         ww.appendChild(b);
       });
     }
@@ -10991,7 +10992,14 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
     toolsIn = true;
     try { Object.assign(S, { tool: t.tool, color: { ...S.color, ...t.color }, wi: { ...S.wi, ...t.wi }, txKind: t.txKind, shKind: t.shKind, ttSize: t.ttSize, favs: t.favs || S.favs, finger: !!t.finger }); renderToolbar(); } finally { toolsIn = false; }
   }
-  document.querySelectorAll('.tool[data-tool]').forEach((b) => { b.onclick = () => { S.tool = b.dataset.tool; persistTools(); renderToolbar(); }; });
+  document.querySelectorAll('.tool[data-tool]').forEach((b) => { b.onclick = () => { S.tool = b.dataset.tool; persistTools(); renderToolbar(); deckInk(); }; });
+  // Präsentation offen: Stift, Textmarker und Radierer der Werkzeugleiste zeichnen auf der Folie (Auswahl/Hand = Objekte bearbeiten)
+  function deckInk() {
+    if (!V.deck || !window.PDFSTIFT_DECK || !window.PDFSTIFT_DECK.inkSet) return;
+    const t = S.tool === 'pen' || S.tool === 'hl' || S.tool === 'er' ? S.tool : S.tool === 'sel' || S.tool === 'hand' ? '' : null;
+    if (t === null) return;
+    window.PDFSTIFT_DECK.inkSet(t, t === 'pen' || t === 'hl' ? S.color[t] : null, t === 'pen' || t === 'hl' ? S.wi[t] : null);
+  }
   document.querySelectorAll('#txKinds .kind').forEach((b) => { b.onclick = () => { S.txKind = b.dataset.k; persistTools(); renderToolbar(); }; });
   document.querySelectorAll('#shKinds .kind').forEach((b) => { b.onclick = () => { S.shKind = b.dataset.k; persistTools(); renderToolbar(); }; });
   document.querySelectorAll('#ttSizes .kind').forEach((b) => { b.onclick = () => { S.ttSize = +b.dataset.fs; persistTools(); renderToolbar(); }; });

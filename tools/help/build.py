@@ -149,6 +149,8 @@ DE = {
         ('h2', 'Bearbeiten, vorführen und speichern'),
         ('ul', [
             'Bearbeiten wie in PowerPoint: Folien und Layouts, Design, Textfelder, Formen, Bilder, Tabellen und Diagramme; Animationen im Reiter „Animationen“.',
+            '<b>Auf Folien zeichnen</b>: Reiter <b>Zeichnen</b> → Stift, Textmarker oder Radierer (oder dieselben Werkzeuge in der Werkzeugleiste) – geschrieben wird direkt auf die Folie, wie in PDFs. '
+            '„Auswählen“ oder Esc schaltet zurück zum Bearbeiten. Die Striche bleiben beim Speichern als PDF und als PowerPoint erhalten; Freihand aus PowerPoint wird übernommen.',
             '<b>Formeln</b>: Einfügen → <b>Formel</b> oder ein Knopf im Reiter <b>Formel</b> (auch auf PDF-Seiten), dann direkt an Ort und Stelle tippen. Der Reiter enthält Struktur '
             '(Bruch, Hochzahl, Wurzel, Summe, Integral …), Symbolen, Vorlagen wie Kapitalwert, Farbe, Größe und LaTeX. Beim Tippen ergibt / einen Bruch, ^ eine Hochzahl, '
             '_ einen Index. Fertig: daneben klicken oder „Fertig“; Doppelklick bearbeitet die Formel wieder.',
@@ -342,6 +344,8 @@ EN = {
         ('h2', 'Editing, Presenting and Saving'),
         ('ul', [
             'Edit as in PowerPoint: slides and layouts, design, text boxes, shapes, pictures, tables and charts; animations on the “Animations” tab.',
+            '<b>Drawing on slides</b>: <b>Drawing</b> tab → pen, highlighter or eraser (or the same tools in the toolbar) – you write straight onto the slide, as in PDFs. '
+            '“Select” or Esc switches back to editing. The strokes are kept when saving as PDF and as PowerPoint; ink from PowerPoint files is imported.',
             '<b>Equations</b>: Insert → <b>Equation</b> or any button on the <b>Equation</b> tab (also on PDF pages), then type right in place. The tab has structures '
             '(fraction, superscript, root, sum, integral …), symbols, templates such as net present value, colour, size and LaTeX. While typing, / makes a fraction, '
             '^ a superscript, _ a subscript. Done: click elsewhere or “Done”; double-click edits the equation again.',
