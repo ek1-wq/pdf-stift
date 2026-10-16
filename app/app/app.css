@@ -1280,7 +1280,8 @@ body[data-demo] #btnShortcut, body[data-demo] #btnBackup, body[data-demo] #btnLo
 .dk-tx ul ul, .dk-tx ol ol { margin: .3em 0 0; }
 .dk-live .dk-ph:not(.dk-pt) .dk-tx { color: #8A93A6 !important; }
 .dk-img img { width: 100%; height: 100%; display: block; object-fit: fill; pointer-events: none; -webkit-user-drag: none; }
-.dk-shape svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.dk-shape > svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.dk-shape .dk-tx svg { pointer-events: none; }
 .dk-table table { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; }
 .dk-table td { border: 0; padding: 0; vertical-align: middle; box-shadow: inset -1px -1px 0 var(--bc, #868E96); }
 .dk-table table { box-shadow: inset 1px 1px 0 var(--bc, #868E96); } /* Linien ohne eigene Höhe – Zeilen so hoch wie in PowerPoint */
@@ -1647,3 +1648,46 @@ body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--hpr, 0px)); }
 .dk-tpln { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Platzhalter aus einer Vorlage: in der eigenen Farbe, nur blasser */
 .dk-live .dk-ph.dk-pt .dk-tx { opacity: .6; }
+/* Nummerierung wie in PowerPoint (a), i., (1) …) */
+.dk-el ol[data-n=arabicParenR] > li::marker { content: counter(list-item, decimal) ")\00a0"; }
+.dk-el ol[data-n=arabicParenBoth] > li::marker { content: "(" counter(list-item, decimal) ")\00a0"; }
+.dk-el ol[data-n=arabicPlain] > li::marker { content: counter(list-item, decimal) "\00a0"; }
+.dk-el ol[data-n=alphaLcPeriod] > li::marker { content: counter(list-item, lower-alpha) ".\00a0"; }
+.dk-el ol[data-n=alphaLcParenR] > li::marker { content: counter(list-item, lower-alpha) ")\00a0"; }
+.dk-el ol[data-n=alphaLcParenBoth] > li::marker { content: "(" counter(list-item, lower-alpha) ")\00a0"; }
+.dk-el ol[data-n=alphaLcPlain] > li::marker { content: counter(list-item, lower-alpha) "\00a0"; }
+.dk-el ol[data-n=alphaUcPeriod] > li::marker { content: counter(list-item, upper-alpha) ".\00a0"; }
+.dk-el ol[data-n=alphaUcParenR] > li::marker { content: counter(list-item, upper-alpha) ")\00a0"; }
+.dk-el ol[data-n=alphaUcParenBoth] > li::marker { content: "(" counter(list-item, upper-alpha) ")\00a0"; }
+.dk-el ol[data-n=alphaUcPlain] > li::marker { content: counter(list-item, upper-alpha) "\00a0"; }
+.dk-el ol[data-n=romanLcPeriod] > li::marker { content: counter(list-item, lower-roman) ".\00a0"; }
+.dk-el ol[data-n=romanLcParenR] > li::marker { content: counter(list-item, lower-roman) ")\00a0"; }
+.dk-el ol[data-n=romanLcParenBoth] > li::marker { content: "(" counter(list-item, lower-roman) ")\00a0"; }
+.dk-el ol[data-n=romanLcPlain] > li::marker { content: counter(list-item, lower-roman) "\00a0"; }
+.dk-el ol[data-n=romanUcPeriod] > li::marker { content: counter(list-item, upper-roman) ".\00a0"; }
+.dk-el ol[data-n=romanUcParenR] > li::marker { content: counter(list-item, upper-roman) ")\00a0"; }
+.dk-el ol[data-n=romanUcParenBoth] > li::marker { content: "(" counter(list-item, upper-roman) ")\00a0"; }
+.dk-el ol[data-n=romanUcPlain] > li::marker { content: counter(list-item, upper-roman) "\00a0"; }
+/* Nummerierung mit Einzug wie in PowerPoint: Nummer links an fester Stelle, Text bei marL */
+.dk-el ol > li[data-bi] { display: list-item; list-style: none; }
+.dk-el ol > li[data-bi]::before { content: counter(list-item) "."; font-family: inherit; }
+.dk-el ol[data-n=arabicParenR] > li[data-bi]::before { content: counter(list-item, decimal) ")"; }
+.dk-el ol[data-n=arabicParenBoth] > li[data-bi]::before { content: "(" counter(list-item, decimal) ")"; }
+.dk-el ol[data-n=arabicPlain] > li[data-bi]::before { content: counter(list-item, decimal) ""; }
+.dk-el ol[data-n=alphaLcPeriod] > li[data-bi]::before { content: counter(list-item, lower-alpha) "."; }
+.dk-el ol[data-n=alphaLcParenR] > li[data-bi]::before { content: counter(list-item, lower-alpha) ")"; }
+.dk-el ol[data-n=alphaLcParenBoth] > li[data-bi]::before { content: "(" counter(list-item, lower-alpha) ")"; }
+.dk-el ol[data-n=alphaLcPlain] > li[data-bi]::before { content: counter(list-item, lower-alpha) ""; }
+.dk-el ol[data-n=alphaUcPeriod] > li[data-bi]::before { content: counter(list-item, upper-alpha) "."; }
+.dk-el ol[data-n=alphaUcParenR] > li[data-bi]::before { content: counter(list-item, upper-alpha) ")"; }
+.dk-el ol[data-n=alphaUcParenBoth] > li[data-bi]::before { content: "(" counter(list-item, upper-alpha) ")"; }
+.dk-el ol[data-n=alphaUcPlain] > li[data-bi]::before { content: counter(list-item, upper-alpha) ""; }
+.dk-el ol[data-n=romanLcPeriod] > li[data-bi]::before { content: counter(list-item, lower-roman) "."; }
+.dk-el ol[data-n=romanLcParenR] > li[data-bi]::before { content: counter(list-item, lower-roman) ")"; }
+.dk-el ol[data-n=romanLcParenBoth] > li[data-bi]::before { content: "(" counter(list-item, lower-roman) ")"; }
+.dk-el ol[data-n=romanLcPlain] > li[data-bi]::before { content: counter(list-item, lower-roman) ""; }
+.dk-el ol[data-n=romanUcPeriod] > li[data-bi]::before { content: counter(list-item, upper-roman) "."; }
+.dk-el ol[data-n=romanUcParenR] > li[data-bi]::before { content: counter(list-item, upper-roman) ")"; }
+.dk-el ol[data-n=romanUcParenBoth] > li[data-bi]::before { content: "(" counter(list-item, upper-roman) ")"; }
+.dk-el ol[data-n=romanUcPlain] > li[data-bi]::before { content: counter(list-item, upper-roman) ""; }
+.dk-el ol > li[data-bi][data-bi]::marker { content: none; }

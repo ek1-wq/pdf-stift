@@ -12,6 +12,16 @@
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const r1 = (v) => Math.round(v * 10) / 10;
   const r2 = (v) => Math.round(v * 100) / 100;
+  // Nummerierungsarten aus PowerPoint: Zahl, Buchstabe, römisch; mit Punkt, Klammer oder ohne
+  const NUM_T = /^(arabic|alphaLc|alphaUc|romanLc|romanUc)(Period|ParenR|ParenBoth|Plain)$/;
+  function numMark(n, t) {
+    const m = NUM_T.exec(t || '') || [0, 'arabic', 'Period'];
+    const alpha = (k) => { let o = ''; while (k > 0) { k--; o = String.fromCharCode(97 + (k % 26)) + o; k = Math.floor(k / 26); } return o; };
+    const roman = (k) => { const R = [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']]; let o = ''; for (const [v, c] of R) while (k >= v) { o += c; k -= v; } return o; };
+    let v = m[1] === 'arabic' ? String(n) : m[1].startsWith('alpha') ? alpha(n) : roman(n);
+    if (/Uc$/.test(m[1])) v = v.toUpperCase();
+    return m[2] === 'Period' ? v + '.' : m[2] === 'ParenR' ? v + ')' : m[2] === 'ParenBoth' ? '(' + v + ')' : v;
+  }
   const uid = () => Math.random().toString(36).slice(2, 10);
   // Schriften: drei PDF-Standardschriften, freie Schriften aus vendor/fonts (SIL Open Font License, Liste in fonts.json)
   // und auf Wunsch die Schriften dieses Computers (Windows-App, Chrome/Edge)
@@ -209,6 +219,13 @@
             // Einzug wie in PowerPoint: Text um margin-left verschoben, Zeichen bei data-bi (em, links vom Text)
             const bi = /^(-\d*\.?\d+|0)$/.exec(n.getAttribute('data-bi') || ''), ml = /^(-?\d*\.?\d+)em$/.exec(st.marginLeft || '');
             if (bi && +bi[0] >= -20 && ml && Math.abs(+ml[1]) <= 20) { el.setAttribute('data-bi', String(Math.round(+bi[0] * 1000) / 1000)); el.style.marginLeft = Math.round(+ml[1] * 1000) / 1000 + 'em'; const bs = +n.getAttribute('data-bs'); if (bs >= 0.25 && bs <= 4) el.setAttribute('data-bs', String(bs)); }
+          }
+          // Nummerierung wie in PowerPoint: Art (a), i. …) und Startwert
+          if (tag === 'ol') {
+            const nt = n.getAttribute('data-n');
+            if (NUM_T.test(nt || '')) el.setAttribute('data-n', nt);
+            const sa = parseInt(n.getAttribute('start'), 10);
+            if (sa > 1 && sa < 10000) el.setAttribute('start', String(sa));
           }
         } else if (tag === 'br') { dst.appendChild(document.createElement('br')); continue; }
         else if (tag === 'b' || tag === 'strong') el = document.createElement('b');
@@ -501,6 +518,7 @@
         e.rows.map((row, ri) => `<tr style="height:${r1(rh[ri] * e.h)}px">` + row.map((cell, ci) => { const k = ri + ',' + ci; if (MG.hid.has(k)) return ''; const sp = MG.span[k]; const cs = (e.cs && e.cs[k]) || {}; return `<td data-r="${ri}" data-c="${ci}"${sp ? ` rowspan="${sp[0]}" colspan="${sp[1]}"` : ''} class="${ri === 0 && e.head ? 'head' : ''}" style="${ri === 0 && e.head ? `background:${th.accent};color:#fff` : `color:${cs.c || th.fg}`}${cs.f ? `;background:${cs.f}` : ''}${cs.b ? ';font-weight:700' : ''};vertical-align:${{ t: 'top', b: 'bottom' }[cs.v || e.va] || 'middle'}"><div class="dk-cell" style="padding:${cpad}${cs.vt ? ';writing-mode:vertical-rl' + (cs.vt === 'u' ? ';transform:rotate(180deg)' : '') : ''}">${clean(cell)}</div></td>`; }).join('') + '</tr>').join('');
       n.appendChild(tb);
     }
+    if (e.t === 'text' || e.t === 'shape' || e.t === 'table') strutFix(n, e.fs || (e.t === 'table' ? 18 : 24), e.t === 'table' ? 1.2 : +e.lh || 1.2);
     fillIm(n);
     // Farbe eigener Aufzählungszeichen
     n.querySelectorAll('li[data-bc]').forEach((li) => li.style.setProperty('--bc', li.getAttribute('data-bc')));
@@ -555,6 +573,26 @@
     if (hf.foot) mk(300, 360, hf.foot, 'center');
     if (hf.num) mk(660, 260, String(i + 1), 'right');
     return out;
+  }
+  // Absätze nur aus kleinerer Schrift (z. B. 10 pt in einem 18-pt-Feld): Zeilenhöhe nach dieser Schrift, wie in PowerPoint
+  // (sonst bestimmt die Grundschrift des Felds die Zeilenhöhe). Nur in der Anzeige, nicht im gespeicherten Text.
+  function strutFix(n, fs, lh) {
+    for (const el of n.querySelectorAll('.dk-tx div, .dk-tx li, .dk-cell div, .dk-cell li')) {
+      if (el.querySelector('div, li, ul, ol')) continue;
+      const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let zmax = 0, big = false;
+      while (tw.nextNode()) {
+        const t = tw.currentNode;
+        if (!t.nodeValue.trim()) continue;
+        let z = 1;
+        for (let a = t.parentElement; a && a !== el; a = a.parentElement) { const m = /^(\d*\.?\d+)em$/.exec(a.style.fontSize || ''); if (m) z *= +m[1]; if (/^(SUP|SUB)$/.test(a.tagName)) z *= 0.7; }
+        if (z >= 0.97) { big = true; break; }
+        zmax = Math.max(zmax, z);
+      }
+      if (big || !zmax) continue;
+      const f = /^\d*\.?\d+$/.test(el.style.lineHeight || '') ? +el.style.lineHeight : lh;
+      el.style.lineHeight = Math.round(f * zmax * fs * 100) / 100 + 'px';
+    }
   }
   // alles in Großbuchstaben (ß bleibt), Auszeichnung bleibt
   function capHtml(html) {
@@ -1079,8 +1117,10 @@
   const IMC = new Map();
   function imSvg(tex) {
     if (IMC.has(tex)) return IMC.get(tex);
-    const box = window.MathJax.tex2svg(texFix(tex), { display: false });
-    const sv = box.querySelector('svg');
+    let box = window.MathJax.tex2svg(texFix(tex), { display: false });
+    let sv = box.querySelector('svg');
+    // nicht lesbare Formel: als einfacher Text statt eines dunklen Fehlerkastens
+    if (sv.querySelector('[data-mjx-error]')) { box = window.MathJax.tex2svg(`\\text{${String(tex).replace(/\\[a-zA-Z]+/g, ' ').replace(/[\\{}$%#&^_~]/g, '').replace(/\s+/g, ' ').trim()}}`, { display: false }); sv = box.querySelector('svg'); }
     const vb = sv.getAttribute('viewBox').split(/[\s,]+/).map((v) => Math.round(+v * 10) / 10);
     const r = { svg: mathSafe(sv.innerHTML.replace(/ data-[a-z-]+="[^"]*"/g, '').replace(/(\d+\.\d)\d+/g, '$1')), vb };
     if (IMC.size > 500) IMC.clear();
@@ -1178,9 +1218,11 @@
       const raw = kids(r, 't').map((t) => t.textContent).join('');
       if (!raw) return '';
       const rp = kid(r, 'rPr');
-      if (rp && kid(rp, 'nor')) return `\\text{${esc1(raw.replace(/[⁡-⁤​]/g, ''))}}`;
+      if (rp && kid(rp, 'nor')) return `\\text{${esc1(raw.replace(/[⁡-⁤​]/g, '')).replace(/[ \u00a0]/g, '\\ ')}}`;
       const sty = val(rp, 'sty', '');
-      const chars = (t) => { let o = ''; for (const ch of t) o += ch === '&' ? '&' : ch === ' ' ? '\\ ' : OM_SYM[ch] || (/[\\{}%#$_^]/.test(ch) ? esc1(ch) : ch); return o; };
+      // Leerzeichen (auch geschützte) bleiben sichtbar; kursive Mathematik-Buchstaben (𝑥, ℎ) → normale Buchstaben (werden ohnehin kursiv gesetzt)
+      const mit = (ch) => { const c = ch.codePointAt(0); if (c === 0x210E) return 'h'; if (c >= 0x1D434 && c <= 0x1D467) { const k = c - 0x1D434; return String.fromCharCode(k < 26 ? 65 + k : 97 + k - 26); } return ch; };
+      const chars = (t) => { let o = ''; for (let ch of t) { ch = mit(ch); o += ch === '&' ? '&' : /^[ \u00a0\u2000-\u200a\u202f]$/.test(ch) ? '{\\ }' : OM_SYM[ch] || (/[\\{}%#$_^]/.test(ch) ? esc1(ch) : ch); } return o; };
       const seg = (t) => {
         if (!t) return '';
         if (OM_FN.has(t.trim())) return `\\${t.trim()} `;
@@ -1193,6 +1235,12 @@
       const parts = raw.split(/([A-Za-z]+)⁡/);
       let out = '';
       parts.forEach((p, i) => { out += i % 2 ? (OM_FN.has(p) ? `\\${p} ` : `\\operatorname{${p}}`) : seg(p.replace(/[⁡-⁤​]/g, '')); });
+      // eigene Farbe des Textlaufs (PowerPoint: a:rPr/a:solidFill/a:srgbClr)
+      const arp = [...r.childNodes].find((c) => c.nodeType === 1 && c.localName === 'rPr' && /drawingml/.test(c.namespaceURI || ''));
+      const fillC = arp && [...arp.childNodes].find((c) => c.nodeType === 1 && c.localName === 'solidFill');
+      const sc = fillC && [...fillC.childNodes].find((c) => c.nodeType === 1 && c.localName === 'srgbClr');
+      const hx = sc && sc.getAttribute('val');
+      if (hx && /^[0-9A-F]{6}$/i.test(hx) && out.trim()) return `{\\color{#${hx.toUpperCase()}}${out}}`;
       return out;
     };
     const all = (n) => [...n.childNodes].map((c) => (c.nodeType === 1 ? conv(c) : c.nodeType === 3 && c.nodeValue.trim() ? [...c.nodeValue.trim()].map((ch) => OM_SYM[ch] || ch).join('') : '')).join('');
@@ -1246,7 +1294,8 @@
         default: return /Pr$/.test(n.localName) ? '' : all(n);
       }
     }
-    return conv(node).replace(/\s+/g, ' ').replace(/ ([}^_])/g, '$1').trim();
+    // Leerraum zusammenfassen; „\ “ (sichtbares Leerzeichen) bleibt erhalten
+    return conv(node).replace(/\s+/g, ' ').replace(/([^\\]) ([}^_])/g, '$1$2').trim();
   }
   // Rechenweg: eine neue Zeile „= …“ anhängen; eine einzeilige Formel wird dabei am ersten = ausgerichtet
   function mathNewRow(tex) {
@@ -3802,20 +3851,21 @@
     t.innerHTML = clean(html);
     const out = [];
     let curP = null;
-    const newP = (al, list, lvl, num) => { curP = { runs: [], al: al || '', list, lvl, num }; out.push(curP); };
+    const newP = (al, list, lvl, num, nt) => { curP = { runs: [], al: al || '', list, lvl, num, nt: nt || '' }; out.push(curP); };
     const walk = (n, st, blk) => {
       for (const c of n.childNodes) {
-        if (c.nodeType === 3) { if (!curP) newP(blk.al, blk.list, blk.lvl, blk.num); curP.runs.push({ ...st, t: c.nodeValue.replace(/\s+/g, ' ') }); continue; }
+        if (c.nodeType === 3) { if (!curP) newP(blk.al, blk.list, blk.lvl, blk.num, blk.nt); curP.runs.push({ ...st, t: c.nodeValue.replace(/\s+/g, ' ') }); continue; }
         if (c.nodeType !== 1) continue;
         const tag = c.tagName.toLowerCase();
         if (tag === 'br') { newP(blk.al, null, blk.lvl, null); continue; }
-        if (tag === 'span' && c.classList.contains('dk-im')) { if (!curP) newP(blk.al, blk.list, blk.lvl, blk.num); curP.runs.push({ ...st, t: '\uFFFC', m: c.getAttribute('data-tex') || '' }); continue; }
+        if (tag === 'span' && c.classList.contains('dk-im')) { if (!curP) newP(blk.al, blk.list, blk.lvl, blk.num, blk.nt); curP.runs.push({ ...st, t: '\uFFFC', m: c.getAttribute('data-tex') || '' }); continue; }
         if (tag === 'ul' || tag === 'ol') {
           let k = 0;
-          for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k }; newP(b2.al, tag, b2.lvl, k); paraSp(curP, li); if (li.getAttribute('data-bu')) curP.bu = li.getAttribute('data-bu'); curP.bc = li.getAttribute('data-bc') || ''; if (li.getAttribute('data-bi')) { curP.bi = parseFloat(li.getAttribute('data-bi')) || 0; curP.bin = li.getAttribute('data-bi') === '0'; curP.ml = parseFloat(li.style.marginLeft) || 0; curP.bs = parseFloat(li.getAttribute('data-bs')) || 0; } walk(li, st, b2); curP = null; }
+          const k0 = tag === 'ol' ? Math.max(1, parseInt(c.getAttribute('start'), 10) || 1) - 1 : 0, nt = tag === 'ol' ? c.getAttribute('data-n') || '' : '';
+          for (const li of c.children) { if (li.tagName.toLowerCase() !== 'li') continue; k++; const b2 = { al: li.style.textAlign || blk.al, list: tag, lvl: (blk.lvl || 0) + 1, num: k + k0, nt }; newP(b2.al, tag, b2.lvl, k + k0, nt); paraSp(curP, li); if (li.getAttribute('data-bu')) curP.bu = li.getAttribute('data-bu'); curP.bc = li.getAttribute('data-bc') || ''; if (li.getAttribute('data-bi')) { curP.bi = parseFloat(li.getAttribute('data-bi')) || 0; curP.bin = li.getAttribute('data-bi') === '0'; curP.ml = parseFloat(li.style.marginLeft) || 0; curP.bs = parseFloat(li.getAttribute('data-bs')) || 0; } walk(li, st, b2); curP = null; }
           continue;
         }
-        if (tag === 'div' || tag === 'li') { const b2 = { ...blk, al: c.style.textAlign || blk.al }; newP(b2.al, blk.list, blk.lvl, blk.num); paraSp(curP, c); walk(c, st, b2); curP = null; continue; }
+        if (tag === 'div' || tag === 'li') { const b2 = { ...blk, al: c.style.textAlign || blk.al }; newP(b2.al, blk.list, blk.lvl, blk.num, blk.nt); paraSp(curP, c); walk(c, st, b2); curP = null; continue; }
         const s2 = { ...st };
         if (tag === 'b') s2.b = 1; if (tag === 'i') s2.i = 1; if (tag === 'u') s2.u = 1; if (tag === 's') s2.s = 1;
         if (tag === 'sup') { s2.sup = 1; delete s2.sub; } if (tag === 'sub') { s2.sub = 1; delete s2.sup; }
@@ -4029,7 +4079,7 @@
         const avail = w - 2 * pad - ln.ind;
         const lx = x + pad + ln.ind + (ln.al === 'center' ? (avail - ln.w) / 2 : ln.al === 'right' ? avail - ln.w : 0);
         if (ln.bullet && ln.bullet.list) {
-          const mark = ln.bullet.list === 'ol' ? ln.bullet.num + '.' : ln.bullet.bu || '•';
+          const mark = ln.bullet.list === 'ol' ? numMark(ln.bullet.num, ln.bullet.nt) : ln.bullet.bu || '•';
           const mf = ln.bullet.bu ? (fontCh([...mark][0], {}) || (FF.custom ? FF.r : F.r)) : (FF.custom ? FF.r : F.r);
           let mk = mark; if (ln.bullet.bu && !fontCh([...mark][0], {})) mk = '•';
           pg.drawText(mk, { x: (ln.bullet.bin ? lx - fs * 0.75 : x + pad + ln.ind + (ln.bullet.bi ? ln.bullet.bi * fs : -fs * (ln.bullet.list === 'ol' ? 1.1 : 0.8))) * K, y: -(yy + fs * (ln.m || 1) * (0.92 + (L(ln) - 1.2) / 2)) * K, size: fs * (ln.bullet.bs || 1) * K, font: mf, color: col(ln.bullet.bc || color) });

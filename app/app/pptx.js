@@ -193,6 +193,7 @@
   }
 
   // ================================================================== Einlesen
+  const NUM_T = /^(arabic|alphaLc|alphaUc|romanLc|romanUc)(Period|ParenR|ParenBoth|Plain)$/;
   async function importPptx(file, progress, opt = {}) {
     const u8 = new Uint8Array(await file.arrayBuffer());
     let z;
@@ -229,18 +230,29 @@
       const st = tstyles[id];
       if (!st) {
         if (!id) return null;
+        // eingebaute Vorlagen „Keine Formatvorlage“: ohne Füllung; „Tabellenraster“ mit dünnen Linien in Textfarbe
+        const nid = String(id).toUpperCase();
+        if (nid === '{2D5ABB26-0587-4C30-8999-92F81FD0307C}') return { wholeTbl: {}, none: 1 };
+        if (nid === '{5940675A-B579-460E-94D1-54222C63F5DA}') return { wholeTbl: {}, none: 1, _line: '#' + (T.scheme.dk1 || '000000') };
         // eingebaute Standardvorlage „Mittleres Format 2 – Akzent 1“
         const a = '#' + (T.scheme.accent1 || '4472C4'), lt = '#' + (T.scheme.lt1 || 'FFFFFF'), dk = '#' + (T.scheme.dk1 || '000000');
         return { wholeTbl: { f: mixW(a, 0.2), c: dk }, band1H: { f: mixW(a, 0.4) }, band1V: { f: mixW(a, 0.4) }, firstRow: { f: a, c: lt, b: 1 }, lastRow: { f: a, c: lt, b: 1 }, firstCol: { f: a, c: lt, b: 1 }, lastCol: { f: a, c: lt, b: 1 }, _line: lt };
       }
       const out = {};
+      // Hintergrund der ganzen Tabelle (tblBg): scheint durch Zellen ohne eigene Füllung
+      const tb = kid(st, 'tblBg');
+      const bgc = tb ? color(kid(tb, 'solidFill') || kid(tb, 'fillRef'), T) : null;
+      const base = bgc ? bgc.c : '#FFFFFF';
+      // halb durchsichtige Füllung (alpha) mit dem Hintergrund mischen
+      const blend = (c) => (c.a < 0.99 ? '#' + [1, 3, 5].map((i) => hex2(parseInt(c.c.slice(i, i + 2), 16) * c.a + parseInt(base.slice(i, i + 2), 16) * (1 - c.a))).join('').toUpperCase() : c.c);
       for (const pn of ['wholeTbl', 'band1H', 'band2H', 'band1V', 'band2V', 'firstRow', 'lastRow', 'firstCol', 'lastCol']) {
         const pe = kid(st, pn);
-        if (!pe) continue;
+        if (!pe) { if (pn === 'wholeTbl' && bgc) out.wholeTbl = { f: bgc.c }; continue; }
         const o = {};
         const tcs = kid(pe, 'tcStyle'), fe = tcs && kid(tcs, 'fill');
-        if (fe) { if (kid(fe, 'noFill')) o.f = 'none'; else { const c = color(kid(fe, 'solidFill'), T); if (c) o.f = c.c; } }
-        if (tcs && kid(tcs, 'fillRef')) { const c = color(kid(tcs, 'fillRef'), T); if (c) o.f = c.c; }
+        if (fe) { if (kid(fe, 'noFill')) o.f = bgc ? bgc.c : 'none'; else { const c = color(kid(fe, 'solidFill'), T); if (c) o.f = blend(c); } }
+        if (tcs && kid(tcs, 'fillRef')) { const c = color(kid(tcs, 'fillRef'), T); if (c) o.f = blend(c); }
+        if (pn === 'wholeTbl' && !o.f && bgc) o.f = bgc.c;
         const tx = kid(pe, 'tcTxStyle');
         if (tx) { if (at(tx, 'b') === 'on') o.b = 1; const c = color(tx, T) || color(kid(tx, 'fontRef'), T); if (c) o.c = c.c; }
         if (pn === 'wholeTbl' && tcs) { const ln = all(kid(tcs, 'tcBdr'), 'ln')[0]; const c = ln && color(kid(ln, 'solidFill'), T); if (c) out._line = c.c; }
@@ -506,6 +518,7 @@
       const list = all(doc, 'sp').concat(all(doc, 'pic')).filter((x) => phOf(x));
       const idx = at(ph, 'idx'), t = phType(ph);
       const master = doc.documentElement && doc.documentElement.localName === 'sldMaster'; // im Master zählt nur die Art (idx gehört dort oft zu Datum/Fußzeile)
+      if (!master && idx === '4294967295') return null; // „verwaister“ Platzhalter (aus einer anderen Folie kopiert): erbt nur vom Master
       return (idx != null && !master && list.find((x) => at(phOf(x), 'idx') === idx)) || list.find((x) => phType(phOf(x)) === t) || list.find((x) => masterType(phType(phOf(x))) === masterType(t)) || null;
     }
 
@@ -567,11 +580,12 @@
         const lvl = num(at(pPr, 'lvl'));
         const lv = chain.map((s) => kid(s, `lvl${lvl + 1}pPr`)).filter(Boolean);
         const pl = [pPr, ...lv].filter(Boolean);
-        const algn = firstAttr(pl, 'algn') || 'l';
-        let list = null, bu = '', buC = '';
+        let algn = firstAttr(pl, 'algn') || 'l';
+        let list = null, bu = '', buC = '', numT = '', numS = 0;
         for (const e of pl) {
           if (kid(e, 'buNone')) { list = null; break; }
-          if (kid(e, 'buAutoNum')) { list = 'ol'; break; }
+          const an = kid(e, 'buAutoNum');
+          if (an) { list = 'ol'; numT = at(an, 'type') || ''; numS = num(at(an, 'startAt')) || 0; break; }
           if (kid(e, 'buChar') || kid(e, 'buBlip')) {
             list = 'ul';
             const bc = kid(e, 'buChar');
@@ -594,7 +608,16 @@
           if (r.localName === 'br') { runs.push({ br: 1 }); continue; }
           // Formel mitten im Text (Office-Formel): als Formel im Fließtext übernehmen
           if (r.localName === 'm' && /drawing\/2010\/main/.test(r.namespaceURI || '')) {
-            for (const c of r.children) if (c.localName === 'oMathPara' || c.localName === 'oMath') { const tx = X().ommlTex(c); if (tx) runs.push({ t: '', m: tx }); }
+            for (const c of r.children) {
+              if (c.localName !== 'oMathPara' && c.localName !== 'oMath') continue;
+              const tx = X().ommlTex(c);
+              if (!tx) continue;
+              // Formel als eigener Absatz (oMathPara): groß gesetzt (Brüche in voller Höhe) und – wie in PowerPoint – mittig
+              const disp = c.localName === 'oMathPara';
+              const szA = all(c, 'rPr').map((x) => at(x, 'sz')).find(Boolean);
+              const jc = disp ? at(path(c, 'oMathParaPr', 'jc'), 'val') || 'centerGroup' : '';
+              runs.push({ t: '', m: disp ? '\\displaystyle ' + tx.replace(/\\frac(?![a-zA-Z])/g, '\\dfrac') : tx, ...(szA ? { sz: (num(szA) / 100) * scale * K } : {}), disp: disp ? jc : '' });
+            }
             continue;
           }
           if (r.localName !== 'r' && r.localName !== 'fld') continue;
@@ -649,7 +672,11 @@
         // Einzug ohne Aufzählungszeichen: marL (links) und indent (erste Zeile, negativ = hängend), in Punkt
         const mAt = (n) => { for (const e of pl) { const v = at(e, n); if (v != null) return num(v) / 12700; } return 0; };
         const mlPt = mAt('marL'), tiPt = mAt('indent'); // bei Aufzählungen: Text bei marL, Zeichen bei marL + indent
-        paras.push({ algn, list, lvl, runs, bu, buC, buS, sB, sA, eSz: (eSz / 100) * scale * K, lnPct, mlPt, tiPt });
+        // Absatz nur aus einer Formel (oMathPara) ohne eigene Ausrichtung: mittig wie in PowerPoint
+        const onlyM = runs.length && runs.every((r) => r.m || (!r.br && !(r.t || '').trim()));
+        const dm = runs.find((r) => r.disp);
+        if (onlyM && dm && !at(pPr, 'algn')) algn = /^(left)$/.test(dm.disp) ? 'l' : /^right$/.test(dm.disp) ? 'r' : 'ctr';
+        paras.push({ algn, list, lvl, runs, bu, buC, buS, numT, numS, sB, sA, eSz: (eSz / 100) * scale * K, lnPct, mlPt, tiPt });
       }
       const top = (m) => [...m.entries()].sort((a, b) => b[1] - a[1])[0];
       const fs = top(stats.sz) ? top(stats.sz)[0] : Math.round((base.sz || 18) * K);
@@ -657,11 +684,11 @@
       const ff = top(stats.ff) ? top(stats.ff)[0] : base.major ? T.major : T.minor;
       // HTML bauen
       const runHtml = (r) => {
-        if (r.m) return `<span class="dk-im" data-tex="${esc(r.m)}"></span>`;
+        if (r.m) { const h0 = `<span class="dk-im" data-tex="${esc(c ? r.m.split(`\\color{${c.toUpperCase()}}`).join('') : r.m)}"></span>`; return r.sz && Math.abs(r.sz - fs) / fs > 0.03 ? `<span style="font-size:${Math.round((r.sz / fs) * 1000) / 1000}em;">${h0}</span>` : h0; }
         let h = esc(r.t).replace(/\t/g, ' ').replace(/ {2}/g, ' &nbsp;');
         if (r.sup) h = `<sup>${h}</sup>`; if (r.sub) h = `<sub>${h}</sub>`;
         if (r.u) h = `<u>${h}</u>`; if (r.s) h = `<s>${h}</s>`; if (r.i) h = `<i>${h}</i>`; if (r.b) h = `<b>${h}</b>`;
-        const st = (r.c && r.c !== c ? `color:${r.c};` : '') + (r.hi ? `background-color:${r.hi};` : '') + (Math.abs(r.sz - fs) / fs > 0.03 ? `font-size:${Math.round((r.sz / fs) * 1000) / 1000}em;` : '');
+        const st = (r.c && (r.c !== c || r.href) ? `color:${r.c};` : '') + (r.hi ? `background-color:${r.hi};` : '') + (Math.abs(r.sz - fs) / fs > 0.03 ? `font-size:${Math.round((r.sz / fs) * 1000) / 1000}em;` : '');
         if (st) h = `<span style="${st}">${h}</span>`;
         if (r.href) h = `<a href="${esc(r.href)}">${h}</a>`;
         return h;
@@ -693,12 +720,14 @@
         if (firstOut) { if (p === paras[0]) p.sB = null; firstOut = false; } // PowerPoint: kein Abstand vor dem ersten Absatz
         // hängender Einzug mit Tab am Anfang: der Tab springt zum linken Einzug
         if (!p.list && p.tiPt < 0 && p.runs[0] && /^\t/.test(p.runs[0].t || '')) { p.runs[0] = { ...p.runs[0], t: p.runs[0].t.slice(1) }; p.tiPt = 0; }
-        const inner = p.runs.map((r) => (r.br ? '<br>' : runHtml(r))).join('') || '<br>';
+        // Zeilenumbruch am Absatzende: PowerPoint zeigt eine leere Zeile danach (HTML braucht dafür ein zweites <br>)
+        const inner = (p.runs.map((r) => (r.br ? '<br>' : runHtml(r))).join('') + (p.runs.length && p.runs[p.runs.length - 1].br ? '<br>' : '')) || '<br>';
         // Abstände in Schrifthöhen des Felds (Prozentangaben beziehen sich auf die Zeilenhöhe der Absatzschrift)
         const pfs = (p.runs.find((r) => r.sz) || {}).sz || fs;
         const toEm = (v) => (!v ? 0 : v.pt != null ? (v.pt * K) / fs : (v.pct * pfs * 1.2) / fs);
         const sb = Math.round((toEm(p.sB) + (p.extraPx || 0) / fs) * 1000) / 1000, sa = Math.round(toEm(p.sA) * 1000) / 1000;
-        let spSt = anySp ? `margin: 0;${sb ? ` padding-top: ${Math.min(6, sb)}em;` : ''}${sa ? ` padding-bottom: ${Math.min(6, sa)}em;` : ''}` : '';
+        // PowerPoint: ohne Angabe kein Abstand zwischen Absätzen
+        let spSt = `margin: 0;${sb ? ` padding-top: ${Math.min(6, sb)}em;` : ''}${sa ? ` padding-bottom: ${Math.min(6, sa)}em;` : ''}`;
         { const own = p.lnPct || 1, maj = lnPct ? lnPct[0] : 1; if (Math.abs(own - maj) > 0.05) spSt += `${spSt ? ' ' : ''}line-height: ${Math.round(own * 120) / 100};`; } // eigener Zeilenabstand
         if (!p.list && p.mlPt + Math.min(0, p.tiPt) >= -0.5 && (p.mlPt > 1 || Math.abs(p.tiPt) > 1)) {
           const r3 = (v) => Math.round(Math.max(-20, Math.min(20, v)) * 1000) / 1000;
@@ -708,10 +737,16 @@
         const al = AL[p.algn] || spSt ? ` style="${AL[p.algn] ? `text-align: ${AL[p.algn]};` : ''}${spSt}"` : '';
         if (p.list && p.runs.length) {
           const depth = p.lvl + 1;
+          // Nummerierung: Art (a), a., i. …) und Startwert wie in PowerPoint; andere Art = neue Liste
+          const nk = p.list === 'ol' ? `${p.numT}|${p.numS}` : '';
           if (stack.length > depth) closeTo(depth);
-          if (stack.length === depth && stack[depth - 1].tag !== p.list) closeTo(depth - 1);
+          if (stack.length === depth && (stack[depth - 1].tag !== p.list || stack[depth - 1].nk !== nk)) closeTo(depth - 1);
           if (stack.length === depth) html += '</li>';
-          while (stack.length < depth) { html += `<${p.list}>`; stack.push({ tag: p.list }); if (stack.length < depth) html += '<li>'; }
+          while (stack.length < depth) {
+            const last = stack.length === depth - 1;
+            const oa = p.list === 'ol' && last ? `${p.numT && p.numT !== 'arabicPeriod' && NUM_T.test(p.numT) ? ` data-n="${p.numT}"` : ''}${p.numS > 1 ? ` start="${Math.min(9999, p.numS)}"` : ''}` : '';
+            html += `<${p.list}${oa}>`; stack.push({ tag: p.list, nk: last ? nk : '' }); if (stack.length < depth) html += '<li>';
+          }
           let buA = p.list === 'ul' ? `${p.bu ? ` data-bu="${esc(p.bu)}"` : ''}${p.buC && p.buC !== c ? ` data-bc="${p.buC}"` : ''}` : '';
           // Einzug wie in PowerPoint: Text beginnt bei marL, das Zeichen bei marL + indent (indent meist negativ)
           let liSt = spSt;
@@ -719,12 +754,12 @@
             // ohne hängenden Einzug: Zeichen direkt vor dem Text (bei marL), Folgezeilen beginnen bei marL
             liSt += `${liSt ? ' ' : ''}margin-left: ${Math.round(((p.mlPt * K) / fs - 1.2 * depth) * 1000) / 1000}em;`; buA += ' data-bi="0"';
             if (AL[p.algn]) { liSt = `text-align: ${AL[p.algn]}; ` + liSt; p.alOnLi = 1; } // Zeichen und Text gemeinsam ausrichten
-          } else if (p.list === 'ul' && p.mlPt > 1) {
+          } else if ((p.list === 'ul' || p.list === 'ol') && p.mlPt > 1) {
             const r3 = (v) => Math.round(v * 1000) / 1000;
             const m = (p.mlPt * K) / fs, bi = Math.max(-m, (p.tiPt * K) / fs);
             if (bi <= -0.4 && m <= 20) {
               liSt += `${liSt ? ' ' : ''}margin-left: ${r3(m - 1.2 * depth)}em;`; buA += ` data-bi="${r3(bi)}"`;
-              if (p.buS && Math.abs(p.buS - 1) > 0.05) buA += ` data-bs="${Math.round(Math.max(0.25, Math.min(4, p.buS)) * 100) / 100}"`; // Größe des Zeichens relativ zum Text
+              if (p.list === 'ul' && p.buS && Math.abs(p.buS - 1) > 0.05) buA += ` data-bs="${Math.round(Math.max(0.25, Math.min(4, p.buS)) * 100) / 100}"`; // Größe des Zeichens relativ zum Text
             }
           }
           html += `<li${buA}${liSt ? ` style="${liSt}"` : ''}>${AL[p.algn] && !p.alOnLi ? `<div style="text-align: ${AL[p.algn]};">${inner}</div>` : inner}`;
@@ -779,7 +814,20 @@
         let M2 = M;
         if (g && chExt && num(at(chExt, 'cx')) && num(at(chExt, 'cy'))) {
           const sx = g.w / num(at(chExt, 'cx')), sy = g.h / num(at(chExt, 'cy')), ox = num(at(chOff, 'x')), oy = num(at(chOff, 'y'));
-          M2 = { f: (x, y) => M.f(g.x + (x - ox) * sx, g.y + (y - oy) * sy), s: M.s * Math.sqrt(sx * sy) };
+          // gedrehte oder gespiegelte Gruppe: Punkte um die Gruppenmitte drehen/spiegeln, Drehung an die Objekte weitergeben
+          const gr = g.r || 0, gfx = !!g.fx, gfy = !!g.fy;
+          const gcx = g.x + g.w / 2, gcy = g.y + g.h / 2, a = (gr * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+          const tr = gr || gfx || gfy;
+          M2 = {
+            f: (x, y) => {
+              let px = g.x + (x - ox) * sx, py = g.y + (y - oy) * sy;
+              if (tr) { if (gfx) px = 2 * gcx - px; if (gfy) py = 2 * gcy - py; const dx = px - gcx, dy = py - gcy; px = gcx + dx * ca - dy * sa; py = gcy + dx * sa + dy * ca; }
+              return M.f(px, py);
+            },
+            s: M.s * Math.sqrt(sx * sy), sx: (M.sx || 1) * sx, sy: (M.sy || 1) * sy,
+            rot: ((M.rot || 0) + ((M.flx ? 1 : 0) ^ (M.fly ? 1 : 0) ? -gr : gr) + 360) % 360, flx: !!M.flx !== gfx, fly: !!M.fly !== gfy,
+          };
+          if (!M2.rot && !M2.flx && !M2.fly) { delete M2.rot; delete M2.flx; delete M2.fly; }
         }
         const id = X().uid();
         const before = out.length;
@@ -950,18 +998,23 @@
         if (parts.length) texs.push(parts.join(' '));
       }
       if (!texs.length) return false;
-      const tex = texs.length > 1 ? `\\begin{gathered}${texs.join('\\\\')}\\end{gathered}` : texs[0];
+      // Formel als eigenes Feld: wie in PowerPoint auch verschachtelte Brüche in voller Größe
+      const tex = (texs.length > 1 ? `\\begin{gathered}${texs.join('\\\\[0.6em]')}\\end{gathered}` : texs[0]).replace(/\\frac(?![a-zA-Z])/g, '\\dfrac');
       const xf = xfrmOf(sp);
       if (!xf) return false;
       const b = box(xf);
       const [x0, y0] = M.f(b.x, b.y), [x1, y1] = M.f(b.x + b.w, b.y + b.h);
       const gx = OX + (x0 / EMU) * K, gy = OY + (y0 / EMU) * K, gw = ((x1 - x0) / EMU) * K, gh = ((y1 - y0) / EMU) * K;
-      const szN = all(body, 'rPr').map((r) => at(r, 'sz')).find(Boolean) || at(all(body, 'endParaRPr')[0], 'sz');
-      const fs = ((szN ? num(szN) / 100 : 18) * K * (M.s || 1));
+      // Schriftgröße: aus der Formel, sonst wie der Platzhalter (Layout/Master), sonst 18 pt
+      let szN = all(body, 'rPr').map((r) => at(r, 'sz')).find(Boolean) || at(all(body, 'endParaRPr')[0], 'sz');
+      if (!szN) { for (const st of styleChain(sp, ctx)) { const dr = path(st, 'lvl1pPr', 'defRPr'); if (dr && at(dr, 'sz')) { szN = at(dr, 'sz'); break; } } }
+      const fsc = (() => { const na = path(body, 'bodyPr', 'normAutofit'); return na && at(na, 'fontScale') ? num(at(na, 'fontScale')) / 100000 : 1; })();
+      const fs = ((szN ? num(szN) / 100 : 18) * fsc * K * (M.s || 1));
       let c = null;
       for (const r of all(body, 'rPr')) { const f = kid(r, 'solidFill'); if (f) { c = color(f, ctx.T); break; } }
       await P.mathLib();
       const r = P.texSvg(tex);
+      if (r.err) return false; // Formel nicht lesbar: Ersatzbild aus PowerPoint
       const w = (r.vb[2] / 1000) * fs, h = (r.vb[3] / 1000) * fs;
       const bp = kid(body, 'bodyPr');
       const ins = (k, d) => (at(bp, k) != null ? (num(at(bp, k)) / EMU) * K : d * K);
@@ -971,7 +1024,7 @@
       const x = algn === 'ctr' ? gx + (gw - w) / 2 : algn === 'r' ? gx + gw - rI - w : gx + lI;
       const y = anc === 'ctr' ? gy + (gh - h) / 2 : anc === 'b' ? gy + gh - bI - h : gy + tI;
       const e = { id: P.uid(), t: 'math', tex, svg: r.svg, vb: r.vb, x: r1(x), y: r1(y), w: r1(w), h: r1(h), r: r1(b.r || 0), fs: r1(fs) };
-      if (c && c.c) e.c = c.c;
+      if (c && c.c) { e.c = c.c; e.tex = e.tex.split(`\\color{${c.c.toUpperCase()}}`).join(''); if (e.tex !== tex) { const r2 = P.texSvg(e.tex); e.svg = r2.svg; e.vb = r2.vb; } }
       if (gid) e.g = gid;
       out.push(e);
       return true;
@@ -987,7 +1040,14 @@
       if ((!xf || !kid(xf, 'ext')) && ph) { const lp = findPh(ctx.layout, ph) || findPh(T.master, ph); xf = lp && xfrmOf(lp); if (!xf) { const mp = findPh(T.master, ph); xf = mp && xfrmOf(mp); } }
       if (!xf) return;
       const b = box(xf);
-      const [x0, y0] = M.f(b.x, b.y), [x1, y1] = M.f(b.x + b.w, b.y + b.h);
+      let [x0, y0] = M.f(b.x, b.y), [x1, y1] = M.f(b.x + b.w, b.y + b.h);
+      if (M.rot || M.flx || M.fly) {
+        // in einer gedrehten/gespiegelten Gruppe: Mittelpunkt abbilden, Größe behalten, Drehung und Spiegelung zusammenrechnen
+        const [cx, cy] = M.f(b.x + b.w / 2, b.y + b.h / 2), w2 = (b.w * (M.sx || 1)) / 2, h2 = (b.h * (M.sy || 1)) / 2;
+        x0 = cx - w2; x1 = cx + w2; y0 = cy - h2; y1 = cy + h2;
+        b.r = (((M.flx ? 1 : 0) ^ (M.fly ? 1 : 0) ? -b.r : b.r) + (M.rot || 0) + 720) % 360;
+        if (M.flx) b.fx = !b.fx; if (M.fly) b.fy = !b.fy;
+      }
       const geo = { x: r1(OX + (x0 / EMU) * K), y: r1(OY + (y0 / EMU) * K), w: r1(Math.max(1, ((x1 - x0) / EMU) * K)), h: r1(Math.max(1, ((y1 - y0) / EMU) * K)), r: r1(b.r) };
       const base = { id: X().uid(), ...geo };
       if (gid) base.g = gid;
@@ -1108,7 +1168,7 @@
           }));
           e.va = 't'; // PowerPoint: Zellen oben ausgerichtet, sofern nicht anders angegeben
           if (Object.keys(cs).length) e.cs = cs;
-          else if (flag('firstRow') || (headFill && headFill >= rows[0].length && rows.length > 1)) e.head = 1;
+          else if (!(parts && parts.none) && flag('firstRow') || (headFill && headFill >= rows[0].length && rows.length > 1)) e.head = 1;
           if (parts && parts._line && !lineC) e.line = parts._line;
           if (lineC) e.line = lineC;
           if (mg.length) e.mg = mg;
@@ -1789,7 +1849,7 @@
     let cur = null;
     let U = 0; // Einheiten für „absatzweise“ (wie in PDF-Stift: oberste Absätze und Aufzählungspunkte)
     const maths = []; // Formeln im Fließtext: Platzhalter „⁣n⁣“, später durch echte Formeln ersetzt
-    const np = (blk) => { cur = { al: blk.al || '', list: blk.list || null, lvl: blk.lvl || 0, runs: [], unit: blk.unit || ++U }; paras.push(cur); return cur; };
+    const np = (blk) => { cur = { al: blk.al || '', list: blk.list || null, lvl: blk.lvl || 0, numT: blk.numT || '', numS: blk.numS || 0, runs: [], unit: blk.unit || ++U }; paras.push(cur); return cur; };
     const walk = (n, st, blk) => {
       for (const k of [...n.childNodes]) {
         if (k.nodeType === 3) {
@@ -1801,7 +1861,7 @@
         }
         if (k.nodeType !== 1) continue;
         const tag = k.tagName.toLowerCase();
-        if (tag === 'ul' || tag === 'ol') { cur = null; walk(k, st, { ...blk, list: tag, lvl: blk.list ? blk.lvl + 1 : 0 }); cur = null; continue; }
+        if (tag === 'ul' || tag === 'ol') { cur = null; walk(k, st, { ...blk, list: tag, lvl: blk.list ? blk.lvl + 1 : 0, ...(tag === 'ol' ? { numT: NUM_T.test(k.getAttribute('data-n') || '') ? k.getAttribute('data-n') : '', numS: +k.getAttribute('start') || 0 } : {}) }); cur = null; continue; }
         if (tag === 'li' || tag === 'div' || tag === 'p') {
           const al = (k.style && k.style.textAlign) || blk.al || '';
           const unit = blk.unit || ++U;
@@ -1840,12 +1900,12 @@
     const out = [], fixes = [];
     paras.forEach((p, pi) => {
       const po = { align: AL[p.al] || 'left' };
-      if (p.list) { po.bullet = p.list === 'ol' ? { type: 'number' } : p.bu ? { characterCode: p.bu.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') } : true; if (p.lvl) po.indentLevel = p.lvl; }
+      if (p.list) { po.bullet = p.list === 'ol' ? { type: 'number', ...(p.numT ? { style: p.numT } : {}), ...(p.numS > 1 ? { startAt: p.numS } : {}) } : p.bu ? { characterCode: p.bu.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') } : true; if (p.lvl) po.indentLevel = p.lvl; }
       const pfs = (o && o.fs) || 18;
       if (p.lh) po.lineSpacingMultiple = Math.round((p.lh / 1.2) * 100) / 100;
       // was der PowerPoint-Baustein nicht kann, wird danach in die Folien-XML geschrieben: Einzüge (pt) und Farbe des Zeichens
       const fx = {};
-      if (p.bi != null && p.list === 'ul') { const m = (p.ml || 0) + 1.2 * ((p.lvl || 0) + 1); fx.marL = m * pfs; fx.ind = (p.bi || 0) * pfs; }
+      if (p.bi != null && (p.list === 'ul' || p.list === 'ol')) { const m = (p.ml || 0) + 1.2 * ((p.lvl || 0) + 1); fx.marL = m * pfs; fx.ind = (p.bi || 0) * pfs; }
       else if (!p.list && (p.pl || p.ti)) { fx.marL = (p.pl || 0) * pfs; fx.ind = (p.ti || 0) * pfs; }
       if (p.list === 'ul' && p.bc) fx.bc = toHex(p.bc);
       fixes[pi] = Object.keys(fx).length ? fx : null;
