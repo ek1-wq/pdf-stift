@@ -4,7 +4,7 @@
 
 PDF-Stift ist ein PDF-Programm zum Lesen, Beschriften und Ordnen von Unterlagen wie Vorlesungsfolien, Aufsätzen und Scans. Sie schreiben mit dem Stift auf die Seiten, markieren Text, setzen Kommentare und Textfelder und durchsuchen den Text Ihrer ganzen Bibliothek. Notizen werden automatisch gespeichert und in die PDF geschrieben, sodass auch jedes andere PDF-Programm sie zeigt.
 
-Alles bleibt auf Ihrem Gerät. Unter Windows und Linux braucht PDF-Stift kein Konto, keine Cloud und keinen Server und schickt keine Nutzungsdaten. Die Bibliothek ist ein ganz normaler Ordner (`Dokumente/PDF-Stift`). Auf Android wählen Sie: **Offline** (alles bleibt auf dem Tablet) oder **Online** mit [eigenem Server](docs/SERVER.md) – dann ist dieselbe Bibliothek in jedem Browser und auf dem Tablet da.
+Alles bleibt auf Ihrem Gerät. Unter Windows und Linux braucht PDF-Stift kein Konto, keine Cloud und keinen Server und schickt keine Nutzungsdaten (einzige Ausnahme ist die freiwillige Funktion *Skizze → Folie* – nur wenn Sie einen eigenen KI-Schlüssel eintragen, siehe unten). Die Bibliothek ist ein ganz normaler Ordner (`Dokumente/PDF-Stift`). Auf Android wählen Sie: **Offline** (alles bleibt auf dem Tablet) oder **Online** mit [eigenem Server](docs/SERVER.md) – dann ist dieselbe Bibliothek in jedem Browser und auf dem Tablet da.
 
 **[⬇ Herunterladen](https://github.com/ek1-wq/pdf-stift/releases/latest)** – Windows (`.exe`), Linux (`.AppImage`, `.deb`), Android (`.apk`), Server-Paket (`.zip`) · **[▶ Online-Demo ausprobieren](https://pdf-stift.edu.net.co/)** (Passwort ist eingetragen, wird stündlich zurückgesetzt) · [English](README.md)
 
@@ -16,6 +16,8 @@ Alles bleibt auf Ihrem Gerät. Unter Windows und Linux braucht PDF-Stift kein Ko
 
 ![Eine PowerPoint-Datei als bearbeitbare Präsentation](docs/screenshots/presentation.png)
 
+![Skizze → Folie: aus einer groben Zeichnung wird eine bearbeitbare Folie](docs/screenshots/sketch.png)
+
 ## Was PDF-Stift kann
 
 - **Schreiben und markieren.** Stift, Marker, Text markieren, unterstreichen und durchstreichen, Formen, Textfelder, Notizzettel, Lasso, Radierer und ein Laserpointer für Präsentationen. Drucksensitive Stifte funktionieren auf Touchscreens und Grafiktabletts.
@@ -25,6 +27,7 @@ Alles bleibt auf Ihrem Gerät. Unter Windows und Linux braucht PDF-Stift kein Ko
 - **Scans aufbereiten.** Schiefe Seiten gerade richten, leere Seiten entfernen und den Kontrast verstärken.
 - **Passt zu Windows.** PDFs aus dem Explorer öffnen („In PDF-Stift öffnen“, „Senden an“), Word-, PowerPoint- und Excel-Dateien hineinziehen (umgewandelt mit Ihrem installierten Microsoft Office), aus jedem Programm auf den Drucker „PDF-Stift“ drucken, einen Ordner überwachen lassen und PDFs in den Explorer oder in eine E-Mail herausziehen.
 - **Notizbuch.** Seiten mit unendlicher Fläche, geordnet in Notizbüchern und Abschnitten. Folien samt Notizen mit einem Klick oder per Ziehen übernehmen, Seitenvorlagen (Cornell, Besprechung, Vorlesung), Suche in getipptem Text und übernommenen Folien, Verknüpfungen zwischen Notizen und PDFs, frühere Stände wiederherstellen, als PDF speichern oder drucken (auf A4 verteilt).
+- **Skizze → Folie (freiwillige KI-Funktion).** Eine grobe Skizze zeichnen oder ein Foto bzw. eine PDF-Seite mit handschriftlichen Notizen holen – ein KI-Modell macht daraus fertige, bearbeitbare Folien: Titel, Text, Formen und Blockpfeile, Tabellen, Diagramme, Formeln und Sprechernotizen, im Design Ihres Folienmasters und in den gezeichneten Größen. Der grüne Knopf steht neben *Neue Folie*. Sie brauchen dafür einen eigenen [API-Schlüssel von Anthropic](https://console.anthropic.com/) (Einstellungen → Skizze → Folie); nur das umgewandelte Bild geht an Anthropic, eine Umwandlung kostet etwa 1–2 Cent.
 - **Präsentationen.** Folien mit Text, Formen, Bildern, Tabellen und Diagrammen gestalten – oder PowerPoint-Dateien (`.pptx`, einzeln oder einen ganzen Ordner) als bearbeitbare Präsentationen öffnen, samt SmartArt, Formeln, Farbverläufen, Animationen und Übergängen. Vorführen, als PDF speichern oder wieder als PowerPoint-Datei speichern – die Animationen bleiben erhalten.
 - **Vertrautes Menüband.** Registerkarten Start, Einfügen, Zeichnen, Seiten, Bildschirmpräsentation und Ansicht wie in Office-Programmen. Menüband und Stiftleisten lassen sich an jeden Fensterrand andocken.
 - **Zwei Dokumente nebeneinander.** Folien links, Notizbuch oder eine zweite PDF rechts – mit einer gemeinsamen Werkzeugleiste.

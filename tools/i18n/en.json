@@ -3501,5 +3501,7 @@
   "Skizze, Foto oder PDF-Seite mit KI in fertige Folien verwandeln (Strg + Umschalt + M)": "Turn a sketch, photo or PDF page into finished slides with AI (Ctrl + Shift + M)",
   "Skizze → Folie …": "Sketch → Slide …",
   "Skizze → Folie (KI) …": "Sketch → Slide (AI) …",
-  "Ctrl+Shift+M": null
+  "Ctrl+Shift+M": null,
+  "Eine Folie erstellt": "One slide created",
+  " Folien erstellt": " slides created"
 }

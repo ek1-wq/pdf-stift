@@ -4,7 +4,7 @@
 
 PDF-Stift is a PDF app for reading, marking up and organizing documents such as lecture slides, papers and scans. You can write on pages with a stylus, highlight text, add comments and text boxes, and search the full text of your whole library. Notes are saved automatically and written into the PDF, so every other PDF program shows them too.
 
-Everything stays on your device. On Windows and Linux PDF-Stift needs no account, no cloud and no server, and it sends no usage data. Your library is an ordinary folder (`Documents/PDF-Stift`) that you can back up and sync like any other folder. On Android you choose: **offline** (everything stays on the tablet) or **online** with [your own server](docs/SERVER.md) – then the same library is available in every browser and on the tablet.
+Everything stays on your device. On Windows and Linux PDF-Stift needs no account, no cloud and no server, and it sends no usage data (the one exception is the optional *Sketch → Slide* feature – only if you enter your own AI key, see below). Your library is an ordinary folder (`Documents/PDF-Stift`) that you can back up and sync like any other folder. On Android you choose: **offline** (everything stays on the tablet) or **online** with [your own server](docs/SERVER.md) – then the same library is available in every browser and on the tablet.
 
 **[⬇ Download](https://github.com/ek1-wq/pdf-stift/releases/latest)** – Windows (`.exe`), Linux (`.AppImage`, `.deb`), Android (`.apk`), server package (`.zip`) · **[▶ Try the online demo](https://pdf-stift.edu.net.co/)** (password is filled in, reset every hour) · [Deutsch](README.de.md)
 
@@ -20,6 +20,7 @@ Everything stays on your device. On Windows and Linux PDF-Stift needs no account
 - **Fits into Windows.** Open PDFs from Explorer ("Open in PDF-Stift", "Send to"), drag Word, PowerPoint or Excel files in (converted with your installed Microsoft Office), print from any program to the "PDF-Stift" printer, watch a folder, and drag PDFs out into Explorer or an e-mail.
 - **Notebook.** Infinite-canvas pages for handwritten notes, organized in notebooks and sections. Copy slides (with your notes) onto a notebook page with one click or by dragging them across, use page templates (Cornell, meeting, lecture), search typed text and copied slides, link notes and PDFs both ways, restore earlier versions, and save or print a page as PDF (split onto A4 sheets).
 - **Presentations.** Build slides with text, shapes, pictures, tables and charts – or open PowerPoint files (`.pptx`, one at a time or a whole folder) as editable presentations, including SmartArt, formulas, gradients, animations and transitions. Present them, save them as PDF, or save them back as PowerPoint with the animations kept.
+- **Sketch → Slide (optional AI).** Draw a rough sketch, or pick a photo or a PDF page with your handwritten notes, and an AI model turns it into finished, editable slides: titles, text, shapes and block arrows, tables, charts, formulas and speaker notes – in the design of your slide master, with the sizes you drew. Find it as the green button next to *New Slide*. It uses your own [Anthropic API key](https://console.anthropic.com/) (Settings → Sketch → Slide); only the image you convert is sent to Anthropic, and one conversion costs about 1–2 cents.
 - **Familiar ribbon.** Start, Insert, Drawing, Pages, Slide show and View tabs as in office programs. The ribbon and the pen bars can be docked to any edge of the window.
 - **Two documents side by side.** Slides on the left, notebook or a second PDF on the right – with one shared toolbar.
 - **Presenting.** Presenter view for a projector or video call: current slide on the big screen, next slide, timer and speaker notes on yours.
@@ -32,6 +33,8 @@ Everything stays on your device. On Windows and Linux PDF-Stift needs no account
 ![A PowerPoint file opened as an editable presentation](docs/screenshots/presentation.png)
 
 ![All tools at a glance](docs/screenshots/tools.png)
+
+![Sketch → Slide: a rough drawing becomes an editable slide](docs/screenshots/sketch.png)
 
 ## Install
 

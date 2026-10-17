@@ -3514,8 +3514,9 @@
       change(() => { D.deck.slides.splice(empty ? D.cur : D.cur + 1, empty ? 1 : 0, ...made); if (!empty) D.cur += 1; D.ed.sel = []; });
       SK.strokes = []; SK.bg = null; SK.w = 1600; SK.h = 900;
       const pr = AI_PRICE[cfg.model] || AI_PRICE['claude-sonnet-5-5'], u = r.usage || {};
-      const cent = (((u.input_tokens || 0) * pr[0] + (u.output_tokens || 0) * pr[1]) / 1e4).toFixed(1).replace('.', ',');
-      C.toast(`${made.length === 1 ? 'Folie' : made.length + ' Folien'} erstellt – ${Math.round((Date.now() - t0) / 1000)} s, etwa ${cent} Cent.`, 5000);
+      const cent = (((u.input_tokens || 0) * pr[0] + (u.output_tokens || 0) * pr[1]) / 1e4).toFixed(1).replace('.', C.LANG === 'en' ? '.' : ',');
+      const what = made.length === 1 ? 'Eine Folie erstellt' : made.length + ' Folien erstellt';
+      C.toast(what + ` – ${Math.round((Date.now() - t0) / 1000)} s, etwa ${cent} Cent.`, 5000);
     } catch (err) { C.toast('Skizze → Folie: ' + err.message, 10000); }
   }
   // Anweisung und Antwortformat für das Modell

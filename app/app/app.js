@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.99.3';
+  const VERSION = '1.100.1';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -11847,7 +11847,7 @@
   // Menüleiste nur zeigen, solange das Menüband (mit Datei, Bearbeiten … in der Reiterzeile) nicht zu sehen ist – und nie beim Präsentieren oder im Vollbild
   if (WIN && WIN.menuBar && WIN.menuPop) {
     let mbLast = null;
-    setInterval(() => { const t = document.querySelector('.rb-wm'); const vis = !!(t && t.offsetParent) || !!(PR && PR.on) || !!(FS && FS.on) || !!document.fullscreenElement; if (vis !== mbLast) { mbLast = vis; WIN.menuBar(!vis); } }, 400);
+    setInterval(() => { const vis = [...document.querySelectorAll('.rb-wm')].some((t) => !!t.offsetParent) || !!(PR && PR.on) || !!(FS && FS.on) || !!document.fullscreenElement; if (vis !== mbLast) { mbLast = vis; WIN.menuBar(!vis); } }, 400);
   }
   const UPD = { d: null };
   function updDialog() {
