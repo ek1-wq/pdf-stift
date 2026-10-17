@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.100.1';
+  const VERSION = '1.100.2';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -152,6 +152,13 @@
     toastT = setTimeout(() => { t.hidden = true; }, ms);
   }
   function downloadBlob(blob, name) {
+    // Android-App (Präsentationen): Datei im Ordner „Download“ ablegen
+    if (window.PdfstiftAndroid && window.PdfstiftAndroid.save) {
+      const fr = new FileReader();
+      fr.onload = () => { try { window.PdfstiftAndroid.save(name, blob.type || '', String(fr.result).split(',')[1] || ''); } catch (e) { toast("Can’t save: " + e.message, 7000); } };
+      fr.readAsDataURL(blob);
+      return;
+    }
     // Windows-App: „Speichern unter“ mit dem normalen Windows-Fenster (Ordner und Name selbst wählen)
     if (window.pdfstiftWin && window.pdfstiftWin.saveAs) {
       blob.arrayBuffer().then((b) => window.pdfstiftWin.saveAs(name, new Uint8Array(b))).then((r) => {

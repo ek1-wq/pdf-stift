@@ -67,6 +67,8 @@ object Api {
     }
 
     fun clearCookies() = prefs.edit().remove("cookies").apply()
+    /** Anmeldung für die eingebettete Web-Ansicht (Präsentationen): dieselben Cookies wie die App */
+    fun cookieStrings(): List<String> = try { val arr = JSONArray(prefs.getString("cookies", null) ?: "[]"); (0 until arr.length()).map { arr.getString(it) } } catch (e: Exception) { emptyList() }
 
     private fun url(action: String, params: Map<String, String> = emptyMap()): HttpUrl {
         val b = API.toHttpUrl().newBuilder().addQueryParameter("a", action)

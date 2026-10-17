@@ -42,6 +42,8 @@ class MainActivity : AppCompatActivity(), FileHost {
     private var mode = "pdf"
     private lateinit var tabPdf: TextView
     private lateinit var tabNb: TextView
+    private var tabDk: TextView? = null
+    private var decks: org.json.JSONArray? = null
     override var folder = ""
     private var query = ""
     private lateinit var list: RecyclerView
@@ -111,6 +113,7 @@ class MainActivity : AppCompatActivity(), FileHost {
             orientation = LinearLayout.HORIZONTAL; setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
             background = Ui.rounded(0xFFDDE2EC.toInt(), dp(12f).toFloat())
             addView(tabPdf); addView(tabNb)
+            if (!Api.offline) { tabDk = tab("Präsentationen") { setMode("dk") }; addView(tabDk) }
             if (!Edition.FREE) addView(tab("Nextcloud") { cloudLauncher.launch(Intent(this@MainActivity, CloudActivity::class.java).putExtra("pv", "nc")) })
             if (!Edition.FREE) addView(tab("OneDrive") { cloudLauncher.launch(Intent(this@MainActivity, CloudActivity::class.java).putExtra("pv", "od")) })
         }
@@ -172,6 +175,7 @@ class MainActivity : AppCompatActivity(), FileHost {
                 Store.scope.launch { Settings.load() }
                 if (PrefSync.startup()) { Ui.toast(this@MainActivity, "Deine Einstellungen sind wieder da."); recreate(); return@launch }
                 books = Notebook.books(this@MainActivity)
+                if (!Api.offline) decks = try { Api.get("decks").optJSONArray("decks") } catch (e: Exception) { decks }
                 statusV.text = ""
             } catch (e: Api.ApiError) {
                 if (e.code == 401) login.launch(Intent(this@MainActivity, LoginActivity::class.java)) else Ui.toast(this@MainActivity, e.message ?: "Fehler")
@@ -187,6 +191,8 @@ class MainActivity : AppCompatActivity(), FileHost {
         class Head(val text: String, val color: String, val level: Int, val add: (() -> Unit)?, val addLabel: String, val path: String = "") : Item()
         class Page(val path: String, val title: String, val level: Int, val date: Long) : Item()
         class Hit(val path: String, val page: Int, val snip: String) : Item()
+        class Deck(val path: String, val title: String, val slides: Int, val date: Long) : Item()
+        object NewDeck : Item()
     }
     private var items = listOf<Item>()
     private var textHits = listOf<Item.Hit>()
@@ -257,6 +263,34 @@ class MainActivity : AppCompatActivity(), FileHost {
         }
         items = out
         adapter.notifyDataSetChanged()
+    }
+
+    // Präsentationen (vom eigenen Server; bearbeitet im selben Folieneditor wie am PC, samt Skizze → Folie)
+    private fun renderDecks() {
+        titleV.text = "Präsentationen"; backV.visibility = View.GONE
+        val out = ArrayList<Item>()
+        out.add(Item.NewDeck)
+        val q = query.lowercase()
+        val ds = decks
+        if (ds != null) for (i in 0 until ds.length()) {
+            val d = ds.getJSONObject(i)
+            val t = d.optString("title").ifBlank { "Präsentation" }
+            if (d.optBoolean("tpl")) continue
+            if (q.isNotEmpty() && !t.lowercase().contains(q)) continue
+            out.add(Item.Deck(d.getString("path"), t, d.optInt("slides"), d.optLong("mtime")))
+        }
+        if (ds == null) out.add(Item.Head("Präsentationen werden geladen – nach unten ziehen zum Aktualisieren.", "#1E2F6E", 0, null, ""))
+        items = out
+        adapter.notifyDataSetChanged()
+    }
+    private fun startDeck(path: String) = startActivity(Intent(this, DeckActivity::class.java).putExtra("path", path))
+    private fun newDeck() = ask("Neue Präsentation", "Titel, z. B. Mikroökonomie – Woche 3") { n ->
+        lifecycleScope.launch {
+            try {
+                val r = Api.post("decknew", JSONObject().put("title", n.ifBlank { "Neue Präsentation" }))
+                startDeck(r.getString("path"))
+            } catch (e: Exception) { Ui.toast(this@MainActivity, e.message ?: "Fehler") }
+        }
     }
 
     private fun ask(title: String, hint: String, done: (String) -> Unit) {
@@ -378,7 +412,9 @@ class MainActivity : AppCompatActivity(), FileHost {
         val on = 0xFFFFFFFF.toInt()
         tabPdf.background = Ui.rounded(if (mode == "pdf") on else 0, Ui.dp(this, 9f).toFloat()); tabNb.background = Ui.rounded(if (mode == "nb") on else 0, Ui.dp(this, 9f).toFloat())
         renderTagBar()
+        tabDk?.background = Ui.rounded(if (mode == "dk") on else 0, Ui.dp(this, 9f).toFloat())
         if (mode == "nb") { renderBooks(); return }
+        if (mode == "dk") { if (Api.offline) { mode = "pdf" } else { renderDecks(); return } }
         val l = lib
         titleV.text = if (query.isNotEmpty()) "Suche" else if (folder.isEmpty()) "Meine PDFs" else folder.substringAfterLast('/')
         backV.visibility = if (folder.isNotEmpty() && query.isEmpty()) View.VISIBLE else View.GONE
@@ -512,6 +548,20 @@ class MainActivity : AppCompatActivity(), FileHost {
                         if (it.path.startsWith("@nb/")) startBoard(it.path, it.path.substringAfterLast('/'))
                         else lib?.let { l -> Store.files(l).find { f -> f.path == it.path } }?.let { f -> open(f, it.page) } ?: Ui.toast(this@MainActivity, "Diese PDF gibt es nicht mehr.")
                     }
+                }
+                is Item.NewDeck -> {
+                    h.itemView.setOnLongClickListener(null)
+                    v[0].text = "＋"; v[0].setTextColor(Ui.INK); v[1].text = "Neue Präsentation"
+                    v[2].text = "Folien gestalten – auch mit dem Stift skizzieren: „Skizze → Folie“"
+                    (h.itemView.layoutParams as RecyclerView.LayoutParams).leftMargin = Ui.dp(this@MainActivity, 16f)
+                    h.itemView.setOnClickListener { _ -> newDeck() }
+                }
+                is Item.Deck -> {
+                    h.itemView.setOnLongClickListener(null)
+                    v[0].text = "🖥"; v[0].setTextColor(Ui.INK); v[1].text = it.title
+                    v[2].text = (if (it.slides == 1) "1 Folie" else "${it.slides} Folien") + " · " + SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.GERMANY).format(Date(it.date * 1000))
+                    (h.itemView.layoutParams as RecyclerView.LayoutParams).leftMargin = Ui.dp(this@MainActivity, 16f)
+                    h.itemView.setOnClickListener { _ -> startDeck(it.path) }
                 }
                 is Item.Page -> {
                     v[0].text = "🗒"; v[0].setTextColor(Ui.INK); v[1].text = it.title
@@ -688,5 +738,7 @@ class MainActivity : AppCompatActivity(), FileHost {
         Offline.onProgress = { t -> runOnUiThread { statusV.text = t; if (t.isEmpty()) adapter.notifyDataSetChanged() } }
         Offline.start(this)
         adapter.notifyDataSetChanged(); Updater.resume(this)
+        // zurück aus einer Präsentation: Liste (Folienzahl, Reihenfolge) auffrischen
+        if (mode == "dk" && !Api.offline) lifecycleScope.launch { try { decks = Api.get("decks").optJSONArray("decks"); render() } catch (e: Exception) { } }
     }
 }
