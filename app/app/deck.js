@@ -640,7 +640,12 @@
         const tx = n.querySelector('.dk-tx');
         if (!tx) break;
         tx.style.justifyContent = 'flex-start';
-        if (tx.scrollHeight <= e.h + 1) break;
+        // gebrauchte Höhe bis zum letzten Absatz mit Inhalt (leere Absätze am Ende zählen nicht)
+        const kids = [...tx.children].filter((c) => c.textContent.trim() || c.querySelector('img, svg, .dk-im'));
+        const top = tx.getBoundingClientRect().top, last = kids[kids.length - 1];
+        const need = last ? last.getBoundingClientRect().bottom - top + (parseFloat(getComputedStyle(tx).paddingBottom) || 0) : 0;
+        // kleine Überstände kommen von Schriftunterschieden – PowerPoint hat die Größe schon passend gespeichert
+        if (need <= e.h + 1 || (i === 0 && need <= e.h * 1.2)) break;
         const nf = fs * 0.95;
         if (nf < f0 * 0.5) break;
         fs = nf;
@@ -3235,6 +3240,8 @@
       up = () => done(() => { if (JSON.stringify(ink) !== JSON.stringify(s0.ink || [])) change(() => { if (ink.length) slide().ink = ink; else delete slide().ink; }); });
     } else {
       const hl = INK.t === 'hl', tool = hl ? 'hl' : 'pen';
+      // Skizzenmodus: Schwarz bzw. Weiß passend zur Folie (beim Wechsel zwischen hellen und dunklen Folien)
+      if (SKM && !hl && (INK.c.pen === '#1A1A1A' || INK.c.pen === '#FFFFFF')) { const want = skCols()[0]; if (INK.c.pen !== want) { INK.c.pen = want; skBar(); } }
       // Stift mit Druck: die Linie wird je nach Druck dünner oder dicker (wie in PDFs)
       const pres = !hl && ev.pointerType === 'pen';
       const prOf = (e) => r2(Math.max(0.05, Math.min(1, e.pressure || 0.5)));
@@ -3265,6 +3272,7 @@
         // gleichmäßiger Druck (z. B. Maus) braucht keine Druckwerte
         if (st.pr && Math.max(...st.pr) - Math.min(...st.pr) < 0.04) { const a = st.pr.reduce((x, y) => x + y, 0) / st.pr.length; st.w = Math.round(st.w * (0.6 + 0.8 * a) * 100) / 100; delete st.pr; }
         change(() => { const t0 = slide(); (t0.ink = t0.ink || []).push(st); });
+        if (SKM && SKM.auto && !hl) skAuto(st); // Skizzenmodus: Formen gleich gerade ziehen (Rückgängig holt den Strich zurück)
       });
     }
     stage.addEventListener('pointermove', mv);
@@ -3665,15 +3673,233 @@
     const pr = AI_PRICE[cfg.model] || AI_PRICE['claude-sonnet-5-5'], u = r.usage || {};
     return (((u.input_tokens || 0) * pr[0] + (u.output_tokens || 0) * pr[1]) / 1e4).toFixed(1).replace('.', C.LANG === 'en' ? '.' : ',');
   };
+  // <inkShape> Formerkennung ohne KI: ein Strich (Punkte x, y, x, y … in Folienpunkten) → gerade Linie, Pfeil,
+  // Rechteck, Raute, Dreieck oder Ellipse – oder null (Schrift, Gekritzel bleibt Freihand)
+  function inkShape(raw) {
+    const P0 = [];
+    for (let i = 0; i + 1 < raw.length; i += 2) P0.push([raw[i], raw[i + 1]]);
+    if (P0.length < 2) return null;
+    const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    let L = 0;
+    for (let i = 1; i < P0.length; i++) L += dist(P0[i - 1], P0[i]);
+    const xs = P0.map((p) => p[0]), ys = P0.map((p) => p[1]);
+    const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by, D = Math.hypot(bw, bh);
+    if (D < 34 || L < 40) return null; // zu klein: eher Schrift
+    // gleichmäßig neu abtasten
+    const N = 96, P = [P0[0]];
+    { const step = L / (N - 1); let acc = 0, k = 1, prev = P0[0];
+      while (k < P0.length && P.length < N) {
+        const d = dist(prev, P0[k]);
+        if (acc + d >= step) { const t = (step - acc) / d; const q = [prev[0] + (P0[k][0] - prev[0]) * t, prev[1] + (P0[k][1] - prev[1]) * t]; P.push(q); prev = q; acc = 0; }
+        else { acc += d; prev = P0[k]; k++; }
+      }
+      while (P.length < N) P.push(P0[P0.length - 1]); }
+    const segDist = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy; let t = l ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(a[0] + t * dx - p[0], a[1] + t * dy - p[1]); };
+    // Ecken (Ramer-Douglas-Peucker)
+    const rdp = (pts, eps) => {
+      if (pts.length < 3) return pts.slice();
+      let im = 0, dm = 0;
+      for (let i = 1; i < pts.length - 1; i++) { const d = segDist(pts[i], pts[0], pts[pts.length - 1]); if (d > dm) { dm = d; im = i; } }
+      if (dm <= eps) return [pts[0], pts[pts.length - 1]];
+      const a = rdp(pts.slice(0, im + 1), eps), b = rdp(pts.slice(im), eps);
+      return a.slice(0, -1).concat(b);
+    };
+    const angOf = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const deg = (r) => (r * 180) / Math.PI;
+    const turn = (a, b, c) => { let t = Math.abs(deg(angOf(a, b) - angOf(b, c))) % 360; return t > 180 ? 360 - t : t; }; // 0 = geradeaus
+    const snapAng = (a) => { for (const s0 of [-180, -135, -90, -45, 0, 45, 90, 135, 180]) if (Math.abs(a - s0) < 7) return s0; return a; };
+    const first = P[0], last = P[N - 1], chord = dist(first, last);
+    // geschlossen? Ende nahe am Anfang (auch leicht überzeichnet)
+    let gap = chord;
+    for (let i = Math.floor(N * 0.75); i < N; i++) gap = Math.min(gap, dist(P[i], first));
+    const closed = gap < Math.max(14, D * 0.2) && L > D * 1.6;
+    if (!closed) {
+      // gerade Linie
+      const dev = Math.max(...P.map((p) => segDist(p, first, last)));
+      if (chord / L > 0.9 && dev < Math.max(5, chord * 0.07)) return { k: 'line', a: first, b: last };
+      // Pfeil in einem Zug: langer Schaft, am Ende kurze Spitze (hin und zurück oder Haken)
+      const V = rdp(P, Math.max(4, D * 0.05));
+      if (V.length >= 3 && V.length <= 6) {
+        const shaft = dist(V[0], V[1]);
+        const restMax = Math.max(...V.slice(2).map((v) => dist(v, V[1])));
+        const straight = Math.max(...P.slice(0, Math.max(2, Math.round(N * shaft / L))).map((p) => segDist(p, V[0], V[1])));
+        if (shaft > 0.55 * L && restMax < 0.4 * shaft && restMax > 6 && straight < Math.max(5, shaft * 0.08) && turn(V[0], V[1], V[2]) > 110) return { k: 'arrow', a: V[0], b: V[1] };
+      }
+      return null;
+    }
+    // geschlossene Formen: Ecken zählen
+    const ring = P.slice(0, N);
+    let V = rdp(ring, Math.max(5, L * 0.035));
+    if (dist(V[0], V[V.length - 1]) < Math.max(14, D * 0.2)) V.pop();
+    // fast gerade Knicke entfernen; Anfang/Ende (liegt oft mitten auf einer Seite) mitprüfen
+    for (let changed = true; changed && V.length > 3;) {
+      changed = false;
+      for (let i = 0; i < V.length; i++) {
+        const a = V[(i - 1 + V.length) % V.length], b = V[i], c = V[(i + 1) % V.length];
+        if (turn(a, b, c) < 32 || dist(a, b) < D * 0.08) { V.splice(i, 1); changed = true; break; }
+      }
+    }
+    if (D < 50) return null; // kleine geschlossene Striche: eher Buchstaben (o, a, D …)
+    // passt der Strich zu dem Vieleck? (mittlerer Abstand der Punkte zu den Seiten)
+    const fits = (vs, tol) => { let e = 0; for (const p of ring) { let m = Infinity; for (let i = 0; i < vs.length; i++) m = Math.min(m, segDist(p, vs[i], vs[(i + 1) % vs.length])); e += m; } return e / ring.length < D * tol; };
+    const cx = bx + bw / 2, cy = by + bh / 2;
+    // Ellipse: Abstand zum Rand der umschreibenden Ellipse gleichmäßig
+    const ellErr = (() => { const rx = Math.max(1, bw / 2), ry = Math.max(1, bh / 2); let e = 0; for (const p of ring) e += Math.abs(Math.hypot((p[0] - cx) / rx, (p[1] - cy) / ry) - 1); return e / ring.length; })();
+    if (ellErr < 0.075) return { k: 'ellipse', x: bx, y: by, w: bw, h: bh };
+    if (V.length >= 3 && V.length <= 6 && !fits(V, 0.035)) return ellErr < 0.11 ? { k: 'ellipse', x: bx, y: by, w: bw, h: bh } : null;
+    if (V.length === 3) {
+      const ang = [0, 1, 2].map((i) => turn(V[(i + 2) % 3], V[i], V[(i + 1) % 3]));
+      if (Math.min(...ang) < 60) return null;
+      // Spitze oben, Grundseite unten (waagrecht) → gleichschenkliges Dreieck; sonst freies Dreieck
+      const s0 = V.slice().sort((p, q) => p[1] - q[1]);
+      const baseFlat = Math.abs(s0[1][1] - s0[2][1]) < bh * 0.15, apexMid = Math.abs(s0[0][0] - cx) < bw * 0.15;
+      if (baseFlat && apexMid) return { k: 'tri', x: bx, y: by, w: bw, h: bh };
+      return { k: 'poly', pts: V };
+    }
+    if (V.length === 4) {
+      const ang = [0, 1, 2, 3].map((i) => turn(V[(i + 3) % 4], V[i], V[(i + 1) % 4]));
+      const e0 = deg(angOf(V[0], V[1]));
+      const axis = (a) => { const m = ((a % 90) + 90) % 90; return Math.min(m, 90 - m); };
+      const edges = [0, 1, 2, 3].map((i) => deg(angOf(V[i], V[(i + 1) % 4])));
+      if (edges.every((a) => axis(a) < 16) && ang.every((a) => a > 60 && a < 120)) return { k: 'rect', x: bx, y: by, w: bw, h: bh };
+      if (edges.every((a) => Math.abs(axis(a) - 45) < 16) && V.every((v) => Math.abs(v[0] - cx) < bw * 0.18 || Math.abs(v[1] - cy) < bh * 0.18)) return { k: 'diamond', x: bx, y: by, w: bw, h: bh };
+      if (ang.every((a) => a > 70 && a < 110)) {
+        // gedrehtes Rechteck
+        const w = (dist(V[0], V[1]) + dist(V[2], V[3])) / 2, h = (dist(V[1], V[2]) + dist(V[3], V[0])) / 2;
+        const mx = V.reduce((a, v) => a + v[0], 0) / 4, my = V.reduce((a, v) => a + v[1], 0) / 4;
+        return { k: 'rect', x: mx - w / 2, y: my - h / 2, w, h, r: e0 };
+      }
+      if (ellErr < 0.09) return { k: 'ellipse', x: bx, y: by, w: bw, h: bh };
+      return { k: 'poly', pts: V };
+    }
+    if (ellErr < 0.13 && V.length >= 5) return { k: 'ellipse', x: bx, y: by, w: bw, h: bh };
+    if (V.length >= 5 && V.length <= 6 && ellErr >= 0.13) return { k: 'poly', pts: V };
+    return null;
+  }
+  // </inkShape>
+  // erkannte Form → Element der Folie (Umriss in der Stiftfarbe, ohne Füllung)
+  function skShapeEl(r, st) {
+    const line = st.c || '#1A1A1A', lw = Math.max(2, Math.round((st.w || 2) * 1.2 * 10) / 10);
+    const snapA = (a) => { for (const s0 of [-180, -135, -90, -45, 0, 45, 90, 135, 180]) if (Math.abs(a - s0) < 6) return s0; return a; };
+    if (r.k === 'line' || r.k === 'arrow') {
+      // Enden, die knapp an einer Form liegen, genau an deren Rand setzen (Verbindungen sehen sauber aus)
+      const snapEnd = (p, other) => {
+        let best = null, bd = 18;
+        for (const e of (slide() || { els: [] }).els) {
+          if (e.t !== 'shape' || LINE_K.includes(e.k) || e.r || e.md || e.w * e.h >= W * H * 0.5) continue;
+          let q;
+          if (e.k === 'ellipse') { const cx = e.x + e.w / 2, cy = e.y + e.h / 2, a = Math.atan2((p[1] - cy) / (e.h / 2), (p[0] - cx) / (e.w / 2)); q = [cx + (e.w / 2) * Math.cos(a), cy + (e.h / 2) * Math.sin(a)]; }
+          else {
+            const x = Math.max(e.x, Math.min(e.x + e.w, p[0])), y = Math.max(e.y, Math.min(e.y + e.h, p[1]));
+            const inside = p[0] > e.x && p[0] < e.x + e.w && p[1] > e.y && p[1] < e.y + e.h;
+            if (!inside) q = [x, y];
+            else { const dl = p[0] - e.x, dr = e.x + e.w - p[0], dt = p[1] - e.y, db = e.y + e.h - p[1], m = Math.min(dl, dr, dt, db); q = m === dl ? [e.x, p[1]] : m === dr ? [e.x + e.w, p[1]] : m === dt ? [p[0], e.y] : [p[0], e.y + e.h]; }
+            // genau auf die Seitenmitte, wenn das Ende nahe daran ist
+            const mids = [[e.x + e.w / 2, e.y], [e.x + e.w / 2, e.y + e.h], [e.x, e.y + e.h / 2], [e.x + e.w, e.y + e.h / 2]];
+            for (const mq of mids) if (Math.hypot(mq[0] - q[0], mq[1] - q[1]) < 14) q = mq;
+          }
+          const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          if (d < bd && Math.hypot(q[0] - other[0], q[1] - other[1]) > 20) { bd = d; best = q; }
+        }
+        return best;
+      };
+      const sa = snapEnd(r.a, r.b), sb = snapEnd(r.b, r.a);
+      let a = sa || r.a, b = sb || r.b;
+      const len0 = Math.hypot(b[0] - a[0], b[1] - a[1]), ang0 = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI, angS = snapA(ang0);
+      if (!sa && !sb) { const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, c = Math.cos((angS * Math.PI) / 180), sn = Math.sin((angS * Math.PI) / 180); a = [mx - (c * len0) / 2, my - (sn * len0) / 2]; b = [mx + (c * len0) / 2, my + (sn * len0) / 2]; }
+      else if (!(sa && sb) && angS !== ang0) {
+        // ein Ende angedockt: das freie Ende so setzen, dass die Linie gerade (waagrecht/senkrecht/45°) läuft
+        const c = Math.cos((angS * Math.PI) / 180), sn = Math.sin((angS * Math.PI) / 180);
+        if (sa) b = [a[0] + c * len0, a[1] + sn * len0]; else a = [b[0] - c * len0, b[1] - sn * len0];
+      }
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+      const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      return { id: uid(), t: 'shape', k: r.k, x: r1(mx - len / 2), y: r1(my - 10), w: r1(len), h: 20, r: r1(ang), line, lw, _a: a, _b: b };
+    }
+    if (r.k === 'poly') {
+      const xs = r.pts.map((p) => p[0]), ys = r.pts.map((p) => p[1]);
+      const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(1, Math.max(...xs) - bx), bh = Math.max(1, Math.max(...ys) - by);
+      const d = r.pts.map((p, i) => (i ? 'L' : 'M') + Math.round(((p[0] - bx) / bw) * 1000) + ' ' + Math.round(((p[1] - by) / bh) * 1000)).join('') + 'Z';
+      return { id: uid(), r: 0, t: 'shape', k: 'path', x: r1(bx), y: r1(by), w: r1(bw), h: r1(bh), d, line, lw };
+    }
+    let { x, y, w, h } = r, rot = r.r || 0;
+    // gedreht: auf −45 … 45° bringen, fast gerade → gerade
+    while (rot > 45) { rot -= 90; [w, h] = [h, w]; }
+    while (rot <= -45) { rot += 90; [w, h] = [h, w]; }
+    if (Math.abs(rot) < 7) rot = 0;
+    const cx = x + r.w / 2, cy = y + r.h / 2;
+    // fast rund bzw. fast quadratisch → rund bzw. quadratisch
+    if (Math.abs(w - h) / Math.max(w, h) < 0.12) { w = h = (w + h) / 2; }
+    return { id: uid(), t: 'shape', k: r.k, x: r1(cx - w / 2), y: r1(cy - h / 2), w: r1(w), h: r1(h), r: r1(rot), line, lw };
+  }
+  // ein „V“ (Pfeilspitze) als zweiter Strich an einer gerade erkannten Linie
+  function skHead(st, ln) {
+    const p = []; for (let i = 0; i + 1 < st.p.length; i += 2) p.push([st.p[i], st.p[i + 1]]);
+    if (p.length < 3) return null;
+    const a = p[0], b = p[p.length - 1];
+    const sd = (q, u, v) => { const dx = v[0] - u[0], dy = v[1] - u[1], l = dx * dx + dy * dy; let t = l ? ((q[0] - u[0]) * dx + (q[1] - u[1]) * dy) / l : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(u[0] + t * dx - q[0], u[1] + t * dy - q[1]); };
+    let im = 0, dm = 0; p.forEach((q, i) => { const d = sd(q, a, b); if (d > dm) { dm = d; im = i; } });
+    const apex = p[im], l1 = Math.hypot(apex[0] - a[0], apex[1] - a[1]), l2 = Math.hypot(apex[0] - b[0], apex[1] - b[1]);
+    if (im === 0 || im === p.length - 1 || l1 < 6 || l2 < 6 || l1 / l2 > 3 || l2 / l1 > 3) return null;
+    const dev = Math.max(...p.slice(0, im + 1).map((q) => sd(q, a, apex)), ...p.slice(im).map((q) => sd(q, apex, b)));
+    if (dev > Math.max(4, 0.25 * Math.max(l1, l2))) return null;
+    let ang = Math.abs(Math.atan2(a[1] - apex[1], a[0] - apex[0]) - Math.atan2(b[1] - apex[1], b[0] - apex[0])) * 180 / Math.PI; if (ang > 180) ang = 360 - ang;
+    if (ang < 15 || ang > 140) return null;
+    const len = ln.len, size = Math.max(l1, l2);
+    if (size > Math.max(60, len * 0.6)) return null;
+    const near = Math.max(18, len * 0.15);
+    const dA = Math.hypot(apex[0] - ln.a[0], apex[1] - ln.a[1]), dB = Math.hypot(apex[0] - ln.b[0], apex[1] - ln.b[1]);
+    if (Math.min(dA, dB) > near) return null;
+    return dB <= dA ? 'b' : 'a';
+  }
+  function skAuto(st) {
+    const t0 = slide();
+    if (!t0 || !st.p || st.p.length < 4) return;
+    let r = null;
+    try { r = inkShape(st.p); } catch (er) { r = null; }
+    if (r && (r.k === 'line' || r.k === 'arrow') && Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]) < 60) r = null; // kurze Striche: eher Schrift
+    // mitten in gerade Geschriebenem (o, D, l, I …): nicht umwandeln
+    const bb = inkBox([st]), now = Date.now(), sz = Math.hypot(bb[2] - bb[0], bb[3] - bb[1]);
+    SKM.recent = (SKM.recent || []).filter((q) => now - q.t < 6000 && q.s === t0.id);
+    if (r && sz < 160 && SKM.recent.some((q) => {
+      const gx = Math.max(0, q.b[0] - bb[2], bb[0] - q.b[2]), gy = Math.max(0, q.b[1] - bb[3], bb[1] - q.b[3]);
+      const qh = q.b[3] - q.b[1];
+      return gx < Math.max(30, sz * 0.5) && gy < Math.max(12, qh * 0.4);
+    })) r = null;
+    const L = SKM.last;
+    // zweiter Strich: Spitze an die eben gezeichnete Linie
+    if (!r && L && L.s === t0.id && Date.now() - L.t < 15000) {
+      const end = skHead(st, L);
+      const el = end && t0.els.find((e) => e.id === L.id);
+      if (el && LINE_K.includes(el.k)) {
+        change(() => {
+          const t1 = slide(); t1.ink = (t1.ink || []).filter((k) => k !== st); if (!t1.ink.length) delete t1.ink;
+          const e1 = t1.els.find((e) => e.id === L.id); if (!e1) return;
+          if (end === 'b') e1.k = e1.k === 'line' ? 'arrow' : e1.k;
+          else if (e1.k === 'line') { e1.k = 'arrow'; e1.r = r1((((e1.r || 0) + 360) % 360) - 180); [L.a, L.b] = [L.b, L.a]; }
+          else if (e1.k === 'arrow') e1.k = 'arrow2';
+        });
+        L.t = Date.now();
+        return;
+      }
+    }
+    if (!r) { SKM.recent.push({ b: bb, t: now, s: t0.id }); return; }
+    const el = skShapeEl(r, st);
+    const ea = el._a, eb = el._b; delete el._a; delete el._b;
+    change(() => {
+      const t1 = slide(); t1.ink = (t1.ink || []).filter((k) => k !== st); if (!t1.ink.length) delete t1.ink;
+      t1.els.push(el);
+    });
+    SKM.last = el.k === 'line' || el.k === 'arrow' ? { id: el.id, s: t0.id, a: ea, b: eb, len: el.w, t: Date.now() } : null;
+  }
   // Skizzenmodus: direkt auf der Folie zeichnen; „Sauber zeichnen“ ersetzt die Striche an Ort und Stelle
   // durch bearbeitbare Elemente (Formen, Pfeile, Text, Tabellen, Diagramme, Formeln)
   let SKM = null;
   async function sketchDialog() {
     if (!D.deck || !slide()) return;
     if (SKM) { skBar(); return; }
-    const cfg = await aiKey();
-    if (!cfg) return;
-    SKM = { pen: INK.c.pen, wi: INK.wi.pen, t: INK.t, busy: false };
+    let auto = true; try { auto = C.ls('dkSkAuto') !== false; } catch (er) { /* */ }
+    SKM = { pen: INK.c.pen, wi: INK.wi.pen, t: INK.t, busy: false, auto, last: null };
     INK.c.pen = skCols()[0]; INK.wi.pen = 1;
     inkTool('pen');
     D.ed.renderFmt();
@@ -3707,6 +3933,7 @@
     const er = INK.t === 'er';
     b.innerHTML = `<b class="dk-skbar-t">✎ Auf der Folie zeichnen</b>${skCols().map((c) => `<button type="button" class="dk-sk-c${!er && c === INK.c.pen ? ' on' : ''}" data-c="${c}" style="--c:${c}" title="Stiftfarbe – Rot und Grün gelten als Hervorhebung" aria-label="Farbe ${c}"></button>`).join('')}
       <button type="button" class="btn${er ? ' on' : ''}" data-a="er" title="Radierer">Radierer</button><button type="button" class="btn" data-a="undo" title="Rückgängig (Strg+Z)">↶</button>
+      <label class="dk-sk-auto" title="Kreise, Rechtecke, Dreiecke, Linien und Pfeile werden gleich beim Zeichnen gerade gezogen – ohne KI, ohne Kosten"><input type="checkbox" data-a="auto"${SKM.auto ? ' checked' : ''}> Formen sofort</label>
       <span class="dk-sk-sep"></span><button type="button" class="btn" data-a="photo" title="Foto einer Skizze oder Tafel in neue Folien umwandeln">Foto …</button><button type="button" class="btn" data-a="pdf" title="PDF-Seite (auch mit Anmerkungen) in neue Folien umwandeln">PDF-Seite …</button>
       <span class="dk-grow"></span><button type="button" class="btn" data-a="end" title="Skizzenmodus beenden (Esc) – Striche bleiben als Freihand">Schließen</button><button type="button" class="btn primary dk-sk-go" data-a="go"${SKM.busy ? ' disabled' : ''}>${SKM.busy ? 'Die KI zeichnet …' : '✓ Sauber zeichnen'}</button>`;
     b.onclick = async (ev) => {
@@ -3714,6 +3941,7 @@
       if (c) { INK.c.pen = c.dataset.c; inkTool('pen'); D.ed.renderFmt(); skBar(); return; }
       if (!a) return;
       const k = a.dataset.a;
+      if (k === 'auto') { SKM.auto = a.checked; try { C.ls('dkSkAuto', SKM.auto); } catch (er) { /* */ } return; }
       if (k === 'er') { inkTool(INK.t === 'er' ? 'pen' : 'er'); D.ed.renderFmt(); skBar(); }
       else if (k === 'undo') undo();
       else if (k === 'end') sketchEnd();
@@ -3721,12 +3949,59 @@
       else if (k === 'photo' || k === 'pdf') { const cv = k === 'photo' ? await sketchPhoto() : await sketchPdfPage(); if (cv) skImage(cv); }
     };
   }
-  // Striche → Bild (ganze Folie, weißer Grund)
-  function skCanvas(strokes) {
+  // vorhandener Inhalt der Folie für die KI: Liste (kurze Kennungen) und blasse Umrisse im Bild
+  const skCtxEls = (s0) => ((s0 && s0.els) || []).filter((e) => !e.md && !isPh(e) && !(e.w * e.h >= W * H * 0.5 && e.t === 'shape' && !e.html) && e.x < W && e.y < H && e.x + e.w > 0 && e.y + e.h > 0);
+  function skContext(s0) {
+    const list = skCtxEls(s0), map = {}, rows = [];
+    const pcx = (v) => Math.round((v / W) * 1000) / 10, pcy = (v) => Math.round((v / H) * 1000) / 10;
+    list.forEach((e, i) => {
+      const id = 'e' + (i + 1); map[id] = e.id;
+      const kind = e.t === 'shape' ? (LINE_K.includes(e.k) ? (e.k === 'line' ? 'line' : 'arrow') : e.k) : e.t === 'img' ? 'image' : e.t;
+      const t = e.html ? plain(e.html).slice(0, 80) : e.t === 'math' ? e.tex : '';
+      rows.push(JSON.stringify({ id, type: kind, x: pcx(e.x), y: pcy(e.y), w: pcx(e.w), h: pcy(e.h), ...(e.r ? { rotation: Math.round(e.r) } : {}), ...(t ? { text: t } : e.t === 'shape' && !LINE_K.includes(e.k) ? { empty: true } : {}), ...(e.html ? { fontSize: e.fs || 24 } : {}) }));
+    });
+    // Aussehen: häufigste Formatierung der vorhandenen Formen bzw. Texte
+    const most = (arr) => { const c = {}; let best = null; for (const v of arr) { const k = JSON.stringify(v); c[k] = (c[k] || 0) + 1; if (!best || c[k] > c[best]) best = k; } return best ? JSON.parse(best) : null; };
+    const style = most(list.filter((e) => e.t === 'shape' && !LINE_K.includes(e.k) && e.k !== 'path').map((e) => ({ fill: e.fill, line: e.line, lw: e.lw || 2, c: e.c || (theme().fg) })));
+    const tcs = most(list.filter((e) => e.t === 'text' && e.c).map((e) => e.c));
+    return { ctx: rows.join('\n'), map, style, tc: tcs };
+  }
+  // Striche → Bild (ganze Folie, weißer Grund); vorhandener Inhalt grau dahinter
+  function skCanvas(strokes, s0) {
     const cw = 1600, ch = Math.round((1600 * H) / W), k = cw / W;
     const c = document.createElement('canvas'); c.width = cw; c.height = ch;
     const g = c.getContext('2d');
     g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch);
+    const GR = '#A6ABB2';
+    for (const e of s0 ? skCtxEls(s0) : []) {
+      try {
+        g.save();
+        g.setTransform(k, 0, 0, k, 0, 0);
+        g.translate(e.x + e.w / 2, e.y + e.h / 2); if (e.r) g.rotate((e.r * Math.PI) / 180); if (e.fx || e.fy) g.scale(e.fx ? -1 : 1, e.fy ? -1 : 1);
+        g.translate(-e.w / 2, -e.h / 2);
+        g.strokeStyle = GR; g.fillStyle = GR; g.lineWidth = 2; g.lineJoin = 'round'; g.lineCap = 'round';
+        if (e.t === 'shape') {
+          g.stroke(new Path2D(shapePath(e.k, e.w, e.h, e)));
+          if (e.k === 'arrow' || e.k === 'arrow2') { const hb = Math.min(10, e.w / 3); g.beginPath(); g.moveTo(e.w - hb, e.h / 2 - hb * 0.6); g.lineTo(e.w, e.h / 2); g.lineTo(e.w - hb, e.h / 2 + hb * 0.6); if (e.k === 'arrow2') { g.moveTo(hb, e.h / 2 - hb * 0.6); g.lineTo(0, e.h / 2); g.lineTo(hb, e.h / 2 + hb * 0.6); } g.stroke(); }
+        } else if (e.t !== 'text') { g.setLineDash([6, 4]); g.strokeRect(0, 0, e.w, e.h); g.setLineDash([]); }
+        const t = e.html ? e.html.replace(/<br\s*\/?>|<\/(div|p|li)>/gi, '\n').split('\n').map((x) => plain(x)).filter(Boolean).join('\n') : e.t === 'img' ? 'Bild' : e.t === 'chart' ? 'Diagramm' : e.t === 'table' ? 'Tabelle' : e.t === 'math' ? 'Formel' : '';
+        if (t) {
+          const fs = e.html ? e.fs || 24 : 14, pad = e.pad != null ? e.pad : 8;
+          g.font = `${fs}px sans-serif`; g.textBaseline = 'top';
+          const lines = []; let cur = '';
+          for (const para of t.split('\n')) {
+            for (const w0 of para.split(/\s+/)) { const nx = cur ? cur + ' ' + w0 : w0; if (cur && g.measureText(nx).width > e.w - 2 * pad) { lines.push(cur); cur = w0; } else cur = nx; }
+            if (cur) lines.push(cur); cur = '';
+          }
+          const lh = fs * 1.2, tot = lines.length * lh;
+          let y = e.t === 'shape' || e.va === 'm' ? (e.h - tot) / 2 : e.va === 'b' ? e.h - pad - tot : pad;
+          const ctr = e.t === 'shape' || /text-align:\s*center/.test(e.html || '');
+          for (const ln of lines) { if (y > e.h + lh) break; const w1 = g.measureText(ln).width; g.fillText(ln, ctr ? (e.w - w1) / 2 : pad, y); y += lh; }
+        }
+      } catch (er) { /* Element überspringen */ }
+      finally { g.restore(); }
+    }
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.lineCap = 'round'; g.lineJoin = 'round';
     for (const s0 of strokes) {
       const p = []; for (let i = 0; i + 1 < s0.p.length; i += 2) p.push([s0.p[i] * k, s0.p[i + 1] * k]);
@@ -3748,12 +4023,13 @@
     const idx = ink.map((k, i) => (k.sk && !k.hl ? i : -1)).filter((i) => i >= 0);
     if (!idx.length) { C.toast('Erst etwas auf diese Folie zeichnen – Formen, Pfeile, Text, eine Tabelle …', 4000); return; }
     const sid = s0.id, sig = idx.map((i) => JSON.stringify(ink[i].p.slice(0, 6)));
-    const cv = skCanvas(idx.map((i) => ink[i]));
+    const CX = skContext(s0);
+    const cv = skCanvas(idx.map((i) => ink[i]), s0);
     SKM.busy = true; skBar();
     const t0 = Date.now();
     try {
-      const r = await aiSlides(cfg, { image: { data: cv.toDataURL('image/png').split(',')[1], type: 'image/png' }, multi: false, place: true });
-      const made = await deckSlides(r.slides.slice(0, 1), { direct: true, bg: skBg(s0) });
+      const r = await aiSlides(cfg, { image: { data: cv.toDataURL('image/png').split(',')[1], type: 'image/png' }, multi: false, place: { ctx: CX.ctx } });
+      const made = await deckSlides(r.slides.slice(0, 1), { direct: true, bg: skBg(s0), style: CX.style, tc: CX.tc });
       const add = (made[0] && made[0].els) || [];
       if (!add.length) throw new Error('Die KI hat nichts erkannt.');
       const t = D.deck.slides.find((x) => x.id === sid);
@@ -3767,6 +4043,16 @@
         const ti = add.find((e) => e._title), ph = t.els.find((e) => e.ph && e.pk === 'title' && isPh(e));
         if (ti && ph) { ph.html = ti.html.replace(/<\/?b>/g, ''); add.splice(add.indexOf(ti), 1); }
         add.forEach((e) => delete e._title);
+        // Text in eine vorhandene leere Form
+        for (const e of add.slice()) {
+          if (!e._into) continue;
+          const tgt = t.els.find((x) => x.id === CX.map[e._into]);
+          delete e._into;
+          if (!tgt || tgt.t !== 'shape' || LINE_K.includes(tgt.k) || plain(tgt.html || '')) continue;
+          tgt.html = '<div style="text-align: center;">' + e.html + '</div>'; tgt.fs = e.fs; tgt.va = 'm';
+          if (!tgt.c) tgt.c = e.c || (skDark() ? '#FFFFFF' : theme().fg);
+          add.splice(add.indexOf(e), 1);
+        }
         t.els.push(...add);
       });
       C.toast(`Sauber gezeichnet – ${Math.round((Date.now() - t0) / 1000)} s, etwa ${aiCost(cfg, r)} Cent.`, 4000);
@@ -3829,7 +4115,7 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
     const el = { type: 'object', required: ['type'], properties: {
       type: { type: 'string', enum: ['title', 'text', 'bullets', 'rect', 'roundrect', 'ellipse', 'shape', 'arrow', 'line', 'polyline', 'table', 'chart', 'formula'] },
       shape: { type: 'string', enum: ['triangle', 'rtTriangle', 'diamond', 'pentagon', 'hexagon', 'star5', 'cloud', 'rightArrow', 'leftArrow', 'upArrow', 'downArrow', 'leftRightArrow', 'chevron', 'parallelogram', 'trapezoid'] },
-      x: num, y: num, w: num, h: num, rotation: num, textHeight: num, closed: { type: 'boolean' }, accent: { type: 'boolean' },
+      x: num, y: num, w: num, h: num, rotation: num, textHeight: num, fontSize: num, into: str, closed: { type: 'boolean' }, accent: { type: 'boolean' },
       text: str, items: { type: 'array', items: str },
       points: { type: 'array', items: { type: 'object', required: ['x', 'y'], properties: { x: num, y: num } } },
       rows: { type: 'array', items: { type: 'array', items: str } }, header: { type: 'boolean' },
@@ -3840,7 +4126,7 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
       input_schema: { type: 'object', required: ['slides'], properties: { slides: { type: 'array', items: { type: 'object', required: ['elements'], properties: { elements: { type: 'array', items: el }, notes: str } } } } } };
   }
   async function aiSlides(cfg, { image, multi, place }) {
-    const rule = place ? 'Die Skizze wurde direkt auf eine bestehende Folie gezeichnet; das Bild zeigt die ganze Folie (16:9). Erzeuge genau eine Folie und setze jedes Element genau an die gezeichnete Stelle und in der gezeichneten Größe (Koordinaten in Prozent der Folie). Die Regeln zu Rand und Titelposition gelten hier nicht; einen Titel nur, wenn oben deutlich eine Überschrift steht. Keine Sprechernotizen.' : multi ? 'Verteile den Inhalt sinnvoll auf so viele Folien wie nötig (höchstens 6 Stichpunkte pro Folie, ein Gedanke pro Folie); jede Folie bekommt einen Titel.' : 'Erzeuge genau eine Folie.';
+    const rule = place ? 'Die Skizze wurde direkt auf eine bestehende Folie gezeichnet; das Bild zeigt die ganze Folie (16:9). Erzeuge genau eine Folie und setze jedes Element genau an die gezeichnete Stelle und in der gezeichneten Größe (Koordinaten in Prozent der Folie). Die Regeln zu Rand und Titelposition gelten hier nicht; einen Titel nur, wenn oben deutlich eine Überschrift steht. Keine Sprechernotizen.' + (place.ctx ? '\n\nGRAU im Bild ist der schon vorhandene Inhalt der Folie – erzeuge ihn NICHT noch einmal. Nur die farbigen/schwarzen Striche sind neu. Vorhandene Elemente (Koordinaten in Prozent, fontSize in Punkt):\n' + place.ctx + '\n\nRichte Neues an Vorhandenem aus: gleiche Kanten, Abstände und Größen wie benachbarte Elemente, wenn es offensichtlich so gemeint ist. Linien und Pfeile, die bei einem vorhandenen Element beginnen oder enden, setzen genau an dessen Rand an. Text, der in eine vorhandene Form ohne Text geschrieben ist: Element type "text" mit into = deren id. Passt gezeichnete Schrift ungefähr zu einer vorhandenen Schriftgröße, gib genau diese als fontSize an.' : '') : multi ? 'Verteile den Inhalt sinnvoll auf so viele Folien wie nötig (höchstens 6 Stichpunkte pro Folie, ein Gedanke pro Folie); jede Folie bekommt einen Titel.' : 'Erzeuge genau eine Folie.';
     const body = { model: cfg.model || 'claude-sonnet-5-5', max_tokens: 16000, system: AI_SYS, tools: [aiTool()], tool_choice: { type: 'auto' },
       messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: image.type, data: image.data } }, { type: 'text', text: rule + ' Rufe dafür unbedingt das Werkzeug folien_erstellen auf.' }] }] };
     let res;
@@ -3873,7 +4159,7 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
     const bgc = opt && /^#[0-9a-f]{6}$/i.test(opt.bg || '') ? opt.bg : /^#[0-9a-f]{6}$/i.test(th.bg || '') ? th.bg : '#FFFFFF';
     const dark = !!(opt && opt.bg) && hexLum(bgc) < 0.4; // auf eine dunkle Folie gezeichnet: helle Linien und Schrift
     const fg = dark ? '#FFFFFF' : /^#[0-9a-f]{6}$/i.test(th.fg || '') ? th.fg : '#1A1A1A';
-    const tc = dark ? { c: fg } : {};
+    const tc = opt && opt.tc ? { c: opt.tc } : dark ? { c: fg } : {};
     const tint = dark ? mixHex(acc, bgc, 0.35) : mixHex(acc, bgc, 0.85);
     const lum = (h) => { const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
     const onAcc = lum(acc) > 0.5 ? fg : '#FFFFFF'; // Schrift auf der Akzentfarbe gut lesbar
@@ -3898,7 +4184,7 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
       const kx = box.sx ? (box.r - box.l) / 90 : W / 100, ky = box.sy ? (box.b - box.t) / 75 : H / 100;
       const X = (v) => r1(box.sx ? box.l + (pc(v) - 5) * kx : pc(v) * kx), Y = (v) => r1(box.sy ? box.t + (Math.max(pc(v), 20) - 20) * ky : pc(v) * ky);
       const SW = (v) => r1(Math.max(4, pc(v) * kx)), SH = (v) => r1(Math.max(4, pc(v) * ky));
-      const fsOf = (e, d) => (+e.textHeight > 0 ? Math.round(Math.max(10, Math.min(200, (+e.textHeight / 100) * H / 0.7 * (box.sy ? Math.min(kx / (W / 100), ky / (H / 100)) : 1)))) : d);
+      const fsOf = (e, d) => (+e.fontSize >= 8 && +e.fontSize <= 200 ? Math.round(+e.fontSize) : +e.textHeight > 0 ? Math.round(Math.max(10, Math.min(200, (+e.textHeight / 100) * H / 0.7 * (box.sy ? Math.min(kx / (W / 100), ky / (H / 100)) : 1)))) : d);
       const base = (e) => ({ id: uid(), r: 0, x: X(e.x), y: Y(e.y), w: SW(e.w), h: SH(e.h) });
       let titled = false;
       for (const e of els0) {
@@ -3909,11 +4195,12 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
           s.els.push({ ...base(e), t: 'text', fs: fsOf(e, 36), va: 'm', c: acc, html: '<b>' + txt(e.text) + '</b>', ...(opt && opt.direct ? { _title: 1 } : {}) });
           continue;
         }
-        if (e.type === 'title' || e.type === 'text') { s.els.push({ ...base(e), t: 'text', fs: fsOf(e, e.type === 'title' ? 32 : 20), ...tc, ...(col ? { c: col } : {}), html: e.type === 'title' ? '<b>' + txt(e.text) + '</b>' : txt(e.text) }); continue; }
+        if (e.type === 'title' || e.type === 'text') { s.els.push({ ...base(e), t: 'text', fs: fsOf(e, e.type === 'title' ? 32 : 20), ...tc, ...(col ? { c: col } : {}), html: e.type === 'title' ? '<b>' + txt(e.text) + '</b>' : txt(e.text), ...(opt && opt.direct && e.into ? { _into: String(e.into) } : {}) }); continue; }
         if (e.type === 'bullets') { const it = (e.items || []).map((t) => '<li>' + txt(t) + '</li>').join(''); if (it) s.els.push({ ...base(e), t: 'text', fs: fsOf(e, 20), ...tc, ...(col ? { c: col } : {}), html: '<ul>' + it + '</ul>' }); continue; }
         if (e.type === 'rect' || e.type === 'roundrect' || e.type === 'ellipse' || e.type === 'shape') {
           const k = SK_SHAPE[e.type === 'shape' ? e.shape : e.type] || 'rect';
-          s.els.push({ ...base(e), r: Math.round(+e.rotation || 0), t: 'shape', k, fill: e.accent ? acc : tint, line: e.accent ? acc : fg, lw: 2, fs: fsOf(e, 18), va: 'm', c: e.accent ? onAcc : fg, ...(e.text ? { html: '<div style="text-align: center;">' + txt(e.text) + '</div>' } : {}) });
+          const SS = !e.accent && opt && opt.style; // auf der Folie schon benutztes Aussehen von Formen
+          s.els.push({ ...base(e), r: Math.round(+e.rotation || 0), t: 'shape', k, fill: SS ? SS.fill : e.accent ? acc : tint, line: SS ? SS.line : e.accent ? acc : fg, lw: SS ? SS.lw : 2, fs: fsOf(e, 18), va: 'm', c: SS ? SS.c : e.accent ? onAcc : fg, ...(e.text ? { html: '<div style="text-align: center;">' + txt(e.text) + '</div>' } : {}) });
           continue;
         }
         if (e.type === 'arrow' || e.type === 'line') {

@@ -153,6 +153,11 @@ DE = {
             '„Auswählen“ oder Esc schaltet zurück zum Bearbeiten. Die Striche bleiben beim Speichern als PDF und als PowerPoint erhalten; Freihand aus PowerPoint wird übernommen. '
             'Mit einem Eingabestift wird die Linie je nach Druck dünner oder dicker. Der <b>Radierer</b> nimmt wahlweise nur die berührten Teile oder ganze Striche weg; '
             'mit dem <b>Lasso</b> kreisen Sie Striche ein und verschieben sie, ziehen sie an den Ecken größer oder kleiner, färben sie um oder löschen sie.',
+            '<b>Skizze → Folie</b> (grüner Knopf neben „Neue Folie“, ' + keys('Strg+Umschalt+M') + '): Sie zeichnen direkt auf die Folie. Kreise, Rechtecke, Dreiecke, Linien und Pfeile '
+            'werden sofort gerade gezogen – ohne KI und ohne Kosten (abschaltbar mit „Formen sofort“; ' + keys('Strg+Z') + ' holt den Originalstrich zurück). Eine Pfeilspitze '
+            'können Sie auch als zweiten Strich an eine Linie setzen. <b>Sauber zeichnen</b> wandelt mit der KI nur das gerade auf dieser Folie Gezeichnete um – Schrift, Tabellen, '
+            'Diagramme, Formeln – an Ort und Stelle und passend zu dem, was schon auf der Folie steht; Text in einem gezeichneten Kasten landet im Kasten. '
+            'Dafür braucht es einen eigenen API-Schlüssel (Datei → Einstellungen → Skizze → Folie). Esc oder „Schließen“ beendet das Zeichnen.',
             '<b>Vorlagen (Folienmaster)</b>: Bei „PowerPoint öffnen“ über ⋯ → <b>Als Vorlage übernehmen</b> die PowerPoint-Vorlage Ihrer Einrichtung wählen. '
             'Danach bietet „Neue Präsentation“ diese Vorlage an: Hintergrund, Logo, Fußzeile und Schriften kommen aus der Vorlage, „Neue Folie“ zeigt deren Layouts. '
             'Eine vorhandene Präsentation bekommt das Aussehen über Entwurf → <b>Vorlage übernehmen</b>. Fußzeilentext, Foliennummer und Feld rechts unten: Einfügen → Fußzeile.',
@@ -353,6 +358,11 @@ EN = {
             '“Select” or Esc switches back to editing. The strokes are kept when saving as PDF and as PowerPoint; ink from PowerPoint files is imported. '
             'With a stylus the line gets thinner or thicker depending on pressure. The <b>eraser</b> removes either just the touched parts or whole strokes; '
             'with the <b>lasso</b> you circle strokes and then move them, drag the corners to resize, recolor or delete them.',
+            '<b>Sketch → Slide</b> (green button next to “New slide”, ' + keys('Ctrl+Shift+M') + '): draw right on the slide. Circles, rectangles, triangles, lines and arrows '
+            'are straightened as you draw – without AI and at no cost (switch off with “Shapes instantly”; ' + keys('Ctrl+Z') + ' brings back your original stroke). You can also add an '
+            'arrowhead to a line as a second stroke. <b>Clean up</b> uses the AI to convert only what you just drew on this slide – handwriting, tables, charts, formulas – in place '
+            'and matching what is already on the slide; text written inside a drawn box ends up in the box. '
+            'This needs your own API key (File → Settings → Sketch → Slide). Esc or “Close” ends drawing.',
             '<b>Templates (slide master)</b>: under “Open PowerPoint” choose ⋯ → <b>Import as template</b> and pick your organization’s PowerPoint template. '
             'From then on “New presentation” offers it: background, logo, footer and fonts come from the template, and “New slide” lists its layouts. '
             'An existing presentation gets the look via Design → <b>Apply template</b>. Footer text, slide number and the bottom-right field: Insert → Footer.',

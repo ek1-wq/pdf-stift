@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.100.5';
+  const VERSION = '1.100.7';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -12429,7 +12429,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
       <h3 class="dlg-sub">Sketch → Slide (on this device)</h3>
       <div class="set-row"><span>API key (Anthropic)</span><input id="stAiKey" type="password" autocomplete="off" spellcheck="false" value="${esc(SET.aiKey || '')}" placeholder="sk-ant-…"></div>
       <div class="set-row"><span>Model</span>${sel('stAiModel', AI_MODELS, SET.aiModel || AI_MODELS[0][0])}</div>
-      <p class="muted small">For “Sketch → Slide” in the slide editor (Insert). Get the key at console.anthropic.com; it stays on this device only. One conversion costs about 1–2 cents.</p>
+      <p class="muted small">For “Clean up” in “Sketch → Slide” in the slide editor. Shapes like circles, rectangles and arrows are straightened even without a key. Get the key at console.anthropic.com; it stays on this device only. One conversion costs about 1–2 cents.</p>
       <div class="dlg-actions"><button type="submit" value="" class="btn">Cancel</button><button type="submit" value="ok" class="btn primary">Save</button></div></form>`;
     document.body.appendChild(d);
     setPage(d);

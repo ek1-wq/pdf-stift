@@ -2032,6 +2032,7 @@
             const rr = runsOf(e.html, { color: noHash(e.c || th.fg), fs: e.fs || 24, im: 1 }); mark(e, rr.units);
             if (rr.fix) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, fix: rr.fix }); }
             if (rr.maths) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, inline: await Promise.all(rr.maths.map((t) => P.texOmml(t).catch(() => null))), tex: rr.maths }); }
+            if (e.warp) { e = { ...e, _fx: [1] }; curFx.push({ id: e.id, warp: e.warp }); } // Text auf einem Bogen
             sl.addText(rr, { ...o, ...nm(e) });
           } else if (e.t === 'shape') {
             const lineK = LINE_K.includes(e.k), openK = OPEN_K.includes(e.k);
@@ -2180,6 +2181,15 @@
           if (at0 < 0) continue;
           if (f.math) { x = mathXml(x, at0, f); continue; }
           if (f.inline) { x = inlineXml(x, at0, f); continue; }
+          if (f.warp) {
+            // WordArt-Bogen in die Textfeld-Eigenschaften (erstes Kind von bodyPr)
+            const b0 = x.indexOf('<a:bodyPr', at0), spEnd = x.indexOf('</p:sp>', at0);
+            if (b0 < 0 || (spEnd >= 0 && b0 > spEnd)) continue;
+            const b1 = x.indexOf('>', b0);
+            const wx = `<a:prstTxWarp prst="${f.warp.k === 'down' ? 'textArchDown' : 'textArchUp'}"><a:avLst><a:gd name="adj" fmla="val ${Math.round((((+f.warp.a || 0) % 360) + 360) % 360 * 60000)}"/></a:avLst></a:prstTxWarp>`;
+            x = x[b1 - 1] === '/' ? x.slice(0, b1 - 1) + '>' + wx + '</a:bodyPr>' + x.slice(b1 + 1) : x.slice(0, b1 + 1) + wx + x.slice(b1 + 1);
+            continue;
+          }
           const endTag = f.cells ? '</p:graphicFrame>' : '</p:sp>';
           const end = x.indexOf(endTag, at0);
           if (end < 0) continue;

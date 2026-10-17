@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.100.5';
+  const VERSION = '1.100.7';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -12421,7 +12421,7 @@
       <h3 class="dlg-sub">Skizze → Folie (auf diesem Gerät)</h3>
       <div class="set-row"><span>API-Schlüssel (Anthropic)</span><input id="stAiKey" type="password" autocomplete="off" spellcheck="false" value="${esc(SET.aiKey || '')}" placeholder="sk-ant-…"></div>
       <div class="set-row"><span>Modell</span>${sel('stAiModel', AI_MODELS, SET.aiModel || AI_MODELS[0][0])}</div>
-      <p class="muted small">Für „Skizze → Folie“ im Folieneditor (Einfügen). Den Schlüssel gibt es auf console.anthropic.com; er bleibt nur auf diesem Gerät. Eine Umwandlung kostet etwa 1–2 Cent.</p>
+      <p class="muted small">Für „Sauber zeichnen“ bei „Skizze → Folie“ im Folieneditor. Formen wie Kreise, Rechtecke und Pfeile werden auch ohne Schlüssel gerade gezogen. Den Schlüssel gibt es auf console.anthropic.com; er bleibt nur auf diesem Gerät. Eine Umwandlung kostet etwa 1–2 Cent.</p>
       <div class="dlg-actions"><button type="submit" value="" class="btn">Abbrechen</button><button type="submit" value="ok" class="btn primary">Speichern</button></div></form>`;
     document.body.appendChild(d);
     setPage(d);
