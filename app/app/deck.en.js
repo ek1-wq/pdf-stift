@@ -946,7 +946,7 @@
     // Platz für die Rubriken unter den Säulen: gedreht (Länge des längsten Texts) oder umgebrochen (bis 3 Zeilen)
     const pw0 = Math.max(10, right - (horiz ? Math.min(w * 0.35, catW) : valW) - left), slot0 = pw0 / n;
     // passen die Rubriken nicht nebeneinander (ein Wort breiter als der Platz), dreht PowerPoint sie schräg
-    if (!horiz && !rot && !e.nc && n > 1 && labels.some((t) => String(t).split(/\s+/).some((x) => tw(x) > slot0 * 0.95))) rot = -45;
+    if (!horiz && !rot && !e.nc && n > 1) { const ffc = fontCss((th && th.font) || 'sans'); if (labels.some((t) => String(t).split(/\s+/).some((x) => textW(x, fs, ffc) > slot0 * 0.98))) rot = -45; }
     const catLines = horiz || rot ? null : labels.map((t) => wrap(t, fs, Math.max(fs * 2, slot0 * 0.95), 3));
     const catH = e.nc ? fs * 0.4 : horiz ? fs * 1.5 : rot ? Math.min(h * 0.4, Math.abs(Math.sin((rot * Math.PI) / 180)) * Math.max(0, ...labels.map((t) => tw(t))) + fs * 1.2) : fs * (0.6 + 1.1 * Math.max(1, ...catLines.map((l) => l.length)));
     let L, B, R, T;
