@@ -1458,16 +1458,21 @@ body.ob-placing .page { cursor: crosshair !important; }
 .dk-dlg-body label.sub { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; margin-left: 26px; }
 .dk-dlg-body input:not([type=checkbox]), .dk-dlg-body select { height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; background: var(--desk); color: var(--fg); font: inherit; }
 .dk-dlg-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-.dk-dlg.dk-sk { width: min(1100px, 96vw); }
-.dk-sk .dk-dlg-body { max-height: none; overflow: visible; }
-.dk-sk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.dk-sk-bar .btn { min-height: 32px; padding: 0 12px; }
-.dk-sk-c { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--c); cursor: pointer; padding: 0; }
-.dk-sk-c.on { outline: 3px solid var(--accent, #3fa96b); outline-offset: 1px; }
-.dk-sk-sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
-.dk-sk-bar label.chk { margin-left: auto; }
-.dk-sk-cv { display: block; width: auto; height: auto; max-width: 100%; max-height: 62vh; margin: 0 auto; background: #fff; border: 1px solid var(--line); border-radius: 10px; touch-action: none; cursor: crosshair; }
-.dk-sk-hint { margin: 0; font-size: 13px; color: var(--muted); }
+/* Skizze → Folie: Leiste über der Folie, solange direkt auf der Folie gezeichnet wird */
+.dk-skbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; background: rgba(63, 169, 107, .12); border-bottom: 2px solid #3fa96b; }
+.dk-skbar-t { color: #1f7a48; font-size: 13px; margin-right: 6px; white-space: nowrap; }
+.dk-skbar .btn { min-height: 30px; padding: 0 12px; }
+.dk-skbar .btn.on { outline: 2px solid #3fa96b; }
+.dk-skbar .dk-grow { flex: 1; }
+.dk-skbar .dk-sk-go { background: #2e8a56; border-color: #2e8a56; color: #fff; font-weight: 700; }
+.dk-skbar .dk-sk-go:disabled { opacity: .7; cursor: progress; }
+.dk-sk-c { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); background: var(--c); cursor: pointer; padding: 0; }
+.dk-sk-c.on { outline: 3px solid #3fa96b; outline-offset: 1px; }
+.dk-sk-sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+/* dunkles Design: Grün heller, damit „Skizze → Folie“ lesbar bleibt */
+:root[data-theme=dark] .dk-skbar-t, :root[data-theme=dark] .rb-big.rb-ai, :root[data-theme=dark] .dk-add-ai { color: #8ce0b0; }
+:root[data-theme=dark] .dk-add-ai:hover { color: #b5f0cf; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .dk-skbar-t, :root:not([data-theme=light]) .rb-big.rb-ai, :root:not([data-theme=light]) .dk-add-ai { color: #8ce0b0; } :root:not([data-theme=light]) .dk-add-ai:hover { color: #b5f0cf; } }
 .ch-top { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .ch-top label { display: flex; gap: 6px; align-items: center; }
 .ch-grid table { border-collapse: collapse; }
@@ -1737,3 +1742,7 @@ body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--hpr, 0px)); }
 .dk-pal .pal-cap { grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--muted); margin: 2px 0; }
 .dk-pal .more { grid-column: 1 / -1; border: 0; background: none; text-align: left; padding: 6px 4px 2px; font: inherit; font-size: 13px; color: var(--fg); cursor: pointer; }
 .dk-pal .more:hover { text-decoration: underline; }
+/* Text auf einem Bogen (aus PowerPoint): angezeigt wird der Textpfad, beim Bearbeiten das normale Textfeld */
+.dk-el.dk-warped > .dk-tx { visibility: hidden; }
+.dk-el.dk-warped.editing > .dk-tx { visibility: visible; }
+.dk-el.dk-warped.editing > .dk-warp { display: none; }

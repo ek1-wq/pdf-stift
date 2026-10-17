@@ -1276,6 +1276,7 @@
           const lr = at(all(kid(catAx, 'txPr'), 'bodyPr')[0], 'rot');
           if (lr != null && Math.abs(num(lr)) >= 60000 && Math.abs(num(lr)) <= 5400000) e.lr = Math.round(num(lr) / 60000); // −60000000 = „automatisch“
           if (catAx && at(kid(catAx, 'delete'), 'val') === '1') e.nc = 1;
+          if (ct === 'bar' && valAx && at(kid(valAx, 'axPos'), 'val') === 't') e.vt = 1; // Werte-Achse oben
           if (valAx && at(kid(valAx, 'delete'), 'val') === '1') e.nv = 1;
           if (valAx && !kid(valAx, 'majorGridlines')) e.ng = 1;
           // Bild als Diagrammhintergrund (gestreckt oder gekachelt) und Rahmen des Diagramms
@@ -1427,6 +1428,8 @@
       } else {
         e.t = 'shape'; e.k = k;
         if (fill && fill.grad && e.k === 'path') e.gr = fill.grad;
+        // ohne Füllung zählt nur der Umriss (z. B. Bogen: die Füllfläche wäre ein Tortenstück mit Linien zur Mitte)
+        if (cg && !fill && cg.ds) { cg = { ...cg, d: cg.ds, ds: '' }; }
         if (cg) { if (cg.d) e.d = cg.d; if (cg.ds) e.ds = cg.ds; if (line && (line.head || line.tail)) e.ah = line.head && line.tail ? 'b' : line.tail ? 'e' : 's'; }
         e.fill = fill ? fill.c : undefined;
         if (!fill) delete e.fill;
@@ -1435,6 +1438,8 @@
       if (line) { e.line = line.c; e.lw = line.w; }
       if (t && t.hasText) {
         e.html = t.html; e.fs = r1(t.fs); e.va = va; e.pad = pad;
+        // PowerPoint hat den Text hier selbst verkleinert („Automatisch anpassen“ am Feld): beim Einlesen auf Feldgröße bringen
+        if (kid(path(sp, 'txBody', 'bodyPr'), 'normAutofit')) e._af = 1;
         e.c = t.c || (e.t === 'shape' && fill ? '#FFFFFF' : T.scheme.dk1 ? '#' + T.scheme.dk1 : '#1A1A1A');
         // Text in derselben Farbe wie die Füllung (kommt bei SmartArt vor): lesbare Farbe nehmen
         if (fill && (!e.fo || e.fo > 0.6) && Math.abs(lum(e.c) - lum(fill.c)) < 0.18) {
@@ -1463,6 +1468,16 @@
           out.push(e, te);
           return;
         }
+      }
+      // Text auf einem Bogen (WordArt „Bogen nach oben/unten“)
+      const warp = bodies.map((bp) => bp && kid(bp, 'prstTxWarp')).find(Boolean);
+      const wk = warp && at(warp, 'prst');
+      if (e.html && e.t === 'text' && (wk === 'textArchUp' || wk === 'textArchDown')) {
+        const gd = all(warp, 'gd').find((g) => at(g, 'name') === 'adj');
+        const v = gd && /val\s+(-?\d+)/.exec(at(gd, 'fmla') || '');
+        e.warp = { k: wk === 'textArchUp' ? 'up' : 'down', a: v ? r1(num(v[1]) / 60000) : wk === 'textArchUp' ? 180 : 0 };
+        out.push(e);
+        return;
       }
       // Text ohne Zeilenumbruch (wrap="none"): Feld so breit machen wie die längste Zeile
       const plainLines = e.html ? e.html.replace(/<br>/g, '\n').replace(/<\/(div|li)>/g, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').split('\n') : [];
@@ -1773,6 +1788,10 @@
         if (a) { e.an = a.an; e.ao = a.ao; if (a.ap && e.html) e.ap = 1; }
         delete e._spid; delete e._grp;
       }
+      // „Automatisch anpassen“: Text, der nicht ins Feld passt, kleiner setzen (wie PowerPoint)
+      if (els.some((e) => e._af)) await X().fitReady(deckFont);
+      for (const e of els) if (e._af) { if (e.ff) await X().fitReady(e.ff); X().fitBox(e, deckFont); delete e._af; }
+      for (const e of els) delete e._af;
       const ranks = [...new Set(els.filter((e) => e.an).map((e) => e.ao))].sort((a, b) => a - b);
       for (const e of els) if (e.an) e.ao = ranks.indexOf(e.ao) + 1;
       // Gruppen-IDs je Folie neu vergeben (Gestaltungselemente werden mehrfach verwendet)

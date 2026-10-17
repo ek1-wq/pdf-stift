@@ -519,6 +519,14 @@
       n.appendChild(tb);
     }
     if (e.t === 'text' || e.t === 'shape' || e.t === 'table') strutFix(n, e.fs || (e.t === 'table' ? 18 : 24), e.t === 'table' ? 1.2 : +e.lh || 1.2);
+    // Text auf einem Bogen: als SVG-Textpfad; das normale Textfeld bleibt (unsichtbar) für das Bearbeiten
+    if (e.t === 'text' && e.warp && plain(e.html)) {
+      const fs = e.fs || 24, G = warpGeom(e, fs), pid = 'wp' + String(e.id).replace(/[^a-z0-9]/gi, '');
+      const { txt, b } = warpText(e);
+      const W0 = textW(txt, fs, fontCss(e.ff || th.font || 'sans'), b), pl = warpPlace(e, G, W0);
+      n.insertAdjacentHTML('beforeend', `<svg class="dk-warp" viewBox="0 0 ${e.w} ${e.h}" style="position:absolute;left:0;top:0;width:${e.w}px;height:${e.h}px;overflow:visible;pointer-events:none;fill:${e.c || th.fg};stroke:none"><path id="${pid}" d="${G.d}" fill="none" stroke="none"/><text font-size="${fs}" style="white-space:pre${e.ff ? ';font-family:' + esc(fontCss(e.ff)) : ''}${b ? ';font-weight:700' : ''}"><textPath href="#${pid}" startOffset="${pl.start.toFixed(1)}" textLength="${pl.len.toFixed(1)}" lengthAdjust="spacing">${esc(txt)}</textPath></text></svg>`);
+      n.classList.add('dk-warped');
+    }
     fillIm(n);
     // Farbe eigener Aufzählungszeichen
     n.querySelectorAll('li[data-bc]').forEach((li) => li.style.setProperty('--bc', li.getAttribute('data-bc')));
@@ -573,6 +581,77 @@
     if (hf.foot) mk(300, 360, hf.foot, 'center');
     if (hf.num) mk(660, 260, String(i + 1), 'right');
     return out;
+  }
+  // Text auf einem Bogen (PowerPoint „Bogen nach oben/unten“): Grundlinie als Folge von Punkten mit Richtung
+  // e.warp = { k: 'up' | 'down', a: Winkel in Grad }; gibt { pt(s) → [x, y, Winkel], len } in Elementkoordinaten
+  function warpGeom(e, fs) {
+    const w = e.w, h = e.h, cx = w / 2, cy = h / 2, up = e.warp.k === 'up';
+    // oben: Schriftoberkante etwa am Rand; unten: Unterlänge am Rand (bei flachen Feldern weniger einrücken)
+    const ix = up ? Math.min(fs * 0.8, w * 0.1) : Math.min(fs * 0.22, w * 0.05), iy = up ? Math.min(fs * 0.8, h * 0.2) : Math.min(fs * 0.22, h * 0.1);
+    const rx = Math.max(2, w / 2 - ix), ry = Math.max(2, h / 2 - iy);
+    const adj = ((+e.warp.a || (up ? 180 : 0)) % 360 + 360) % 360;
+    let a1, sw;
+    if (up) { a1 = adj; sw = 2 * (270 - adj); if (sw <= 0) sw += 360; } // symmetrisch um oben (270°), im Uhrzeigersinn
+    else { a1 = (((540 - adj) % 360) + 360) % 360; sw = -2 * (a1 - 90); if (sw >= 0) sw -= 360; if (sw < -360) sw = -360; } // symmetrisch um unten (90°), gegen den Uhrzeigersinn
+    const R = Math.PI / 180, N = 240, P = [];
+    const t0 = a1 * R, dt = sw * R; // Winkel wie bei PowerPoint auf die Ellipse übertragen (nicht in Blickrichtung)
+    let L = 0;
+    for (let i = 0; i <= N; i++) { const t = t0 + (dt * i) / N; const p = [cx + rx * Math.cos(t), cy + ry * Math.sin(t)]; if (i) L += Math.hypot(p[0] - P[i - 1][0], p[1] - P[i - 1][1]); p.push(L); P.push(p); }
+    const pt = (s) => {
+      s = Math.max(0, Math.min(L, s));
+      let i = 1; while (i < N && P[i][2] < s) i++;
+      const A = P[i - 1], B = P[i], f = (s - A[2]) / Math.max(1e-6, B[2] - A[2]);
+      return [A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f, Math.atan2(B[1] - A[1], B[0] - A[0])];
+    };
+    const d = 'M' + P.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('L');
+    return { pt, len: L, d };
+  }
+  // Lage des Bogentextes: Zeilenbreite wie im geraden Feld, dann auf die Bogenlänge gestreckt (wie PowerPoint)
+  function warpText(e) {
+    const t = document.createElement('template'); t.innerHTML = clean(e.html);
+    const txt = t.content.textContent.replace(/\s*\n\s*/g, ' ').replace(/\s+$/, '');
+    const al = /text-align:\s*center/.test(e.html) ? 0.5 : /text-align:\s*right/.test(e.html) ? 1 : 0;
+    return { txt, al, b: /<b>|<strong>|font-weight:\s*(bold|[6-9]00)/.test(e.html) };
+  }
+  function warpPlace(e, G, W0) {
+    const pad = e.pad != null ? e.pad : 8, k = G.len / Math.max(1, e.w);
+    // flache Felder: die Zeile (samt führender Leerzeichen) wird über die ganze Breite verteilt;
+    // hohe Felder: Text in natürlicher Breite an seiner Stelle (so sieht es auch in PowerPoint aus)
+    const fs = e.fs || 24;
+    if (e.h <= fs * 6) { const span = Math.max(W0, e.w - 2 * pad); return { start: pad * k, len: span * k }; }
+    const x0 = pad + Math.max(0, e.w - 2 * pad - W0) * warpText(e).al;
+    return { start: x0 * k, len: W0 * Math.min(k, 1.15) };
+  }
+  // „Automatisch anpassen“ aus PowerPoint: Schrift so weit verkleinern, bis der Text in sein Feld passt
+  let FITHOST = null;
+  async function fitReady(font) { try { const f = fontCss(font || 'sans'); await Promise.all(['', 'bold '].map((b) => document.fonts.load(`${b}16px ${f}`, 'Aa'))); } catch (er) { /* */ } }
+  function fitBox(e, font) {
+    if (!e.html || (e.t !== 'text' && e.t !== 'shape') || e.warp) return;
+    try {
+      if (!FITHOST) { FITHOST = document.createElement('div'); FITHOST.style.cssText = 'position:fixed;left:-20000px;top:0;width:4000px;height:4000px;visibility:hidden;pointer-events:none'; }
+      if (!FITHOST.isConnected) document.body.appendChild(FITHOST);
+      FITHOST.style.fontFamily = fontCss(font || 'sans');
+      const f0 = e.fs || 24;
+      let fs = f0;
+      for (let i = 0; i < 14; i++) {
+        FITHOST.innerHTML = '';
+        const n = elNode({ ...e, fs, r: 0 }, DEF_TH);
+        FITHOST.appendChild(n);
+        const tx = n.querySelector('.dk-tx');
+        if (!tx) break;
+        tx.style.justifyContent = 'flex-start';
+        if (tx.scrollHeight <= e.h + 1) break;
+        const nf = fs * 0.95;
+        if (nf < f0 * 0.5) break;
+        fs = nf;
+      }
+      FITHOST.innerHTML = '';
+      if (fs < f0 - 0.05) e.fs = Math.round(fs * 10) / 10;
+    } catch (er) { /* bleibt wie es ist */ }
+  }
+  let WCV = null;
+  function textW(txt, fs, ff, b) {
+    try { WCV = WCV || document.createElement('canvas').getContext('2d'); WCV.font = `${b ? 'bold ' : ''}${fs}px ${ff}`; return WCV.measureText(txt).width; } catch (er) { return txt.length * fs * 0.5; }
   }
   // Absätze nur aus kleinerer Schrift (z. B. 10 pt in einem 18-pt-Feld): Zeilenhöhe nach dieser Schrift, wie in PowerPoint
   // (sonst bestimmt die Grundschrift des Felds die Zeilenhöhe). Nur in der Anzeige, nicht im gespeicherten Text.
@@ -854,21 +933,25 @@
     if (ticks.length < 2) ticks = niceTicks(Math.min(0, ...all), Math.max(1, ...all));
     const lo = !pctAx && e.vmin != null ? Math.min(e.vmin, ticks[0]) : ticks[0], hi = !pctAx && e.vmax != null ? Math.max(e.vmax, ticks[ticks.length - 1]) : ticks[ticks.length - 1];
     const horiz = e.ct === 'bar';
-    const rot = horiz ? 0 : e.lr || 0;
+    let rot = horiz ? 0 : e.lr || 0;
+    const vTop = horiz && e.vt && !e.nv; // Werte-Achse oben (PowerPoint: Rubriken von oben nach unten)
     const valW = e.nv ? fs * 0.3 : Math.max(...ticks.map((t) => tw(fmtV(t, 1), fs * 0.9))) + fs * 0.6;
     const catW = e.nc ? fs * 0.3 : Math.max(0, ...labels.map((t) => tw(t))) + fs * 0.6;
     // Platz für die Rubriken unter den Säulen: gedreht (Länge des längsten Texts) oder umgebrochen (bis 3 Zeilen)
     const pw0 = Math.max(10, right - (horiz ? Math.min(w * 0.35, catW) : valW) - left), slot0 = pw0 / n;
+    // passen die Rubriken nicht nebeneinander (ein Wort breiter als der Platz), dreht PowerPoint sie schräg
+    if (!horiz && !rot && !e.nc && n > 1 && labels.some((t) => String(t).split(/\s+/).some((x) => tw(x) > slot0 * 0.95))) rot = -45;
     const catLines = horiz || rot ? null : labels.map((t) => wrap(t, fs, Math.max(fs * 2, slot0 * 0.95), 3));
     const catH = e.nc ? fs * 0.4 : horiz ? fs * 1.5 : rot ? Math.min(h * 0.4, Math.abs(Math.sin((rot * Math.PI) / 180)) * Math.max(0, ...labels.map((t) => tw(t))) + fs * 1.2) : fs * (0.6 + 1.1 * Math.max(1, ...catLines.map((l) => l.length)));
     let L, B, R, T;
     if (PL) { L = PL.x; T = PL.y; R = PL.x + PL.w; B = PL.y + PL.h; }
+    else if (vTop) { L = left + Math.min(w * 0.35, catW); B = bottom - fs * 0.4; R = right; T = top + fs * 1.5; }
     else { L = left + (horiz ? Math.min(w * 0.35, catW) : valW); B = bottom - catH; R = right; T = top; }
     const pw = Math.max(10, R - L), ph = Math.max(10, B - T);
     const vpos = (v0) => { const v = Math.max(lo, Math.min(hi, v0)); return horiz ? L + ((v - lo) / (hi - lo)) * pw : B - ((v - lo) / (hi - lo)) * ph; };
     // Gitter und Werte-Achse
     for (const t of ticks) {
-      if (horiz) { const x = vpos(t); if (!e.ng) P.push({ k: 'line', x1: x, y1: T, x2: x, y2: B, c: grid, sw: 0.8 }); if (!e.nv) P.push({ k: 'text', x, y: B + fs * 1.2, s: fmtV(t, 1), fs: fs * 0.9, a: 'middle', c: fg }); }
+      if (horiz) { const x = vpos(t); if (!e.ng) P.push({ k: 'line', x1: x, y1: T, x2: x, y2: B, c: grid, sw: 0.8 }); if (!e.nv) P.push({ k: 'text', x, y: vTop ? T - fs * 0.45 : B + fs * 1.2, s: fmtV(t, 1), fs: fs * 0.9, a: 'middle', c: fg }); }
       else { const y = vpos(t); if (!e.ng) P.push({ k: 'line', x1: L, y1: y, x2: R, y2: y, c: grid, sw: 0.8 }); if (!e.nv) P.push({ k: 'text', x: L - fs * 0.4, y: y + fs * 0.32, s: fmtV(t, 1), fs: fs * 0.9, a: 'end', c: fg }); }
     }
     const slot = (horiz ? ph : pw) / n;
@@ -2881,7 +2964,7 @@
     placing: (on, kind) => { if (!D.root) return; D.root.classList.toggle('dk-placing', !!on); D.root.querySelectorAll('[data-ins]').forEach((b) => b.classList.toggle('on', !!on && b.dataset.ins === kind)); },
     pickImage: () => $('.dk-file', D.root).click(),
     replaceAll: (f, r) => { let n = 0; D.ed.change(() => { for (const s0 of D.deck.slides) n += replaceInEls(s0.els, f, r); }, true); return n; },
-    ribbonPre: ({ grp, rows, big, mb }) => grp('Folien', big('data-menu="newslide"', 'Neue Folie', RI.newslide, true, true) + big('data-menu="sketch"', 'Skizze → Folie', RI.sketch).replace('class="rb-big"', 'class="rb-big rb-ai"').replace(/title="[^"]*"/, 'title="Skizze, Foto oder PDF-Seite mit KI in fertige Folien verwandeln (Strg + Umschalt + M)"') +
+    ribbonPre: ({ grp, rows, big, mb }) => grp('Folien', big('data-menu="newslide"', 'Neue Folie', RI.newslide, true, true) + big('data-menu="sketch"', 'Skizze → Folie', RI.sketch).replace('class="rb-big"', 'class="rb-big rb-ai"').replace(/title="[^"]*"/, 'title="Direkt auf der Folie zeichnen – die KI macht daraus saubere Formen, Texte, Tabellen und Diagramme (Strg + Umschalt + M)"') +
       rows(mb('layout', 'Layout dieser Folie', RI.layout, true, 'Layout'), mb('bg', 'Hintergrund', RI.bg, true, 'Hintergrund'), mb('design', 'Design aller Folien', RI.design, true, 'Design'))),
     act: (a) => { if (a === 'hf') { hfDialog(); return true; } return false; },
     tabs: () => [['draw', 'Zeichnen'], ['design', 'Entwurf'], ['anim', 'Animationen'], ['show', 'Bildschirmpräsentation'], ['view', 'Ansicht']],
@@ -3157,6 +3240,7 @@
       const prOf = (e) => r2(Math.max(0.05, Math.min(1, e.pressure || 0.5)));
       const st = { c: INK.c[tool], w: INK_W[tool][INK.wi[tool]] || INK_W[tool][1], p: toL(ev) };
       if (hl) st.hl = 1;
+      else if (SKM) st.sk = 1; // im Skizzenmodus gezeichnet: wird beim „Sauber zeichnen“ umgesetzt
       if (pres) st.pr = [prOf(ev)];
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       const paint = () => {
@@ -3228,6 +3312,7 @@
   async function open(path, root) {
     close();
     D.root = root; D.path = path; D.undo = []; D.redo = [];
+    if (SKM) { INK.c.pen = SKM.pen; INK.wi.pen = SKM.wi; SKM = null; }
     D.ed = makeEditor(deckHost);
     INK.t = '';
     build(root);
@@ -3322,7 +3407,7 @@
     list.appendChild(add);
     const ai = document.createElement('button');
     ai.type = 'button'; ai.className = 'dk-add dk-add-ai'; ai.textContent = '✎ Skizze → Folie';
-    ai.title = 'Skizze, Foto oder PDF-Seite mit KI in fertige Folien verwandeln (Strg + Umschalt + M)';
+    ai.title = 'Direkt auf der Folie zeichnen – die KI macht daraus saubere Formen, Texte, Tabellen und Diagramme (Strg + Umschalt + M)';
     ai.onclick = () => sketchDialog();
     list.appendChild(ai);
     const cur = list.children[D.cur];
@@ -3534,7 +3619,6 @@
   // ------------------------------------------------------------------ Skizze → Folie (KI)
   // Handskizze, Foto oder PDF-Seite → saubere, bearbeitbare Folien. Die Erkennung übernimmt ein Sprachmodell von Anthropic
   // mit dem eigenen API-Schlüssel (Datei → Einstellungen). Antwort: Elemente in Prozent der Folie (x, w: Breite; y, h: Höhe).
-  const SK = { strokes: [], bg: null, multi: false, w: 1600, h: 900, pen: false };
   const SK_COLS = ['#1A1A1A', '#1E5AC8', '#D23232', '#2E9E5B'];
   const AI_PRICE = { 'claude-sonnet-5-5': [2, 10], 'claude-haiku-5-5': [0.1, 0.5], 'claude-opus-5-5': [4, 20] };
   function sketchPhoto() {
@@ -3567,80 +3651,146 @@
     }
     return renderPage(doc.pdf, pn, 1600);
   }
-  async function sketchDialog() {
+  async function aiKey() {
     let cfg = C.aiCfg ? C.aiCfg() : { key: '', model: '' };
     if (!cfg.key) {
       const k = await C.askText('Skizze → Folie', 'Für die Umwandlung braucht PDF-Stift einen API-Schlüssel von Anthropic (console.anthropic.com → API Keys). Er bleibt nur auf diesem Gerät und lässt sich unter Datei → Einstellungen ändern. Eine Umwandlung kostet etwa 1–2 Cent.', '', 'Speichern');
-      if (!k || !k.trim()) return;
+      if (!k || !k.trim()) return null;
       C.aiSetKey(k.trim());
       cfg = C.aiCfg();
     }
-    let out = null, cv = null, cx = null, cur = null, pen = SK_COLS[0];
-    const html = `<div class="dk-sk-bar">${SK_COLS.map((c, i) => `<button type="button" class="dk-sk-c${i ? '' : ' on'}" data-c="${c}" style="--c:${c}" aria-label="Farbe ${c}" title="Stiftfarbe – Rot und Grün gelten als Hervorhebung"></button>`).join('')}
-      <button type="button" class="btn" data-a="undo" title="Letzten Strich zurücknehmen">↶</button><button type="button" class="btn" data-a="clear">Leeren</button>
-      <span class="dk-sk-sep"></span><button type="button" class="btn" data-a="photo">Foto …</button><button type="button" class="btn" data-a="pdf">PDF-Seite …</button>
-      <label class="chk"><input type="checkbox" name="multi"${SK.multi ? ' checked' : ''}> Auf mehrere Folien verteilen</label></div>
-      <canvas class="dk-sk-cv"></canvas>
-      <p class="dk-sk-hint">Mit Stift oder Maus zeichnen und schreiben – oder ein Foto bzw. eine PDF-Seite holen und darauf markieren. Die KI baut daraus Folien mit echten Textfeldern, Formen, Tabellen, Diagrammen und Formeln.</p>`;
-    const d0 = await modalEl('Skizze → Folie', html, 'In Folien umwandeln', (d) => {
-      d.classList.add('dk-sk');
-      cv = d.querySelector('.dk-sk-cv');
-      cx = cv.getContext('2d');
-      const line = (s) => {
-        const p = s.p; if (!p.length) return;
-        cx.strokeStyle = s.c; cx.lineWidth = s.w; cx.lineCap = 'round'; cx.lineJoin = 'round';
-        cx.beginPath(); cx.moveTo(p[0][0], p[0][1]);
-        if (p.length < 3) cx.lineTo(p[p.length - 1][0] + 0.1, p[p.length - 1][1]);
-        else { for (let i = 1; i < p.length - 1; i++) cx.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2); cx.lineTo(p[p.length - 1][0], p[p.length - 1][1]); }
-        cx.stroke();
-      };
-      const draw = () => { cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); if (SK.bg) cx.drawImage(SK.bg, 0, 0, cv.width, cv.height); SK.strokes.forEach(line); if (cur) line(cur); };
-      const size = () => { cv.width = SK.w; cv.height = SK.h; cv.style.aspectRatio = SK.w + ' / ' + SK.h; draw(); };
-      const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * cv.width / r.width, (e.clientY - r.top) * cv.height / r.height]; };
-      cv.onpointerdown = (e) => {
-        if (e.pointerType === 'pen') SK.pen = true;
-        if (e.pointerType === 'touch' && SK.pen) return; // Handballen
-        e.preventDefault(); cv.setPointerCapture(e.pointerId);
-        cur = { c: pen, w: 5 * cv.width / 1600, p: [pos(e)] }; draw();
-      };
-      cv.onpointermove = (e) => { if (!cur) return; for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) cur.p.push(pos(ev)); draw(); };
-      cv.onpointerup = cv.onpointercancel = () => { if (cur && cur.p.length) SK.strokes.push(cur); cur = null; draw(); };
-      d.querySelectorAll('.dk-sk-c').forEach((b) => { b.onclick = () => { d.querySelectorAll('.dk-sk-c').forEach((x) => x.classList.remove('on')); b.classList.add('on'); pen = b.dataset.c; }; });
-      d.querySelector('[data-a=undo]').onclick = () => { SK.strokes.pop(); draw(); };
-      d.querySelector('[data-a=clear]').onclick = () => { SK.strokes = []; SK.bg = null; SK.w = 1600; SK.h = 900; size(); };
-      const useBg = (c) => {
-        if (!c) return;
-        const k = 1600 / Math.max(c.width, c.height);
-        SK.bg = c; SK.strokes = []; SK.w = Math.round(c.width * k); SK.h = Math.round(c.height * k);
-        if (SK.h > SK.w) d.querySelector('[name=multi]').checked = true;
-        size();
-      };
-      d.querySelector('[data-a=photo]').onclick = async () => useBg(await sketchPhoto());
-      d.querySelector('[data-a=pdf]').onclick = async () => useBg(await sketchPdfPage());
-      d.querySelector('form').addEventListener('submit', () => {
-        SK.multi = d.querySelector('[name=multi]').checked;
-        if (!SK.strokes.length && !SK.bg) return;
-        const jpeg = !!SK.bg;
-        out = { data: cv.toDataURL(jpeg ? 'image/jpeg' : 'image/png', 0.85).split(',')[1], type: jpeg ? 'image/jpeg' : 'image/png' };
-      });
-      size();
-    });
-    if (!d0) return;
-    if (!out) { C.toast('Erst etwas zeichnen oder ein Foto bzw. eine PDF-Seite holen.', 4000); return; }
+    return cfg;
+  }
+  const aiCost = (cfg, r) => {
+    const pr = AI_PRICE[cfg.model] || AI_PRICE['claude-sonnet-5-5'], u = r.usage || {};
+    return (((u.input_tokens || 0) * pr[0] + (u.output_tokens || 0) * pr[1]) / 1e4).toFixed(1).replace('.', C.LANG === 'en' ? '.' : ',');
+  };
+  // Skizzenmodus: direkt auf der Folie zeichnen; „Sauber zeichnen“ ersetzt die Striche an Ort und Stelle
+  // durch bearbeitbare Elemente (Formen, Pfeile, Text, Tabellen, Diagramme, Formeln)
+  let SKM = null;
+  async function sketchDialog() {
+    if (!D.deck || !slide()) return;
+    if (SKM) { skBar(); return; }
+    const cfg = await aiKey();
+    if (!cfg) return;
+    SKM = { pen: INK.c.pen, wi: INK.wi.pen, t: INK.t, busy: false };
+    INK.c.pen = skCols()[0]; INK.wi.pen = 1;
+    inkTool('pen');
+    D.ed.renderFmt();
+    skBar();
+  }
+  function sketchEnd() {
+    if (!SKM) return;
+    const o = SKM; SKM = null;
+    INK.c.pen = o.pen; INK.wi.pen = o.wi;
+    let any = false;
+    if (D.deck) for (const s0 of D.deck.slides) for (const k of s0.ink || []) if (k.sk) { delete k.sk; any = true; }
+    if (any) save();
+    const b = D.root && $('.dk-skbar', D.root); if (b) b.remove();
+    inkTool(o.t && o.t !== 'la' ? o.t : '');
+    if (D.ed) D.ed.renderFmt();
+  }
+  // auf dunklen Folien zeichnet der Stift weiß statt schwarz
+  // Grundfarbe der Folie: Hintergrund oder eine große gefüllte Fläche darüber (z. B. Titelfolien aus PowerPoint)
+  function skBg(s0) {
+    let c = bgOf(s0, theme()).color;
+    for (const e of (s0 && s0.els) || []) if (e.t === 'shape' && /^#[0-9a-f]{6}$/i.test(e.fill || '') && !(e.fo < 0.5) && e.w * e.h >= W * H * 0.5) c = e.fill;
+    return /^#[0-9a-f]{6}$/i.test(c || '') ? c : '#FFFFFF';
+  }
+  const skDark = () => hexLum(skBg(slide())) < 0.4;
+  const skCols = () => (skDark() ? ['#FFFFFF', ...SK_COLS.slice(1)] : SK_COLS);
+  function skBar() {
+    const host = D.root && $('.dk-center', D.root);
+    if (!host || !SKM) return;
+    let b = $('.dk-skbar', host);
+    if (!b) { b = document.createElement('div'); b.className = 'dk-skbar'; host.insertBefore(b, host.firstChild); }
+    const er = INK.t === 'er';
+    b.innerHTML = `<b class="dk-skbar-t">✎ Auf der Folie zeichnen</b>${skCols().map((c) => `<button type="button" class="dk-sk-c${!er && c === INK.c.pen ? ' on' : ''}" data-c="${c}" style="--c:${c}" title="Stiftfarbe – Rot und Grün gelten als Hervorhebung" aria-label="Farbe ${c}"></button>`).join('')}
+      <button type="button" class="btn${er ? ' on' : ''}" data-a="er" title="Radierer">Radierer</button><button type="button" class="btn" data-a="undo" title="Rückgängig (Strg+Z)">↶</button>
+      <span class="dk-sk-sep"></span><button type="button" class="btn" data-a="photo" title="Foto einer Skizze oder Tafel in neue Folien umwandeln">Foto …</button><button type="button" class="btn" data-a="pdf" title="PDF-Seite (auch mit Anmerkungen) in neue Folien umwandeln">PDF-Seite …</button>
+      <span class="dk-grow"></span><button type="button" class="btn" data-a="end" title="Skizzenmodus beenden (Esc) – Striche bleiben als Freihand">Schließen</button><button type="button" class="btn primary dk-sk-go" data-a="go"${SKM.busy ? ' disabled' : ''}>${SKM.busy ? 'Die KI zeichnet …' : '✓ Sauber zeichnen'}</button>`;
+    b.onclick = async (ev) => {
+      const c = ev.target.closest('[data-c]'), a = ev.target.closest('[data-a]');
+      if (c) { INK.c.pen = c.dataset.c; inkTool('pen'); D.ed.renderFmt(); skBar(); return; }
+      if (!a) return;
+      const k = a.dataset.a;
+      if (k === 'er') { inkTool(INK.t === 'er' ? 'pen' : 'er'); D.ed.renderFmt(); skBar(); }
+      else if (k === 'undo') undo();
+      else if (k === 'end') sketchEnd();
+      else if (k === 'go') skClean();
+      else if (k === 'photo' || k === 'pdf') { const cv = k === 'photo' ? await sketchPhoto() : await sketchPdfPage(); if (cv) skImage(cv); }
+    };
+  }
+  // Striche → Bild (ganze Folie, weißer Grund)
+  function skCanvas(strokes) {
+    const cw = 1600, ch = Math.round((1600 * H) / W), k = cw / W;
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const s0 of strokes) {
+      const p = []; for (let i = 0; i + 1 < s0.p.length; i += 2) p.push([s0.p[i] * k, s0.p[i + 1] * k]);
+      if (!p.length) continue;
+      g.strokeStyle = !s0.c || hexLum(s0.c) > 0.8 ? '#1A1A1A' : s0.c; // weiße Striche (dunkle Folie) schwarz aufs weiße Bild g.lineWidth = Math.max(2.5, (s0.w || 2) * 1.2) * k;
+      g.beginPath(); g.moveTo(p[0][0], p[0][1]);
+      if (p.length < 3) g.lineTo(p[p.length - 1][0] + 0.1, p[p.length - 1][1]);
+      else { for (let i = 1; i < p.length - 1; i++) g.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2); g.lineTo(p[p.length - 1][0], p[p.length - 1][1]); }
+      g.stroke();
+    }
+    return c;
+  }
+  async function skClean() {
+    if (!SKM || SKM.busy) return;
+    const cfg = await aiKey();
+    if (!cfg) return;
+    const s0 = slide(), ink = (s0 && s0.ink) || [];
+    // nur, was gerade im Skizzenmodus auf DIESER Folie gezeichnet und noch nicht umgesetzt wurde – sonst nichts
+    const idx = ink.map((k, i) => (k.sk && !k.hl ? i : -1)).filter((i) => i >= 0);
+    if (!idx.length) { C.toast('Erst etwas auf diese Folie zeichnen – Formen, Pfeile, Text, eine Tabelle …', 4000); return; }
+    const sid = s0.id, sig = idx.map((i) => JSON.stringify(ink[i].p.slice(0, 6)));
+    const cv = skCanvas(idx.map((i) => ink[i]));
+    SKM.busy = true; skBar();
     const t0 = Date.now();
-    C.toast('Die KI liest die Skizze …', 180000);
     try {
-      const r = await aiSlides(cfg, { image: out, multi: SK.multi });
+      const r = await aiSlides(cfg, { image: { data: cv.toDataURL('image/png').split(',')[1], type: 'image/png' }, multi: false, place: true });
+      const made = await deckSlides(r.slides.slice(0, 1), { direct: true, bg: skBg(s0) });
+      const add = (made[0] && made[0].els) || [];
+      if (!add.length) throw new Error('Die KI hat nichts erkannt.');
+      const t = D.deck.slides.find((x) => x.id === sid);
+      if (!t) return;
+      change(() => {
+        // die umgesetzten Striche verschwinden (wiedererkannt am Anfang des Strichs, falls inzwischen etwas dazukam)
+        const left = sig.slice();
+        t.ink = (t.ink || []).filter((k) => { const j = left.indexOf(JSON.stringify(k.p.slice(0, 6))); if (j < 0) return true; left.splice(j, 1); return false; });
+        if (!t.ink.length) delete t.ink;
+        // Überschrift in einen leeren Titelplatzhalter der Folie
+        const ti = add.find((e) => e._title), ph = t.els.find((e) => e.ph && e.pk === 'title' && isPh(e));
+        if (ti && ph) { ph.html = ti.html.replace(/<\/?b>/g, ''); add.splice(add.indexOf(ti), 1); }
+        add.forEach((e) => delete e._title);
+        t.els.push(...add);
+      });
+      C.toast(`Sauber gezeichnet – ${Math.round((Date.now() - t0) / 1000)} s, etwa ${aiCost(cfg, r)} Cent.`, 4000);
+    } catch (err) { C.toast('Skizze → Folie: ' + err.message, 10000); }
+    finally { if (SKM) { SKM.busy = false; skBar(); } }
+  }
+  // Foto oder PDF-Seite → neue Folien hinter der aktuellen
+  async function skImage(c0) {
+    const cfg = await aiKey();
+    if (!cfg) return;
+    const k = Math.min(1, 1600 / Math.max(c0.width, c0.height));
+    const c = document.createElement('canvas'); c.width = Math.round(c0.width * k); c.height = Math.round(c0.height * k);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(c0, 0, 0, c.width, c.height);
+    const t0 = Date.now();
+    C.toast('Die KI liest die Vorlage …', 180000);
+    try {
+      const r = await aiSlides(cfg, { image: { data: c.toDataURL('image/jpeg', 0.85).split(',')[1], type: 'image/jpeg' }, multi: c.height > c.width });
       const made = await deckSlides(r.slides);
       if (!made.length) throw new Error('Die KI hat keine Folie geliefert.');
       // leere Folie (nur unberührte Platzhalter) wird ersetzt, sonst kommen die neuen Folien dahinter
       const s0 = slide(), empty = !!(s0 && !(s0.ink && s0.ink.length) && s0.els.every((e) => isPh(e)));
       change(() => { D.deck.slides.splice(empty ? D.cur : D.cur + 1, empty ? 1 : 0, ...made); if (!empty) D.cur += 1; D.ed.sel = []; });
-      SK.strokes = []; SK.bg = null; SK.w = 1600; SK.h = 900;
-      const pr = AI_PRICE[cfg.model] || AI_PRICE['claude-sonnet-5-5'], u = r.usage || {};
-      const cent = (((u.input_tokens || 0) * pr[0] + (u.output_tokens || 0) * pr[1]) / 1e4).toFixed(1).replace('.', C.LANG === 'en' ? '.' : ',');
       const what = made.length === 1 ? 'Eine Folie erstellt' : made.length + ' Folien erstellt';
-      C.toast(what + ` – ${Math.round((Date.now() - t0) / 1000)} s, etwa ${cent} Cent.`, 5000);
+      C.toast(what + ` – ${Math.round((Date.now() - t0) / 1000)} s, etwa ${aiCost(cfg, r)} Cent.`, 5000);
     } catch (err) { C.toast('Skizze → Folie: ' + err.message, 10000); }
   }
   // Anweisung und Antwortformat für das Modell
@@ -3689,8 +3839,8 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
     return { name: 'folien_erstellen', description: 'Erstellt eine oder mehrere Präsentationsfolien aus Elementen.',
       input_schema: { type: 'object', required: ['slides'], properties: { slides: { type: 'array', items: { type: 'object', required: ['elements'], properties: { elements: { type: 'array', items: el }, notes: str } } } } } };
   }
-  async function aiSlides(cfg, { image, multi }) {
-    const rule = multi ? 'Verteile den Inhalt sinnvoll auf so viele Folien wie nötig (höchstens 6 Stichpunkte pro Folie, ein Gedanke pro Folie); jede Folie bekommt einen Titel.' : 'Erzeuge genau eine Folie.';
+  async function aiSlides(cfg, { image, multi, place }) {
+    const rule = place ? 'Die Skizze wurde direkt auf eine bestehende Folie gezeichnet; das Bild zeigt die ganze Folie (16:9). Erzeuge genau eine Folie und setze jedes Element genau an die gezeichnete Stelle und in der gezeichneten Größe (Koordinaten in Prozent der Folie). Die Regeln zu Rand und Titelposition gelten hier nicht; einen Titel nur, wenn oben deutlich eine Überschrift steht. Keine Sprechernotizen.' : multi ? 'Verteile den Inhalt sinnvoll auf so viele Folien wie nötig (höchstens 6 Stichpunkte pro Folie, ein Gedanke pro Folie); jede Folie bekommt einen Titel.' : 'Erzeuge genau eine Folie.';
     const body = { model: cfg.model || 'claude-sonnet-5-5', max_tokens: 16000, system: AI_SYS, tools: [aiTool()], tool_choice: { type: 'auto' },
       messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: image.type, data: image.data } }, { type: 'text', text: rule + ' Rufe dafür unbedingt das Werkzeug folien_erstellen auf.' }] }] };
     let res;
@@ -3715,13 +3865,16 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
   }
   // Antwort der KI → Folien des Editors (960 × H Bildpunkte; mit Vorlage im Inhaltsbereich des Layouts)
   const SK_SHAPE = { rect: 'rect', roundrect: 'round', ellipse: 'ellipse', triangle: 'tri', rtTriangle: 'rtri', diamond: 'diamond', pentagon: 'pent', hexagon: 'hex', star5: 'star5', cloud: 'cloud', rightArrow: 'arrowR', leftArrow: 'arrowL', upArrow: 'arrowU', downArrow: 'arrowD', leftRightArrow: 'arrowLR', chevron: 'chevron', parallelogram: 'para', trapezoid: 'trap' };
+  const hexLum = (h) => { const v = [1, 3, 5].map((i) => parseInt(String(h).slice(i, i + 2), 16) / 255 || 0); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
   const mixHex = (a, b, t) => { const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('').toUpperCase(); };
-  async function deckSlides(list) {
-    const th = theme(), m = D.deck.master;
+  async function deckSlides(list, opt) {
+    const th = theme(), m = opt && opt.direct ? null : D.deck.master; // direct: Elemente genau an die gezeichnete Stelle
     const acc = /^#[0-9a-f]{6}$/i.test(th.accent || '') ? th.accent : '#1E2F6E';
-    const fg = /^#[0-9a-f]{6}$/i.test(th.fg || '') ? th.fg : '#1A1A1A';
-    const bgc = /^#[0-9a-f]{6}$/i.test(th.bg || '') ? th.bg : '#FFFFFF';
-    const tint = mixHex(acc, bgc, 0.85);
+    const bgc = opt && /^#[0-9a-f]{6}$/i.test(opt.bg || '') ? opt.bg : /^#[0-9a-f]{6}$/i.test(th.bg || '') ? th.bg : '#FFFFFF';
+    const dark = !!(opt && opt.bg) && hexLum(bgc) < 0.4; // auf eine dunkle Folie gezeichnet: helle Linien und Schrift
+    const fg = dark ? '#FFFFFF' : /^#[0-9a-f]{6}$/i.test(th.fg || '') ? th.fg : '#1A1A1A';
+    const tc = dark ? { c: fg } : {};
+    const tint = dark ? mixHex(acc, bgc, 0.35) : mixHex(acc, bgc, 0.85);
     const lum = (h) => { const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
     const onAcc = lum(acc) > 0.5 ? fg : '#FFFFFF'; // Schrift auf der Akzentfarbe gut lesbar
     const pc = (v) => Math.max(0, Math.min(100, +v || 0));
@@ -3753,11 +3906,11 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
         if (e.type === 'title' && !titled) {
           titled = true;
           if (titleEl) { titleEl.html = txt(e.text); continue; }
-          s.els.push({ ...base(e), t: 'text', fs: fsOf(e, 36), va: 'm', c: acc, html: '<b>' + txt(e.text) + '</b>' });
+          s.els.push({ ...base(e), t: 'text', fs: fsOf(e, 36), va: 'm', c: acc, html: '<b>' + txt(e.text) + '</b>', ...(opt && opt.direct ? { _title: 1 } : {}) });
           continue;
         }
-        if (e.type === 'title' || e.type === 'text') { s.els.push({ ...base(e), t: 'text', fs: fsOf(e, e.type === 'title' ? 32 : 20), ...(col ? { c: col } : {}), html: e.type === 'title' ? '<b>' + txt(e.text) + '</b>' : txt(e.text) }); continue; }
-        if (e.type === 'bullets') { const it = (e.items || []).map((t) => '<li>' + txt(t) + '</li>').join(''); if (it) s.els.push({ ...base(e), t: 'text', fs: fsOf(e, 20), ...(col ? { c: col } : {}), html: '<ul>' + it + '</ul>' }); continue; }
+        if (e.type === 'title' || e.type === 'text') { s.els.push({ ...base(e), t: 'text', fs: fsOf(e, e.type === 'title' ? 32 : 20), ...tc, ...(col ? { c: col } : {}), html: e.type === 'title' ? '<b>' + txt(e.text) + '</b>' : txt(e.text) }); continue; }
+        if (e.type === 'bullets') { const it = (e.items || []).map((t) => '<li>' + txt(t) + '</li>').join(''); if (it) s.els.push({ ...base(e), t: 'text', fs: fsOf(e, 20), ...tc, ...(col ? { c: col } : {}), html: '<ul>' + it + '</ul>' }); continue; }
         if (e.type === 'rect' || e.type === 'roundrect' || e.type === 'ellipse' || e.type === 'shape') {
           const k = SK_SHAPE[e.type === 'shape' ? e.shape : e.type] || 'rect';
           s.els.push({ ...base(e), r: Math.round(+e.rotation || 0), t: 'shape', k, fill: e.accent ? acc : tint, line: e.accent ? acc : fg, lw: 2, fs: fsOf(e, 18), va: 'm', c: e.accent ? onAcc : fg, ...(e.text ? { html: '<div style="text-align: center;">' + txt(e.text) + '</div>' } : {}) });
@@ -3900,6 +4053,7 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
     const inField = ev.target.closest && ev.target.closest('math-field, input, textarea, select');
     const mod = ev.ctrlKey || ev.metaKey;
     if (INK.t === 'la' && lsValid() && !D.ed.edit && /^(Delete|Backspace|Escape)$/.test(ev.key)) { ev.preventDefault(); if (ev.key === 'Escape') lsClear(true); else lsAct('del'); return; }
+    if (SKM && ev.key === 'Escape' && !D.ed.edit) { ev.preventDefault(); sketchEnd(); return; }
     if (INK.t && ev.key === 'Escape' && !D.ed.edit) { ev.preventDefault(); inkTool(''); D.ed.renderFmt(); return; }
     if (D.ed.edit) {
       if (mod && ev.key.toLowerCase() === 'z' && !D.ed.edit.math) { ev.preventDefault(); undo(); return; }
@@ -4662,6 +4816,21 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
       const lw = (e.lw || 2) * K;
       const pad = e.pad != null ? e.pad : 8;
       const box = (fill, line) => pg.drawRectangle({ x: 0, y: -e.h * K, width: e.w * K, height: e.h * K, color: fill ? col(fill) : undefined, borderColor: line ? col(line) : undefined, borderWidth: line ? lw : 0, ...opa() });
+      if (e.t === 'text' && e.warp && plain(e.html)) {
+        // Text auf einem Bogen: Zeichen einzeln entlang der Grundlinie, über die ganze Bogenlänge verteilt
+        const fs = e.fs || 24, G = warpGeom(e, fs);
+        const { txt, b } = warpText(e), tok = { b: b ? 1 : 0 };
+        const chs = [...txt].map((ch) => { const f = fontCh(ch, tok) || fontOf(tok); let w = fs * 0.5; try { w = f.widthOfTextAtSize(ch, fs); } catch (er) { /* */ } return { ch, f, w }; });
+        const tot = chs.reduce((a, c) => a + c.w, 0), pl = warpPlace(e, G, tot);
+        const gap = chs.length > 1 ? (pl.len - tot) / (chs.length - 1) : 0;
+        let s = pl.start;
+        for (const c of chs) {
+          const [x, y, ang] = G.pt(s + c.w / 2);
+          if (c.ch.trim()) { const ox = -Math.cos(ang) * c.w / 2, oy = -Math.sin(ang) * c.w / 2; try { pg.drawText(c.ch, { x: (x + ox) * K, y: -(y + oy) * K, size: fs * K, font: c.f, color: col(e.c || th.fg), rotate: PDFLib.degrees(-ang * 180 / Math.PI), ...(OP < 1 ? { opacity: OP } : {}) }); } catch (er) { /* Zeichen fehlt in der Schrift */ } }
+          s += c.w + gap;
+        }
+        return;
+      }
       if (e.t === 'text') {
         if (e.fill && e.fo != null && !SH) { pg.drawRectangle({ x: 0, y: -e.h * K, width: e.w * K, height: e.h * K, color: col(e.fill), opacity: OP * e.fo }); if (e.line) box(null, e.line); } else if (e.fill || e.line) box(e.fill, e.line);
         drawTextBox(pg, e.html || '', 0, 0, e.w, e.h, e.fs || 24, e.c || th.fg, e.va || 't', pad, K, e.lh);
@@ -4856,5 +5025,5 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
     D.ed.renderFmt();
   }
   window.PDFSTIFT_DECK = { inkSet, clipMath, open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
-    PX: { mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH, mathSvgDoc, texOmml, mathFs, mathLib, texSvg, ommlTex }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
+    PX: { fitBox, fitReady, mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH, mathSvgDoc, texOmml, mathFs, mathLib, texSvg, ommlTex }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();
