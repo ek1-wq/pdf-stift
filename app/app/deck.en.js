@@ -638,12 +638,15 @@
   };
   const SHAPE_GROUPS = [
     ["Lines", [['line', "Line"], ['arrow', "Arrow"], ['arrow2', "Double arrow"], ['elbow', "Elbow connector"], ['arc', "Arc"]]],
-    ["Basic shapes", [['rect', "Rectangle"], ['round', "Rounded rectangle"], ['ellipse', "Circle / ellipse"], ['tri', "Triangle"], ['rtri', "Right triangle"], ['diamond', "Diamond"], ['pent', "Pentagon"], ['hex', "Hexagon"], ['oct', "Octagon"], ['para', "Parallelogram"], ['trap', "Trapezoid"], ['plus', "Cross"], ['heart', "Heart"], ['cloud', "Cloud"]]],
-    ["Block arrows", [['arrowR', "Right arrow"], ['arrowL', "Left arrow"], ['arrowU', "Up arrow"], ['arrowD', "Down arrow"], ['arrowLR', "Left-right arrow"], ['chevron', "Chevron"], ['home', "Pentagon arrow"]]],
-    ["Stars and callouts", [['star5', "Star"], ['star8', "8-point star"], ['callout', "Speech bubble"], ['calloutR', "Speech bubble (rounded)"]]],
+    ["Basic Shapes", [['rect', "Rectangle"], ['round', "Rounded rectangle"], ['ellipse', "Circle / ellipse"], ['tri', "Triangle"], ['rtri', "Right triangle"], ['diamond', "Diamond"], ['pent', "Pentagon"], ['hex', "Hexagon"], ['oct', "Octagon"], ['para', "Parallelogram"], ['trap', "Trapezoid"], ['plus', "Cross"], ['heart', "Heart"], ['cloud', "Cloud"]]],
+    ["Arrows", [['arrowR', "Right arrow"], ['arrowL', "Left arrow"], ['arrowU', "Up arrow"], ['arrowD', "Down arrow"], ['arrowLR', "Left-right arrow"], ['chevron', "Chevron"], ['home', "Pentagon arrow"]]],
+    ["Stars and Callouts", [['star5', "Star"], ['star8', "8-point star"], ['callout', "Speech bubble"], ['calloutR', "Speech bubble (rounded)"]]],
     ["Brackets", [['brackL', "Left bracket"], ['brackR', "Right bracket"], ['braceL', "Left brace"], ['braceR', "Right brace"]]],
   ];
   const SHAPES = SHAPE_GROUPS.flatMap((g) => g[1]);
+  // zuletzt verwendete Formen (wie in PowerPoint oben in der Formen-Auswahl)
+  const shRecent = () => { try { return (C.ls('shRecent') || []).filter((k) => SHAPES.some((x) => x[0] === k)).slice(0, 12); } catch (er) { return []; } };
+  const shRemember = (k) => { try { C.ls('shRecent', [k, ...shRecent().filter((x) => x !== k)].slice(0, 12)); } catch (er) { /* */ } };
   const QUICK_SHAPES = ['rect', 'round', 'ellipse', 'tri', 'line', 'arrow', 'arrowR', 'elbow', 'star5', 'callout', 'braceL', 'diamond'];
   const SHAPE_IC = { rect: '<rect x="4" y="6.5" width="16" height="11"/>', round: '<rect x="4" y="6.5" width="16" height="11" rx="3.5"/>', ellipse: '<ellipse cx="12" cy="12" rx="8.5" ry="6"/>', tri: '<path d="M12 5l8.5 14h-17z"/>',
     arrowR: '<path d="M3 9.5h10V5.5l8 6.5-8 6.5v-4H3z"/>', line: '<path d="M4 19L20 5"/>', arrow: '<path d="M4 19L20 5"/><path d="M12.5 5H20v7.5"/>',
@@ -1561,6 +1564,10 @@
       if (!(window.pdfstiftWin && window.pdfstiftWin.menuPop) && document.querySelector('[data-act="help"]')) tabs.push(['help', "Help"]);
       // Reiter „Formel“ hinter „Ansicht“, immer da: ein Knopf darin legt eine neue Formel an, wenn keine gewählt ist
       { const vi = tabs.findIndex((t) => t[0] === 'view'); const hi = tabs.findIndex((t) => t[0] === 'help'); tabs.splice(vi >= 0 ? vi + 1 : hi >= 0 ? hi : tabs.length, 0, ['math', "Equation"]); }
+      // Kontextreiter „Formformat“ wie in PowerPoint: erscheint, solange eine Form, ein Textfeld, eine Linie oder ein Bild gewählt ist
+      const shCtx = !!e && (e.t === 'shape' || e.t === 'text' || e.t === 'img');
+      if (shCtx) tabs.push(['shapefmt', e.t === 'img' ? "Picture Format" : "Shape Format"]);
+      else if (RB.tab === 'shapefmt') RB.tab = RB.prevTab || 'start';
       if (!tabs.some((t) => t[0] === RB.tab)) RB.tab = 'start';
       let h = '';
       if (RB.tab === 'start' && !has && !ED.edit && !ED.painter && host.startIdle) h += host.startIdle(kit, !!(ED.clip || (host.clipboard && host.clipboard())));
@@ -1606,6 +1613,27 @@
         if (e && e.t === 'chart') h += grp("Chart", big('data-f="chartdata"', "Edit data", RI.chart) + rows(mb('ctype', "Chart type", RI.chart, true, (CHART_TYPES.find((c) => c[0] === e.ct) || CHART_TYPES[0])[1]), sb('legend', "Legend on/off", RI.legend, { label: "Legend", on: e.legend !== 0 })), 'ctx');
         // Bearbeiten
         h += grp("Editing", rows(sb('replace', "Find and replace", RI.replace, { label: "Replace …", en: true }), sb('selall', "Select all (Ctrl+A)", RI.selall, { label: "Select All", en: els().length > 0 }), sb('x:del', "Delete (Del)", ICON.del, { label: "Delete", en: has })));
+      } else if (RB.tab === 'shapefmt') {
+        const fillOk = !!e && ((e.t === 'shape' && !line && !open) || e.t === 'text');
+        const rec = shRecent(), quick = [...rec, ...QUICK_SHAPES.filter((k) => !rec.includes(k))].slice(0, 14);
+        h += grp("Insert Shapes", `<div class="rb-gal">${quick.map((k) => shBtn(k, (SHAPES.find((x) => x[0] === k) || [k, k])[1])).join('')}</div><button type="button" class="rb-galmore" data-menu="shapes" title="All shapes">▾</button>`, 'rb-draw');
+        const lw0 = e ? (e.lw || (line ? 3 : 2)) : 2;
+        const lab = (b, l) => `<span class="rb-cbl">${b}<span>${esc(l)}</span></span>`;
+        h += grp("Shape Styles", big('data-menu="shstyle"', "Quick Styles", RI.design, fillOk, true) + rows(
+          lab(cb('fill', "Shape Fill", e && e.fill, true, svg(ICON.fill), fillOk), "Fill"),
+          lab(cb('line', "Shape Outline", e && (e.line || (line || open ? host.theme().fg : '')), !line && !open, svg(ICON.line), shapeish), "Outline"),
+          `<select data-f="lw" class="rb-lw" title="${esc("Outline weight")}"${dis(shapeish)}>${[0.5, 1, 2, 3, 4, 6, 8, 12].map((v) => `<option value="${v}"${v === lw0 ? ' selected' : ''}>${v} pt</option>`).join('')}</select>` + mb('fx', "Effects: shadow, transparency, flip", RI.fx, has, "Effects")));
+        if (e && e.t === 'img') h += grp("image", big('data-f="imgreset"', "Original shape", ICON.img, true));
+        const grouped = list.some((x) => x.g);
+        h += grp("Arrange", rows(
+          sb('fwd', "Bring forward one layer", RI.vt, { label: "Bring Forward" }) + sb('front', "Bring to front", RI.arrange, { label: "Bring to front" }),
+          sb('bwd', "Send backward one layer", RI.vb, { label: "Send Backward" }) + sb('back', "Send to back", RI.arrange, { label: "Send to back" }),
+          mb('alignm', "Align", RI.al, true, "Align") + mb('rotm', "Rotate and flip", RI.rot, true, "Rotate") + sb(grouped && !multi ? 'ungroup' : 'group', grouped && !multi ? "Ungroup" : "Group (select several objects)", RI.group, { label: grouped && !multi ? "Ungroup" : "Group", en: multi || grouped })));
+        const cm = (px) => String(Math.round(px * 2.54 / 72 * 100) / 100).replace('.', ',');
+        const lineLike = !!e && (line || open);
+        h += grp("Size", rows(
+          `<label class="rb-num" title="${esc("Height in cm")}">↕ <input type="text" inputmode="decimal" data-f="szh" value="${e && !lineLike ? cm(e.h) : ''}"${dis(!!e && !lineLike)}> cm</label>`,
+          `<label class="rb-num" title="${esc("Width in cm")}">↔ <input type="text" inputmode="decimal" data-f="szw" value="${e ? cm(e.w) : ''}"${dis(!!e)}> cm</label>`));
       } else if (RB.tab === 'insert') {
         if (host.ribbonPre) h += host.ribbonPre(kit, 'insert');
         h += grp("Tables", big('data-ins="table"', "Table", ICON.table));
@@ -1676,13 +1704,15 @@
         if (t.dataset.a === 'rbcol') { rbCollapse(); return; }
         if (t.dataset.tab) { const now = Date.now(); const dbl = RB.lastTab === t.dataset.tab && now - (RB.lastAt || 0) < 450; RB.lastTab = t.dataset.tab; RB.lastAt = dbl ? 0 : now; if (dbl) { rbCollapse(); return; } }
         if (t.dataset.tab && RB.collapsed) { RB.tab = t.dataset.tab; RB.peek = !(RB.peek && t.classList.contains('on')); renderFmt(); return; }
-        if (t.dataset.tab) { RB.tab = t.dataset.tab; try { C.ls('rbTab', RB.tab); } catch (er) { /* */ } renderFmt(); return; }
+        if (t.dataset.tab) { if (t.dataset.tab === 'shapefmt' && RB.tab !== 'shapefmt') RB.prevTab = RB.tab; RB.tab = t.dataset.tab; try { if (RB.tab !== 'shapefmt') C.ls('rbTab', RB.tab); } catch (er) { /* */ } renderFmt(); return; }
         if (t.dataset.ins) { if (host.onIns) host.onIns(t.dataset.ins); else ins(t.dataset.ins); return; }
         if (t.dataset.pal) { palette(t, t.dataset.pal, !!t.dataset.none); return; }
         if (t.dataset.menu) { menu(t.dataset.menu, t); return; }
         if (t.dataset.f) fmt(t.dataset.f, t.dataset.v, t);
       };
-      bar.onchange = (ev) => { const sl = ev.target.closest('select[data-f]'); if (sl) fmt(sl.dataset.f, sl.value); };
+      bar.onchange = (ev) => { const sl = ev.target.closest('select[data-f], input[data-f]'); if (sl) fmt(sl.dataset.f, sl.value); };
+      bar.onkeydown = (ev) => { const ip = ev.target.closest('input[data-f]'); if (ip && ev.key === 'Enter') { ev.preventDefault(); ip.blur(); } };
+      { const ct = bar.querySelector('[data-tab="shapefmt"]'); if (ct) ct.classList.add('rb-ctx'); }
     }
     // Auswahlmenüs im Menüband
     function menu(m, btn) {
@@ -1716,6 +1746,31 @@
         return;
       }
       if (m === 'shapes') { gallery(btn); return; }
+      if (m === 'alignm') {
+        const word = host.alignWord ? "page" : 'Folie';
+        popMenu(x, y, [
+          ...(n > 1 ? [['al', "Align left", () => fmt('aln', 'l')], ['ac', "Center horizontally", () => fmt('aln', 'c')], ['ar', "Align right", () => fmt('aln', 'r')], ['-', ''],
+            ['at', "Align top", () => fmt('aln', 't')], ['am', "Center vertically", () => fmt('aln', 'm')], ['ab', "Align bottom", () => fmt('aln', 'b')], ['-', '']] : []),
+          ...(n > 2 ? [['dh', "Distribute horizontally", () => fmt('dist', 'h')], ['dv', "Distribute vertically", () => fmt('dist', 'v')], ['-', '']] : []),
+          ['ap', "Align to %s …".replace('%s', word), () => act('align', btn)],
+        ]);
+        return;
+      }
+      if (m === 'rotm') {
+        popMenu(x, y, [['r90', "Rotate Right 90°", () => fmt('rot90')], ['r270', "Rotate Left 90°", () => fmt('rot270')], ['-', ''],
+          ['fv', "Flip Vertical", () => fmt('flip', 'y')], ['fh', "Flip Horizontal", () => fmt('flip', 'x')], ['-', ''], ['r0', "Reset rotation", () => fmt('rot0')]]);
+        return;
+      }
+      if (m === 'shstyle') {
+        const th = host.theme(), hx = (c, d) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : d);
+        const acc = hx(th.accent, '#1E2F6E'), fg = hx(th.fg, '#1A1A1A'), bg = hx(th.bg, '#FFFFFF');
+        const lumi = (c) => { const v = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+        const onA = lumi(acc) > 0.5 ? fg : '#FFFFFF';
+        const ST = [["Colored fill", acc, acc, onA], ["Light fill", mixHex(acc, bg, 0.85), acc, fg], ["Outline only", '', acc, fg], ["Colored, no outline", acc, '', onA],
+          ["Dark", fg, fg, bg], ["Gray", '#E9ECEF', '#868E96', fg], ["White with outline", '#FFFFFF', fg, '#1A1A1A']];
+        popMenu(x, y, ST.map(([l, fi, li, tc], i) => ['st' + i, `<span class="dk-stsw" style="background:${fi || 'transparent'};border-color:${li || 'transparent'};color:${tc}">Abc</span> ${esc(l)}`, () => fmt('shst', JSON.stringify([fi, li, tc]))]));
+        return;
+      }
       if (m === 'sym') { symbolPicker(btn, (c) => insertChars(c)); return; }
       if (m === 'ctype') { popMenu(x, y, CHART_TYPES.map(([k, l]) => [k, esc(l), () => fmt('ct', k)])); return; }
       if (host.menu) host.menu(m, btn);
@@ -1725,7 +1780,8 @@
       document.querySelectorAll('.dk-gal-pop').forEach((g) => g.remove());
       const g = document.createElement('div');
       g.className = 'dk-gal-pop';
-      g.innerHTML = SHAPE_GROUPS.map(([cap, l]) => `<div class="gp-cap">${esc(cap)}</div><div class="gp-row">${l.map(([k, n]) => `<button type="button" data-ins="shape:${k}" title="${esc(n)}"><svg viewBox="0 0 24 24">${shapeIc(k)}</svg></button>`).join('')}</div>`).join('');
+      const rec = shRecent().map((k) => SHAPES.find((x) => x[0] === k)).filter(Boolean);
+      g.innerHTML = (rec.length ? [["Recently Used Shapes", rec]] : []).concat(SHAPE_GROUPS).map(([cap, l]) => `<div class="gp-cap">${esc(cap)}</div><div class="gp-row">${l.map(([k, n]) => `<button type="button" data-ins="shape:${k}" title="${esc(n)}"><svg viewBox="0 0 24 24">${shapeIc(k)}</svg></button>`).join('')}</div>`).join('');
       document.body.appendChild(g);
       const r = btn.getBoundingClientRect();
       g.style.left = Math.max(4, Math.min(r.left - 200, innerWidth - g.offsetWidth - 8)) + 'px';
@@ -1739,14 +1795,29 @@
       document.querySelectorAll('.dk-pal').forEach((m) => m.remove());
       const m = document.createElement('div');
       m.className = 'dk-pal';
-      m.innerHTML = (none ? "<button type=\"button\" class=\"none\" data-v=\"\">None</button>" : '') + COLORS.map((c) => `<button type="button" class="sw" data-v="${c}" style="--c:${c}" title="${c}"></button>`).join('');
+      const th = (host.theme && host.theme()) || {};
+      const thc = [...new Set([th.accent, th.fg, th.bg].filter((c) => /^#[0-9a-f]{6}$/i.test(c || '')).map((c) => c.toUpperCase()))];
+      m.innerHTML = (thc.length ? `<div class="pal-cap">${"Theme Colors"}</div>${thc.map((c) => `<button type="button" class="sw" data-v="${c}" style="--c:${c}" title="${c}"></button>`).join('')}<div class="pal-cap">${"Colours"}</div>` : '') +
+        (none ? "<button type=\"button\" class=\"none\" data-v=\"\">None</button>" : '') + COLORS.map((c) => `<button type="button" class="sw" data-v="${c}" style="--c:${c}" title="${c}"></button>`).join('') +
+        '<button type="button" class="more" data-more="1">' + "More Colors …" + '</button>';
       document.body.appendChild(m);
       const r = btn.getBoundingClientRect();
       m.style.left = Math.max(4, Math.min(r.left, innerWidth - m.offsetWidth - 8)) + 'px';
       m.style.top = Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 8) + 'px';
       m.onmousedown = (ev) => ev.preventDefault();
       m.onpointerdown = (ev) => ev.stopPropagation();
-      m.onclick = (ev) => { const b = ev.target.closest('[data-v]'); if (!b) return; m.remove(); if (f === 'color') ED.lastColor = b.dataset.v; if (f === 'hl' && b.dataset.v) ED.lastHl = b.dataset.v; fmt(f, b.dataset.v); };
+      m.onclick = (ev) => {
+        if (ev.target.closest('[data-more]')) {
+          m.remove();
+          const ip = document.createElement('input'); ip.type = 'color'; ip.value = '#1E2F6E';
+          ip.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.bottom + 'px;opacity:0;width:1px;height:1px';
+          document.body.appendChild(ip);
+          ip.onchange = () => { const c0 = ip.value.toUpperCase(); if (f === 'color') ED.lastColor = c0; fmt(f, c0); ip.remove(); };
+          ip.onblur = () => setTimeout(() => ip.remove(), 500);
+          ip.click();
+          return;
+        }
+        const b = ev.target.closest('[data-v]'); if (!b) return; m.remove(); if (f === 'color') ED.lastColor = b.dataset.v; if (f === 'hl' && b.dataset.v) ED.lastHl = b.dataset.v; fmt(f, b.dataset.v); };
       setTimeout(() => document.addEventListener('pointerdown', function off(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('pointerdown', off, true); } }, true), 0);
     }
     // Format anwenden: im Bearbeiten auf die Markierung, sonst aufs ganze Element
@@ -1761,6 +1832,30 @@
       if (f === 'selall') { select(els().map((x) => x.id)); return; }
       if (f === 'rot90') { each((x) => { x.r = ((x.r || 0) + 90) % 360; }); return; }
       if (f === 'rot0') { each((x) => { x.r = 0; }); return; }
+      if (f === 'rot270') { each((x) => { x.r = ((x.r || 0) + 270) % 360; }); return; }
+      if (f === 'fwd' || f === 'bwd') {
+        change(() => {
+          const a = els().slice();
+          const idx = a.map((x, i) => (ids.includes(x.id) ? i : -1)).filter((i) => i >= 0);
+          if (f === 'fwd') { for (let k = idx.length - 1; k >= 0; k--) { const i = idx[k]; if (i < a.length - 1 && !ids.includes(a[i + 1].id)) [a[i], a[i + 1]] = [a[i + 1], a[i]]; } }
+          else { for (const i of idx) { if (i > 0 && !ids.includes(a[i - 1].id)) [a[i], a[i - 1]] = [a[i - 1], a[i]]; } }
+          host.setEls(a);
+        }, true);
+        return;
+      }
+      if (f === 'front' || f === 'back') { act(f); return; }
+      if (f === 'szh' || f === 'szw') {
+        const cm = parseFloat(String(v).replace(',', '.'));
+        if (!(cm > 0)) { renderFmt(); return; }
+        const px = Math.max(2, cm * 72 / 2.54);
+        each((x) => { if (f === 'szh') { const c = x.y + x.h / 2; x.h = r1(px); x.y = r1(c - x.h / 2); } else { const c = x.x + x.w / 2; x.w = r1(px); x.x = r1(c - x.w / 2); } });
+        return;
+      }
+      if (f === 'shst') {
+        const [fi, li, tc] = JSON.parse(v);
+        each((x) => { if (x.t === 'img') return; if (fi) x.fill = fi; else delete x.fill; if (li) x.line = li; else delete x.line; if (tc && (x.t === 'shape' || x.t === 'text')) x.c = tc; });
+        return;
+      }
       if ((f === 'fs' || f === 'fs+' || f === 'fs-') && ED.edit && !ED.edit.math && sizeSelection(f, v)) return;
       if (f === 'mathedit') { if (ids[0]) startMath(ids[0]); return; }
       if (f === 'mst') { mathRecent('st' + v); mathPut(MATH_STRUCT[+v][1]); return; }
@@ -2408,6 +2503,7 @@
       if (ld && ld.id === nid && now - ld.t < 450 && Math.hypot(ev.clientX - ld.x, ev.clientY - ld.y) < 8) {
         ED.lastDown = null; ED.lastDbl = now;
         ED.sel = [nid];
+        { const ne = byId(nid); if (ne && wantsShapeTab(ne, ev)) { shapeTab(nid); return true; } }
         startEdit(nid, ev);
         if (!ED.edit) render();
         return true;
@@ -2632,6 +2728,7 @@
     }
     // Knopf im Menüband „Einfügen“
     function ins(kind) {
+      if (/^shape:/.test(kind)) shRemember(kind.slice(6));
       if (kind === 'img') { host.pickImage(); return; }
       if (kind === 'chart') { addChart(); return; }
       if (kind === 'crop') { addCrop(); return; }
@@ -2692,7 +2789,27 @@
       return false;
     }
     function select(ids) { endEdit(); ED.sel = ids.filter((id) => byId(id)); render(); }
-    Object.assign(ED, { change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, addMathTex, pick, pickEv: (ev) => pick(...toLocal(ev)), mathPut, mathLatex, imClose, mfTexNow: () => mfTex(), fmt, menu });
+    // Doppelklick auf eine Form wie in PowerPoint: auf den Rand (oder auf Linie, Bild, Form ohne Text) öffnet den Reiter „Formformat“
+    function wantsShapeTab(e, ev) {
+      if (e.t === 'img' || isLine(e) || isOpen(e) || (e.t === 'shape' && e.k === 'path')) return true;
+      if (e.t !== 'shape') return false;
+      if (!plain(e.html)) return true;
+      const sel = `.dk-el[data-id="${e.id}"]`;
+      const node = (ev.target && ev.target.closest && ev.target.closest(sel)) || (host.box && host.box() && host.box().querySelector(sel));
+      if (!node) return false;
+      const r = node.getBoundingClientRect();
+      const d = Math.min(ev.clientX - r.left, r.right - ev.clientX, ev.clientY - r.top, r.bottom - ev.clientY);
+      return d < 12;
+    }
+    function shapeTab(id) {
+      endEdit();
+      ED.sel = [id];
+      if (RB.tab !== 'shapefmt') RB.prevTab = RB.tab;
+      RB.tab = 'shapefmt';
+      if (RB.collapsed) RB.peek = true;
+      render(); renderFmt();
+    }
+    Object.assign(ED, { wantsShapeTab, shapeTab, change, render, renderStage, renderFmt, startEdit, endEdit, down, hit, act, key, addImage, addTable, pasteEls, copy, select, byId, insertAt, drawInsert, ins, toLocal, insertHtmlAt, addChart, addCrop, addMath, addMathTex, pick, pickEv: (ev) => pick(...toLocal(ev)), mathPut, mathLatex, imClose, mfTexNow: () => mfTex(), fmt, menu });
     return ED;
   }
 
@@ -3098,7 +3215,14 @@
     new ResizeObserver(() => fit()).observe(stage);
     $('.dk-notes textarea', root).oninput = (ev) => { const s0 = slide(); if (!s0) return; if (ev.target.value) s0.notes = ev.target.value; else delete s0.notes; save(); };
     stage.addEventListener('pointerdown', (ev) => { if (!D.deck) return; if (INK.t && inkDown(ev)) return; D.ed.down(ev); });
-    stage.addEventListener('dblclick', (e) => { if (INK.t || Date.now() - (D.ed.lastDbl || 0) < 700) return; const pk = D.ed.pickEv(e), n = e.target.closest('.dk-el'); const id = pk ? pk.id : n && n.dataset.id; if (id) D.ed.startEdit(id, e); });
+    stage.addEventListener('dblclick', (e) => {
+      if (INK.t || Date.now() - (D.ed.lastDbl || 0) < 700) return;
+      const pk = D.ed.pickEv(e), n = e.target.closest('.dk-el'); const id = pk ? pk.id : n && n.dataset.id;
+      if (!id) return;
+      const el = D.ed.byId(id);
+      if (el && D.ed.wantsShapeTab(el, e)) { D.ed.shapeTab(id); return; }
+      D.ed.startEdit(id, e);
+    });
   }
 
   // ------------------------------------------------------------------ Laden, Speichern

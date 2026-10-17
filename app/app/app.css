@@ -1726,3 +1726,14 @@ body.tp-r .tool-panel { right: calc(var(--dr, 0px) + var(--hpr, 0px)); }
 .dk-el ol[data-n=romanUcParenBoth] > li[data-bi]::before { content: "(" counter(list-item, upper-roman) ")"; }
 .dk-el ol[data-n=romanUcPlain] > li[data-bi]::before { content: counter(list-item, upper-roman) ""; }
 .dk-el ol > li[data-bi][data-bi]::marker { content: none; }
+
+/* Kontextreiter „Formformat“ wie in PowerPoint */
+.rb-tab.rb-ctx { color: #B4246B; font-weight: 700; }
+.rb-tab.rb-ctx.on { color: #B4246B; box-shadow: inset 0 -3px 0 #B4246B; }
+.rb-cbl { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.rb-num { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.rb-num input { width: 64px; height: 26px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font: inherit; background: var(--surface); color: var(--fg); }
+.dk-stsw { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 24px; border: 2px solid; border-radius: 4px; font-size: 12px; font-weight: 700; margin-right: 6px; vertical-align: middle; }
+.dk-pal .pal-cap { grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--muted); margin: 2px 0; }
+.dk-pal .more { grid-column: 1 / -1; border: 0; background: none; text-align: left; padding: 6px 4px 2px; font: inherit; font-size: 13px; color: var(--fg); cursor: pointer; }
+.dk-pal .more:hover { text-decoration: underline; }
