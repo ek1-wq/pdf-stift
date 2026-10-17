@@ -248,6 +248,7 @@ function menu() {
       { label: 'Link …', accelerator: 'Ctrl+K', registerAccelerator: false, click: cmd('rb:f:link') },
       { type: 'separator' },
       { label: 'Neue Folie …', accelerator: 'Ctrl+M', registerAccelerator: false, click: cmd('rb:btn:start:[data-menu="newslide"]') },
+      { label: 'Skizze → Folie (KI) …', accelerator: 'Ctrl+Shift+M', click: cmd('rb:btn:start:[data-menu="sketch"]') },
       { label: 'Folien aus PDF …', click: cmd('rb:btn:insert:[data-menu="pdfslides"]') },
       { label: 'Kopf- und Fußzeile, Foliennummer …', click: cmd('rb:f:x:hf') },
     ] },

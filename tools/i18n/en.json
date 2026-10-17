@@ -3494,5 +3494,12 @@
   "API-Schlüssel ungültig – bitte unter Datei → Einstellungen prüfen.": "Invalid API key – please check it under File → Settings.",
   "KI-Fehler ": "AI error ",
   "Die Antwort der KI war zu lang und wurde abgebrochen.": "The AI’s answer was too long and was cut off.",
-  "Die KI hat keine Folie geliefert (": "The AI didn’t return a slide ("
+  "Die KI hat keine Folie geliefert (": "The AI didn’t return a slide (",
+  "class=\"rb-big rb-ai\"": null,
+  "title=\"Skizze, Foto oder PDF-Seite mit KI in fertige Folien verwandeln (Strg + Umschalt + M)\"": "title=\"Turn a sketch, photo or PDF page into finished slides with AI (Ctrl + Shift + M)\"",
+  "✎ Skizze → Folie": "✎ Sketch → Slide",
+  "Skizze, Foto oder PDF-Seite mit KI in fertige Folien verwandeln (Strg + Umschalt + M)": "Turn a sketch, photo or PDF page into finished slides with AI (Ctrl + Shift + M)",
+  "Skizze → Folie …": "Sketch → Slide …",
+  "Skizze → Folie (KI) …": "Sketch → Slide (AI) …",
+  "Ctrl+Shift+M": null
 }

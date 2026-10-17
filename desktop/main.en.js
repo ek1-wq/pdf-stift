@@ -255,6 +255,7 @@ function menu() {
       { label: 'Link …', accelerator: 'Ctrl+K', registerAccelerator: false, click: cmd('rb:f:link') },
       { type: 'separator' },
       { label: "New slide …", accelerator: 'Ctrl+M', registerAccelerator: false, click: cmd('rb:btn:start:[data-menu="newslide"]') },
+      { label: "Sketch → Slide (AI) …", accelerator: 'Ctrl+Shift+M', click: cmd('rb:btn:start:[data-menu="sketch"]') },
       { label: "Slides from PDF …", click: cmd('rb:btn:insert:[data-menu="pdfslides"]') },
       { label: "Header and footer, slide number …", click: cmd('rb:f:x:hf') },
     ] },

@@ -2765,7 +2765,7 @@
     placing: (on, kind) => { if (!D.root) return; D.root.classList.toggle('dk-placing', !!on); D.root.querySelectorAll('[data-ins]').forEach((b) => b.classList.toggle('on', !!on && b.dataset.ins === kind)); },
     pickImage: () => $('.dk-file', D.root).click(),
     replaceAll: (f, r) => { let n = 0; D.ed.change(() => { for (const s0 of D.deck.slides) n += replaceInEls(s0.els, f, r); }, true); return n; },
-    ribbonPre: ({ grp, rows, big, mb }) => grp("slides", big('data-menu="newslide"', "New slide", RI.newslide, true, true) +
+    ribbonPre: ({ grp, rows, big, mb }) => grp("slides", big('data-menu="newslide"', "New slide", RI.newslide, true, true) + big('data-menu="sketch"', "Sketch → Slide", RI.sketch).replace('class="rb-big"', 'class="rb-big rb-ai"').replace(/title="[^"]*"/, "title=\"Turn a sketch, photo or PDF page into finished slides with AI (Ctrl + Shift + M)\"") +
       rows(mb('layout', "Layout of this slide", RI.layout, true, 'Layout'), mb('bg', "Background", RI.bg, true, "Background"), mb('design', "Design of all slides", RI.design, true, 'Design'))),
     act: (a) => { if (a === 'hf') { hfDialog(); return true; } return false; },
     tabs: () => [['draw', "Drawing"], ['design', "Design"], ['anim', "Animations"], ['show', "Slide show"], ['view', "View"]],
@@ -2848,7 +2848,7 @@
     snapOn: () => VIEW.snap,
     gridSize: () => (VIEW.grid ? 20 : 0),
     insertText: ({ sb }) => sb('x:hf', "Header and footer, Foliennummer, Date", RI.hf, { label: "Footer …" }),
-    insertExtra: ({ grp, big }) => grp("slides", big('data-menu="pdfslides"', "Slides from PDF", RI.slidesPdf) + big('data-menu="sketch"', "Sketch → Slide", RI.sketch)),
+    insertExtra: ({ grp, big }) => grp("slides", big('data-menu="pdfslides"', "Slides from PDF", RI.slidesPdf)),
     menu: (m, btn) => {
       const r = btn.getBoundingClientRect(), x = r.left, y = r.bottom + 4;
       if (m === 'pdfslides') { importSlides(); return; }
@@ -3197,6 +3197,11 @@
     add.type = 'button'; add.className = 'dk-add'; add.textContent = "+ New slide";
     add.onclick = (ev) => layoutMenu(ev.clientX, ev.clientY);
     list.appendChild(add);
+    const ai = document.createElement('button');
+    ai.type = 'button'; ai.className = 'dk-add dk-add-ai'; ai.textContent = "✎ Sketch → Slide";
+    ai.title = "Turn a sketch, photo or PDF page into finished slides with AI (Ctrl + Shift + M)";
+    ai.onclick = () => sketchDialog();
+    list.appendChild(ai);
     const cur = list.children[D.cur];
     if (cur) cur.scrollIntoView({ block: 'nearest' });
   }
@@ -3264,6 +3269,7 @@
   function slideMenu(x, y) {
     popMenu(x, y, [
       ['new', "New slide after this …", () => layoutMenu(x, y)],
+      ['sketch', "Sketch → Slide …", () => sketchDialog()],
       ['dup', "Duplicate slide", () => change(() => { const s = clone(slide()); s.id = uid(); s.els.forEach((e) => { e.id = uid(); }); D.deck.slides.splice(D.cur + 1, 0, s); D.cur++; })],
       ['bg', "Background of this slide …", () => bgMenu(x, y, false)],
       ...(D.deck.src && slide().sn != null ? [['img', "Take slide as picture from PowerPoint", () => slideAsImage()]] : []),

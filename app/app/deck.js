@@ -2764,7 +2764,7 @@
     placing: (on, kind) => { if (!D.root) return; D.root.classList.toggle('dk-placing', !!on); D.root.querySelectorAll('[data-ins]').forEach((b) => b.classList.toggle('on', !!on && b.dataset.ins === kind)); },
     pickImage: () => $('.dk-file', D.root).click(),
     replaceAll: (f, r) => { let n = 0; D.ed.change(() => { for (const s0 of D.deck.slides) n += replaceInEls(s0.els, f, r); }, true); return n; },
-    ribbonPre: ({ grp, rows, big, mb }) => grp('Folien', big('data-menu="newslide"', 'Neue Folie', RI.newslide, true, true) +
+    ribbonPre: ({ grp, rows, big, mb }) => grp('Folien', big('data-menu="newslide"', 'Neue Folie', RI.newslide, true, true) + big('data-menu="sketch"', 'Skizze → Folie', RI.sketch).replace('class="rb-big"', 'class="rb-big rb-ai"').replace(/title="[^"]*"/, 'title="Skizze, Foto oder PDF-Seite mit KI in fertige Folien verwandeln (Strg + Umschalt + M)"') +
       rows(mb('layout', 'Layout dieser Folie', RI.layout, true, 'Layout'), mb('bg', 'Hintergrund', RI.bg, true, 'Hintergrund'), mb('design', 'Design aller Folien', RI.design, true, 'Design'))),
     act: (a) => { if (a === 'hf') { hfDialog(); return true; } return false; },
     tabs: () => [['draw', 'Zeichnen'], ['design', 'Entwurf'], ['anim', 'Animationen'], ['show', 'Bildschirmpräsentation'], ['view', 'Ansicht']],
@@ -2847,7 +2847,7 @@
     snapOn: () => VIEW.snap,
     gridSize: () => (VIEW.grid ? 20 : 0),
     insertText: ({ sb }) => sb('x:hf', 'Kopf- und Fußzeile, Foliennummer, Datum', RI.hf, { label: 'Fußzeile …' }),
-    insertExtra: ({ grp, big }) => grp('Folien', big('data-menu="pdfslides"', 'Folien aus PDF', RI.slidesPdf) + big('data-menu="sketch"', 'Skizze → Folie', RI.sketch)),
+    insertExtra: ({ grp, big }) => grp('Folien', big('data-menu="pdfslides"', 'Folien aus PDF', RI.slidesPdf)),
     menu: (m, btn) => {
       const r = btn.getBoundingClientRect(), x = r.left, y = r.bottom + 4;
       if (m === 'pdfslides') { importSlides(); return; }
@@ -3196,6 +3196,11 @@
     add.type = 'button'; add.className = 'dk-add'; add.textContent = '+ Neue Folie';
     add.onclick = (ev) => layoutMenu(ev.clientX, ev.clientY);
     list.appendChild(add);
+    const ai = document.createElement('button');
+    ai.type = 'button'; ai.className = 'dk-add dk-add-ai'; ai.textContent = '✎ Skizze → Folie';
+    ai.title = 'Skizze, Foto oder PDF-Seite mit KI in fertige Folien verwandeln (Strg + Umschalt + M)';
+    ai.onclick = () => sketchDialog();
+    list.appendChild(ai);
     const cur = list.children[D.cur];
     if (cur) cur.scrollIntoView({ block: 'nearest' });
   }
@@ -3263,6 +3268,7 @@
   function slideMenu(x, y) {
     popMenu(x, y, [
       ['new', 'Neue Folie danach …', () => layoutMenu(x, y)],
+      ['sketch', 'Skizze → Folie …', () => sketchDialog()],
       ['dup', 'Folie duplizieren', () => change(() => { const s = clone(slide()); s.id = uid(); s.els.forEach((e) => { e.id = uid(); }); D.deck.slides.splice(D.cur + 1, 0, s); D.cur++; })],
       ['bg', 'Hintergrund dieser Folie …', () => bgMenu(x, y, false)],
       ...(D.deck.src && slide().sn != null ? [['img', 'Folie als Bild aus PowerPoint übernehmen', () => slideAsImage()]] : []),

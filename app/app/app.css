@@ -1262,6 +1262,10 @@ body[data-demo] #btnShortcut, body[data-demo] #btnBackup, body[data-demo] #btnLo
 .dk-thumb.drop .dk-mini { box-shadow: 0 -4px 0 0 var(--accent); }
 .dk-add { border: 1px dashed var(--line); background: transparent; color: var(--muted); border-radius: 8px; padding: 10px; cursor: pointer; font: inherit; margin-left: 22px; }
 .dk-add:hover { color: var(--fg); border-color: var(--accent); }
+.dk-add-ai { display: block; margin-top: 8px; border-style: solid; border-color: #3fa96b; color: #1f7a48; font-weight: 700; background: rgba(63, 169, 107, .08); }
+.dk-add-ai:hover { background: rgba(63, 169, 107, .16); color: #145c35; border-color: #2e8a56; }
+.rb-big.rb-ai { background: rgba(63, 169, 107, .12); color: #1f7a48; font-weight: 700; box-shadow: inset 0 0 0 1px rgba(63, 169, 107, .55); }
+.rb-big.rb-ai:hover { background: rgba(63, 169, 107, .22); }
 .dk-stage { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
 .dk-box { position: relative; box-shadow: 0 4px 24px rgba(20, 30, 60, .18); }
 .deck-view.dk-placing .dk-stage { cursor: crosshair; }
