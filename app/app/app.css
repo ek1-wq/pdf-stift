@@ -815,6 +815,27 @@ body.dropping::after { content: 'Loslassen zum Hochladen'; position: fixed; inse
 
 /* ---- Einstellungen */
 .set-dlg { width: min(560px, calc(100% - 32px)); }
+.dlg.set-page { width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; border-radius: 0; box-shadow: none; }
+.dlg.set-page::backdrop { background: var(--bg, #E9ECF2); }
+.set-page form { height: 100%; padding: 0; gap: 0; }
+.setp-head { display: flex; align-items: center; gap: 14px; padding: 16px 28px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.setp-head h2 { margin: 0; font-size: 26px; }
+.setp-back { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--bar); color: var(--fg); font-size: 26px; line-height: 1; cursor: pointer; padding: 0 0 3px; }
+.setp-back:hover { border-color: var(--accent); }
+.setp-body { flex: 1; display: flex; min-height: 0; }
+.setp-nav { width: 260px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 18px 12px; background: var(--bar); border-right: 1px solid var(--line); overflow: auto; }
+.setp-nav button { text-align: left; border: 0; background: none; color: var(--fg); font: inherit; font-size: 15px; padding: 11px 16px; border-radius: 10px; cursor: pointer; }
+.setp-nav button:hover { background: var(--soft); }
+.setp-nav button.on { background: var(--soft); font-weight: 700; box-shadow: inset 4px 0 0 var(--accent); }
+.setp-main { flex: 1; overflow: auto; padding: 28px 44px 40px; }
+.setp-sec { max-width: 780px; display: flex; flex-direction: column; gap: 16px; }
+.setp-sec[hidden] { display: none; }
+.setp-sec h3 { margin: 0; font-size: 22px; }
+.setp-sub { margin: -10px 0 4px; }
+.set-page .set-row { font-size: 15px; padding: 4px 0; }
+.set-page .set-row select, .set-page .set-row .ho-pages, .set-page .set-row input:not([type=checkbox]) { width: 340px; max-width: 55%; }
+.set-page .dlg-actions { margin: 0; padding: 14px 28px; border-top: 1px solid var(--line); background: var(--surface); }
+@media (max-width: 720px) { .setp-body { flex-direction: column; } .setp-nav { width: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; } .setp-nav button { white-space: nowrap; } .setp-main { padding: 18px 16px; } }
 .set-dlg h3.dlg-sub { margin: 12px 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
 .set-row select { min-height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--bar); color: var(--fg); padding: 4px 8px; font: inherit; max-width: 60%; }

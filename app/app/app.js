@@ -1,7 +1,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.100.2';
+  const VERSION = '1.100.3';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -12343,6 +12343,49 @@
   }
   if (SET.startTool && SET.startTool !== 'last') S.tool = SET.startTool;
 
+  // Einstellungen als ganze Seite (wie die Optionen in PowerPoint): links die Bereiche, rechts deren Einstellungen
+  function setPage(d) {
+    const f = d.querySelector('form'), h2 = f.querySelector('h2'), acts = f.querySelector('.dlg-actions');
+    const secs = []; let cur = { t: 'Allgemein', sub: '', els: [] };
+    for (const el of [...f.children]) {
+      if (el === h2 || el === acts) continue;
+      if (el.matches('h3.dlg-sub')) {
+        if (cur.els.length) secs.push(cur);
+        const m = el.textContent.trim().match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+        cur = { t: m ? m[1] : el.textContent.trim(), sub: m ? m[2] : '', els: [] };
+        el.remove();
+        continue;
+      }
+      cur.els.push(el);
+    }
+    if (cur.els.length) secs.push(cur);
+    const head = document.createElement('div'); head.className = 'setp-head';
+    head.innerHTML = `<button type="submit" value="" class="setp-back" title="Zurück ohne Speichern" aria-label="Zurück">‹</button>`;
+    head.appendChild(h2);
+    const body = document.createElement('div'); body.className = 'setp-body';
+    const nav = document.createElement('nav'); nav.className = 'setp-nav';
+    const main = document.createElement('div'); main.className = 'setp-main';
+    secs.forEach((sc, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = sc.t; b.dataset.i = i;
+      nav.appendChild(b);
+      const sec = document.createElement('section'); sec.className = 'setp-sec'; sec.dataset.i = i;
+      const h = document.createElement('h3'); h.textContent = sc.t; sec.appendChild(h);
+      if (sc.sub) { const p0 = document.createElement('p'); p0.className = 'muted small setp-sub'; p0.textContent = sc.sub; sec.appendChild(p0); }
+      sc.els.forEach((el) => sec.appendChild(el));
+      main.appendChild(sec);
+    });
+    const show = (i) => {
+      nav.querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.i === i));
+      main.querySelectorAll('.setp-sec').forEach((x) => { x.hidden = +x.dataset.i !== i; });
+      main.scrollTop = 0;
+      try { sessionStorage.setItem('pdfstift.setSec', String(i)); } catch (e) { /* */ }
+    };
+    nav.onclick = (ev) => { const b = ev.target.closest('button'); if (b) show(+b.dataset.i); };
+    body.append(nav, main);
+    f.insertBefore(head, acts); f.insertBefore(body, acts);
+    let i0 = 0; try { i0 = Math.min(secs.length - 1, +(sessionStorage.getItem('pdfstift.setSec') || 0) || 0); } catch (e) { /* */ }
+    show(i0);
+  }
   async function settingsDialog() {
     track('tool', 'Einstellungen');
     const hot = window.pdfstiftWin && window.pdfstiftWin.hotGet ? await window.pdfstiftWin.hotGet().catch(() => null) : null;
@@ -12350,7 +12393,7 @@
     if (d) d.remove();
     d = document.createElement('dialog');
     d.id = 'setDlg';
-    d.className = 'dlg set-dlg';
+    d.className = 'dlg set-dlg set-page';
     const sel = (id, opts, v) => `<select id="${id}">${opts.map(([k, l]) => `<option value="${k}"${String(k) === String(v) ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
     const chk = (id, label, v, hint) => `<label class="check"><input id="${id}" type="checkbox"${v ? ' checked' : ''}> <span>${label}${hint ? `<br><span class="muted small">${hint}</span>` : ''}</span></label>`;
     d.innerHTML = `<form method="dialog"><h2>Einstellungen</h2>
@@ -12381,6 +12424,7 @@
       <p class="muted small">Für „Skizze → Folie“ im Folieneditor (Einfügen). Den Schlüssel gibt es auf console.anthropic.com; er bleibt nur auf diesem Gerät. Eine Umwandlung kostet etwa 1–2 Cent.</p>
       <div class="dlg-actions"><button type="submit" value="" class="btn">Abbrechen</button><button type="submit" value="ok" class="btn primary">Speichern</button></div></form>`;
     document.body.appendChild(d);
+    setPage(d);
     d.showModal();
     if (d.querySelector('#stReport')) d.querySelector('#stReport').onclick = () => usageReport();
     if (d.querySelector('#stLibPick')) {

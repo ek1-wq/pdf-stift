@@ -3503,5 +3503,8 @@
   "Skizze → Folie (KI) …": "Sketch → Slide (AI) …",
   "Ctrl+Shift+M": null,
   "Eine Folie erstellt": "One slide created",
-  " Folien erstellt": " slides created"
+  " Folien erstellt": " slides created",
+  "<button type=\"submit\" value=\"\" class=\"setp-back\" title=\"Zurück ohne Speichern\" aria-label=\"Zurück\">‹</button>": "<button type=\"submit\" value=\"\" class=\"setp-back\" title=\"Back without saving\" aria-label=\"Back\">‹</button>",
+  "muted small setp-sub": null,
+  "dlg set-dlg set-page": null
 }
