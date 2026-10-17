@@ -20,7 +20,7 @@ Alles bleibt auf Ihrem Gerät. Unter Windows und Linux braucht PDF-Stift kein Ko
 
 ## Was PDF-Stift kann
 
-- **Schreiben und markieren.** Stift, Marker, Text markieren, unterstreichen und durchstreichen, Formen, Textfelder, Notizzettel, Lasso, Radierer und ein Laserpointer für Präsentationen. Drucksensitive Stifte funktionieren auf Touchscreens und Grafiktabletts.
+- **Schreiben und markieren.** Stift, Marker, Text markieren, unterstreichen und durchstreichen, Formen, Textfelder, Notizzettel, Lasso, Radierer und ein Laserpointer für Präsentationen. Auf Wunsch werden gezeichnete Kreise, Kästen, Linien und Pfeile sofort gerade gezogen. Drucksensitive Stifte funktionieren auf Touchscreens und Grafiktabletts.
 - **Notizen werden Teil der PDF.** Sie werden beim Schreiben gespeichert und beim Schließen fest in die Datei geschrieben. Frühere Fassungen bleiben erhalten.
 - **Volltextsuche** in allen PDFs auf einmal. Scans werden mit der in Windows eingebauten Texterkennung durchsuchbar.
 - **Werkzeuge.** Seiten organisieren (umsortieren, drehen, löschen, herausziehen, aufteilen), PDFs zusammenfügen, Text und Bilder bearbeiten, Kopf- und Fußzeile, Seitenzahlen und Wasserzeichen, Lesezeichen, Stempel, Formulare ausfüllen und unterschreiben, Formularfelder anlegen, Fassungen vergleichen, schwärzen, mit Passwort schützen, nach Word, Excel, PowerPoint oder als Bilder exportieren und Handzettel mit 2–9 Folien pro Seite drucken.

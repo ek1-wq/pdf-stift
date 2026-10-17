@@ -306,6 +306,7 @@ function menu() {
       tool('hl', "Highlighter (freehand)", 'M'),
       tool('tx', "Highlight text", 'U'),
       tool('sh', "Shapes"),
+      { label: "Straighten shapes while drawing (on/off)", click: cmd('shapeRec') },
       tool('tt', "Text box", 'T'),
       tool('nt', "Comment (sticky note)"),
       tool('la', 'Lasso'),

@@ -183,6 +183,9 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .width { width: 40px; height: 44px; border: 0; border-radius: 10px; background: transparent; display: grid; place-items: center; }
 .width span { border-radius: 50%; background: var(--fg); }
 .width.active { background: var(--accent-soft); }
+.width.shrec { margin-left: 6px; color: var(--muted); }
+.width.shrec svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.width.shrec.active { color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
 .menu-wrap { position: relative; }
 .menu {
   position: absolute; right: 0; top: 48px; z-index: 30; min-width: 280px; background: var(--surface);

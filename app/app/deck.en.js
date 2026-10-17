@@ -1770,8 +1770,9 @@
       const wm = (id, l, c = '') => `<button type="button" class="rb-tab rb-wm${c}" data-wm="${id}" aria-haspopup="menu" title="${esc(l)} ▾">${esc(l)}</button>`;
       // Reihenfolge wie in Office: Datei – Start … Ansicht – Hilfe. Bearbeiten, Werkzeuge und Notizbuch stecken in den Reitern
       // und Seitenleisten (und bleiben über die Alt-Taste in der klassischen Menüleiste erreichbar).
-      const wmPre = WM ? wm('m-datei', "file", ' rb-file') : '';
-      const wmPost = WM ? wm('m-hilfe', "Help") : '';
+      // Windows-App: die Menüleiste (Datei, Bearbeiten, Ansicht …) steht immer oben – wie bei PDFs; keine doppelten Menüs im Menüband
+      const wmPre = '', wmPost = '';
+      void WM; void wm;
       bar.innerHTML = `<div class="rb-tabs" role="tablist">${wmPre}${tabs.map(([k, l]) => `<button type="button" role="tab" class="rb-tab${k === RB.tab && (!RB.collapsed || RB.peek) ? ' on' : ''}" data-tab="${k}" title="Double-click: collapse/expand ribbon">${esc(l)}</button>`).join('')}${wmPost}<span class="rb-tgrow"></span><button type="button" class="rb-tab rb-colbtn" data-a="rbcol" title="${esc(colTitle)}" aria-label="${esc(colTitle)}">${RB.collapsed ? '▾' : '▴'}</button></div><div class="rb-body">${h}</div>`;
       bar.classList.toggle('rb-collapsed', RB.collapsed && !RB.peek);
       bar.classList.toggle('rb-peek', RB.collapsed && RB.peek);
@@ -3532,6 +3533,7 @@
     if (a === 'notes') { VIEW.notes = !VIEW.notes; viewSave(); renderNotes(); fit(true); return; }
     if (a === 'grid' || a === 'guides' || a === 'snap') { VIEW[a] = !VIEW[a]; viewSave(); D.ed.render(); return; }
     if (a === 'fit') { VIEW.zoom = 1; viewSave(); fit(true); D.ed.renderFmt(); }
+    if (a === 'zin' || a === 'zout') { const Z = [0.5, 0.75, 1, 1.25, 1.5, 2]; let i = Z.findIndex((z) => z >= VIEW.zoom - 0.01); if (i < 0) i = Z.length - 1; VIEW.zoom = Z[Math.max(0, Math.min(Z.length - 1, i + (a === 'zin' ? (Z[i] > VIEW.zoom + 0.01 ? 0 : 1) : -1)))]; viewSave(); fit(true); D.ed.renderFmt(); }
   }
   function renderNotes() {
     if (!D.root) return;
@@ -5313,5 +5315,5 @@ Antworte ausschließlich über das Werkzeug folien_erstellen.`;
     D.ed.renderFmt();
   }
   window.PDFSTIFT_DECK = { inkSet, clipMath, open, close, flush, preview, makeEditor, layerNode, elNode, painter, popMenu, clean, plain, insertGroup, ICON, RI,
-    PX: { fitBox, fitReady, mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH, mathSvgDoc, texOmml, mathFs, mathLib, texSvg, ommlTex }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
+    PX: { fitBox, fitReady, inkShape, skHead, mergeMap, tblRows, animOrder, W, slideH, H: () => H, fontKey, fontOffice, fontsReady: () => FM.ready, chartColors, clean, isPh, imgUrl, mediaUrl, inkSvg, hfEls, uid, bgOf, DEF_TH, mathSvgDoc, texOmml, mathFs, mathLib, texSvg, ommlTex }, replaceInEls, audience, rbCollapse, deckEditor: () => (D.root && D.deck ? D.ed : null), RB };
 })();

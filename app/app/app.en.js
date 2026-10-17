@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.100.7';
+  const VERSION = '1.100.8';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -285,6 +285,7 @@
     wi: Object.assign({ pen: 1, hl: 1, sh: 1 }, ls('wi') || {}),
     txKind: ls('txKind') || 'hl',
     shKind: ls('shKind') || 'arrow',
+    shapeRec: ls('shapeRec') === true, // Formen gerade ziehen (Stift)
     ttSize: ls('ttSize') || 14,
     favs: Array.isArray(ls('favs')) ? ls('favs') : DEFAULT_FAVS.map((f) => ({ ...f })),
     showTools: ls('showTools') ?? true,
@@ -2886,6 +2887,73 @@
     if (Math.abs(a - 90) < 4) return [x0, y];
     return [x, y];
   }
+  // ---------------------------------------------------------------- Formen gerade ziehen (zuschaltbar, ohne KI)
+  // Ein Stiftstrich wird zu Linie, Pfeil, Rechteck, Ellipse, Dreieck oder Raute; Schrift bleibt Schrift.
+  const SHR = { recent: [], last: null };
+  function shapeRec(st, P) {
+    const PX = window.PDFSTIFT_DECK && window.PDFSTIFT_DECK.PX;
+    if (!PX || !PX.inkShape) { ensureDeck().catch(() => {}); return false; } // Erkennung wird nachgeladen
+    const f = 960 / (P.w || 960), xy = [];
+    for (let i = 0; i + 1 < st.pts.length; i += 3) xy.push(st.pts[i] * f, st.pts[i + 1] * f);
+    let r = null;
+    try { r = PX.inkShape(xy); } catch (er) { r = null; }
+    if (r && (r.k === 'line' || r.k === 'arrow') && Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]) < 60) r = null; // kurze Striche: eher Schrift
+    const xs = xy.filter((_, i) => i % 2 === 0), ys = xy.filter((_, i) => i % 2 === 1);
+    const bb = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], sz = Math.hypot(bb[2] - bb[0], bb[3] - bb[1]), now = Date.now();
+    SHR.recent = SHR.recent.filter((q) => now - q.t < 6000 && q.path === V.path && q.p === P.i);
+    // mitten in gerade Geschriebenem (o, D, l …): nicht umwandeln
+    if (r && sz < 160 && SHR.recent.some((q) => Math.max(0, q.b[0] - bb[2], bb[0] - q.b[2]) < Math.max(30, sz * 0.5) && Math.max(0, q.b[1] - bb[3], bb[1] - q.b[3]) < Math.max(12, (q.b[3] - q.b[1]) * 0.4))) r = null;
+    const g = (q) => [r2(q[0] / f), r2(q[1] / f)];
+    const base = { p: P.i, c: st.c, w: st.w };
+    const pen = (pts, closed) => { const out = []; const add = (q, n) => { for (let k = 0; k < n; k++) out.push(...g(q), 0.5); }; pts.forEach((q) => add(q, 3)); if (closed) add(pts[0], 3); return { id: uid(), ...base, t: 'pen', pts: out }; };
+    const L = SHR.last;
+    let made = null, gone = [st];
+    if (!r && L && L.path === V.path && L.p === P.i && now - L.t < 15000) {
+      // Pfeilspitze als zweiter Strich an die eben gerade gezogene Linie
+      const end = PX.skHead({ p: xy }, L);
+      const old = end && Notes.docs.get(V.path).strokes.get(L.id);
+      if (old && old.t === 'sh' && (old.k === 'line' || old.k === 'arrow')) {
+        let a0 = L.a, b0 = L.b;
+        if (old.k === 'line') { if (end === 'a') [a0, b0] = [b0, a0]; made = { id: uid(), ...base, c: old.c, w: old.w, t: 'sh', k: 'arrow', pts: [...g(a0), ...g(b0)] }; }
+        else {
+          // zweite Spitze: Doppelpfeil als Linienzug
+          const ang = Math.atan2(b0[1] - a0[1], b0[0] - a0[0]), hl = Math.min(Math.max(old.w * 5 * f, 10), Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) * 0.3);
+          const hd = (tip, an) => [[tip[0] - hl * Math.cos(an - 0.45), tip[1] - hl * Math.sin(an - 0.45)], tip, [tip[0] - hl * Math.cos(an + 0.45), tip[1] - hl * Math.sin(an + 0.45)]];
+          const h1 = hd(a0, ang + Math.PI), h2 = hd(b0, ang);
+          made = pen([h1[0], a0, h1[2], a0, b0, h2[0], b0, h2[2]], false); made.c = old.c; made.w = old.w;
+        }
+        gone = [st, old];
+        SHR.last = { ...L, id: made.id, t: now, a: a0, b: b0 };
+      }
+    }
+    if (!made && r) {
+      if (r.k === 'line' || r.k === 'arrow') {
+        // fast waagrecht/senkrecht/45° → genau
+        let a0 = r.a, b0 = r.b; const len = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]);
+        const ang = Math.atan2(b0[1] - a0[1], b0[0] - a0[0]) * 180 / Math.PI;
+        for (const s0 of [-180, -135, -90, -45, 0, 45, 90, 135, 180]) if (Math.abs(ang - s0) < 6) { const m = [(a0[0] + b0[0]) / 2, (a0[1] + b0[1]) / 2], rad = s0 * Math.PI / 180; a0 = [m[0] - Math.cos(rad) * len / 2, m[1] - Math.sin(rad) * len / 2]; b0 = [m[0] + Math.cos(rad) * len / 2, m[1] + Math.sin(rad) * len / 2]; break; }
+        made = { id: uid(), ...base, t: 'sh', k: r.k, pts: [...g(a0), ...g(b0)] };
+        SHR.last = { id: made.id, path: V.path, p: P.i, a: a0, b: b0, len, t: now };
+      } else if ((r.k === 'rect' && !(r.r && Math.abs(((r.r % 90) + 90) % 90 - 45) < 38)) || r.k === 'ellipse') {
+        let { x, y, w, h } = r;
+        if (r.r) { const rr = ((r.r % 90) + 90) % 90; if (rr > 45) [w, h] = [h, w]; const cx = r.x + r.w / 2, cy = r.y + r.h / 2; x = cx - w / 2; y = cy - h / 2; } // fast gerade → gerade
+        if (Math.abs(w - h) / Math.max(w, h) < 0.12) { const cx = x + w / 2, cy = y + h / 2; w = h = (w + h) / 2; x = cx - w / 2; y = cy - h / 2; }
+        made = { id: uid(), ...base, t: 'sh', k: r.k === 'ellipse' ? 'oval' : 'rect', pts: [...g([x, y]), ...g([x + w, y + h])] };
+      } else if (r.k === 'rect') {
+        const cx = r.x + r.w / 2, cy = r.y + r.h / 2, a = r.r * Math.PI / 180, co = Math.cos(a), si = Math.sin(a);
+        const c4 = [[-r.w / 2, -r.h / 2], [r.w / 2, -r.h / 2], [r.w / 2, r.h / 2], [-r.w / 2, r.h / 2]].map(([u, v]) => [cx + u * co - v * si, cy + u * si + v * co]);
+        made = pen(c4, true);
+      } else if (r.k === 'tri') made = pen([[r.x + r.w / 2, r.y], [r.x + r.w, r.y + r.h], [r.x, r.y + r.h]], true);
+      else if (r.k === 'diamond') made = pen([[r.x + r.w / 2, r.y], [r.x + r.w, r.y + r.h / 2], [r.x + r.w / 2, r.y + r.h], [r.x, r.y + r.h / 2]], true);
+      else if (r.k === 'poly') made = pen(r.pts, true);
+    }
+    if (!made) { SHR.recent.push({ path: V.path, p: P.i, b: bb, t: now }); return false; }
+    opDel(V.path, gone.map((x) => x.id));
+    opAdd(V.path, [made]);
+    pushHistory({ t: 'multi', acts: [{ t: 'del', strokes: gone }, { t: 'add', strokes: [made] }] });
+    drawInk(P);
+    return true;
+  }
   function endStroke(e, cancel) {
     if (e.pointerType === 'touch') touches.delete(e.pointerId);
     if (e.pointerType === 'pen') penDown = false;
@@ -2920,6 +2988,7 @@
     } else if (cancel && c.st.t !== 'tx' && c.st.pts.length < 9) return;
     opAdd(V.path, [c.st]);
     pushHistory({ t: 'add', strokes: [c.st] });
+    if (c.st.t === 'pen' && S.shapeRec && !cancel && shapeRec(c.st, c.P)) return; // Form gerade gezogen (Rückgängig holt den Strich zurück)
     if (c.st.t !== 'pen') drawInk(c.P);
     else if (c.P.ink) {
       c.P.ink.hidden = false;
@@ -11007,6 +11076,19 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
         b.onclick = () => { S.wi[S.tool] = i; persistTools(); renderToolbar(); deckInk(); };
         ww.appendChild(b);
       });
+      if (S.tool === 'pen' && !V.deck) {
+        // Formen gerade ziehen: Kreis, Kasten, Linie, Pfeil … werden beim Zeichnen sauber (ohne KI)
+        if (S.shapeRec && !window.PDFSTIFT_DECK) ensureDeck().catch(() => {});
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'width shrec' + (S.shapeRec ? ' active' : '');
+        b.setAttribute('aria-pressed', S.shapeRec ? 'true' : 'false');
+        b.setAttribute('aria-label', "Straighten shapes");
+        b.title = "Straighten shapes: circles, boxes, triangles, lines and arrows you draw are cleaned up at once – handwriting stays handwriting (" + (S.shapeRec ? "on" : "off") + ')';
+        b.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="4.5"/><rect x="12.5" y="12.5" width="8" height="8" rx="0.5"/><path d="M4 20l6-6"/></svg>';
+        b.onclick = () => { S.shapeRec = !S.shapeRec; ls('shapeRec', S.shapeRec); if (S.shapeRec) ensureDeck().catch(() => {}); renderToolbar(); toast(S.shapeRec ? "Straighten shapes: on – circles, boxes, lines and arrows are cleaned up as you draw." : "Straighten shapes: off.", 3500); };
+        ww.appendChild(b);
+      }
     }
 
     const fw = $('#favs');
@@ -11859,10 +11941,10 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
   // ================================================================== Windows-App: Update-Hinweis oben rechts
   const WIN = window.pdfstiftWin || null;
   if (WIN && WIN.onPptxOpen) { window.__pdfstiftPptx = true; WIN.onPptxOpen((d) => { try { pptxImport(new File([d.bytes], d.name)); } catch (e) { toast(e.message); } }); }
-  // Menüleiste nur zeigen, solange das Menüband (mit Datei, Bearbeiten … in der Reiterzeile) nicht zu sehen ist – und nie beim Präsentieren oder im Vollbild
+  // Menüleiste (Datei, Bearbeiten …) immer oben – bei PDFs und Präsentationen gleich; nur beim Präsentieren und im Vollbild nicht
   if (WIN && WIN.menuBar && WIN.menuPop) {
     let mbLast = null;
-    setInterval(() => { const vis = [...document.querySelectorAll('.rb-wm')].some((t) => !!t.offsetParent) || !!(PR && PR.on) || !!(FS && FS.on) || !!document.fullscreenElement; if (vis !== mbLast) { mbLast = vis; WIN.menuBar(!vis); } }, 400);
+    setInterval(() => { const vis = !!(PR && PR.on) || !!(FS && FS.on) || !!document.fullscreenElement || !!document.querySelector('.dk-show, .dk-pres'); if (vis !== mbLast) { mbLast = vis; WIN.menuBar(!vis); } }, 400);
   }
   const UPD = { d: null };
   function updDialog() {
@@ -11952,6 +12034,21 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
     const ae = document.activeElement;
     const typing = ae && ae.matches && ae.matches('math-field, input, textarea, [contenteditable]');
     const needDoc = () => { if (!V.path) { toast("Please open a PDF first."); return false; } return true; };
+    // Präsentation offen: Befehle der Menüleiste gelten für die Präsentation
+    if (V.deck && !typing) {
+      const dv = (sel) => { const el = document.querySelector('#deckView ' + sel); if (el) { el.click(); return true; } return false; };
+      const vw = (x) => { rbCmd('v:' + x); return true; };
+      const DM = {
+        undo: () => dv('.dk-top [data-a=undo]'), redo: () => dv('.dk-top [data-a=redo]'),
+        save: () => dv('.dk-top [data-a=pdf]'), print: () => dv('.dk-top [data-a=pdf]'), original: () => dv('.dk-top [data-a=pdf]'),
+        present: () => dv('.dk-top [data-a=play]'), presenter: () => { rbCmd('show:presenter'); return true; },
+        find: () => { rbCmd('f:replace'); return true; },
+        fitw: () => vw('fit'), fitp: () => vw('fit'), actual: () => vw('fit'), zin: () => vw('zin'), zout: () => vw('zout'),
+        thumbs: () => vw('normal'), single: () => vw('normal'), two: () => vw('sorter'), cover: () => vw('sorter'),
+      };
+      if (DM[c] && DM[c]()) return;
+      if (['findNext', 'findPrev', 'first', 'last', 'next', 'prev', 'rotate', 'rotR', 'rotL', 'focus', 'props', 'tonb', 'nblink', 'nbback', 'findredact', 'handout', 'scanfix', 'comments', 'live', 'mkf', 'mkv', 'study', 'carry'].includes(c)) { toast("That is only available for PDFs."); return; }
+    }
     switch (c) {
       case 'upload': showLibrary(); $('#btnUpload').click(); break;
       case 'library': showLibrary(); break;
@@ -11986,6 +12083,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
       case 'study': studySheet(); break;
       case 'carry': carryDialog(); break;
       case 'tonb': if (needDoc()) toNotebook(); break;
+      case 'shapeRec': { S.shapeRec = !S.shapeRec; ls('shapeRec', S.shapeRec); if (S.shapeRec) { ensureDeck().catch(() => {}); if (S.tool !== 'pen') { S.tool = 'pen'; persistTools(); } } renderToolbar(); toast(S.shapeRec ? "Straighten shapes: on – circles, boxes, lines and arrows are cleaned up as you draw." : "Straighten shapes: off.", 3500); break; }
       case 'newdeck': newDeck(); break;
       case 'pptximport': pptxPick(); break;
       case 'pptxfolder': pptxPick(true); break;

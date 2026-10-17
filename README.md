@@ -12,7 +12,7 @@ Everything stays on your device. On Windows and Linux PDF-Stift needs no account
 
 ## What you can do
 
-- **Write and mark up.** Pen, highlighter, text highlighting, underline and strike-through, shapes, text boxes, sticky-note comments, lasso, eraser and a laser pointer for presenting. Pressure-sensitive pens work on touch screens and pen tablets.
+- **Write and mark up.** Pen, highlighter, text highlighting, underline and strike-through, shapes, text boxes, sticky-note comments, lasso, eraser and a laser pointer for presenting. If you like, circles, boxes, lines and arrows you draw are straightened at once. Pressure-sensitive pens work on touch screens and pen tablets.
 - **Notes become part of the PDF.** They are saved as you write. When you close a PDF, they are written into the file itself, and earlier versions are kept.
 - **Full-text search.** Search inside all of your PDFs at once. Scanned pages become searchable through the text recognition built into Windows.
 - **Tools.** Organize pages (reorder, rotate, delete, extract, split), combine PDFs, edit text and images, add a header, footer, page numbers or watermark, insert bookmarks, stamp, fill and sign forms, prepare form fields, compare versions, redact, password-protect, export to Word, Excel, PowerPoint or images, and print handouts with 2–9 slides per page.

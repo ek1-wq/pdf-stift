@@ -299,6 +299,7 @@ function menu() {
       tool('hl', 'Marker (frei)', 'M'),
       tool('tx', 'Text markieren', 'U'),
       tool('sh', 'Formen'),
+      { label: 'Formen beim Zeichnen gerade ziehen (an/aus)', click: cmd('shapeRec') },
       tool('tt', 'Textfeld', 'T'),
       tool('nt', 'Kommentar (Notizzettel)'),
       tool('la', 'Lasso'),

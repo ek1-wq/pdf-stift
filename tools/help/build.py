@@ -78,6 +78,9 @@ DE = {
               'Notizen werden sofort gespeichert und zwischen PC und Tablet abgeglichen.', 'S'),
         ('p', 'Stift, Marker, Text markieren, Formen, Textfeld, Lasso und Radierer stehen in der Werkzeugleiste und im Menüband unter „Start“ und „Zeichnen“. '
               'Notizen werden sofort gespeichert – direkt im Bibliotheksordner auf Ihrem PC.', 'L'),
+        ('p', '<b>Formen gerade ziehen</b>: Beim Stift gibt es neben den Strichstärken einen Schalter (auch unter Werkzeuge im Menü). Ist er an, werden gezeichnete Kreise, Kästen, '
+              'Dreiecke, Rauten, Linien und Pfeile sofort sauber – auf dem Gerät, ohne KI. Eine Pfeilspitze kann auch als zweiter Strich kommen. Schrift bleibt Schrift; '
+              + keys('Strg+Z') + ' holt den Originalstrich zurück.'),
         ('table', 'Tasten für die Werkzeuge', ['Taste', 'Werkzeug'], [
             ['V', 'Text auswählen'], ['H', 'Hand (verschieben)'], ['P', 'Stift'], ['M', 'Marker (frei)'], ['U', 'Text markieren'],
             ['T', 'Textfeld'], ['E', 'Radierer'], ['Leertaste gedrückt halten', 'vorübergehend Hand; die mittlere Maustaste ebenso'],
@@ -283,6 +286,9 @@ EN = {
               'Notes are saved immediately and synchronized between PC and tablet.', 'S'),
         ('p', 'Pen, highlighter, text highlighting, shapes, text box, lasso and eraser are in the tool bar and on the ribbon under “Start” and “Drawing”. '
               'Notes are saved immediately – right in the library folder on your PC.', 'L'),
+        ('p', '<b>Straighten shapes</b>: next to the pen widths there is a switch (also under Tools in the menu). When it is on, circles, boxes, triangles, diamonds, '
+              'lines and arrows you draw are cleaned up at once – on your device, without AI. An arrowhead can also be a second stroke. Handwriting stays handwriting; '
+              + keys('Ctrl+Z') + ' brings back your original stroke.'),
         ('table', 'Keys for the Tools', ['Key', 'Tool'], [
             ['V', 'Select text'], ['H', 'Hand (move)'], ['P', 'Pen'], ['M', 'Highlighter (free)'], ['U', 'Highlight text'],
             ['T', 'Text box'], ['E', 'Eraser'], ['Hold the space bar', 'temporarily the hand; the middle mouse button as well'],

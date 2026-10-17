@@ -3571,5 +3571,16 @@
   "> Formen sofort</label>\n      <span class=\"dk-sk-sep\"></span><button type=\"button\" class=\"btn\" data-a=\"photo\" title=\"Foto einer Skizze oder Tafel in neue Folien umwandeln\">Foto …</button><button type=\"button\" class=\"btn\" data-a=\"pdf\" title=\"PDF-Seite (auch mit Anmerkungen) in neue Folien umwandeln\">PDF-Seite …</button>\n      <span class=\"dk-grow\"></span><button type=\"button\" class=\"btn\" data-a=\"end\" title=\"Skizzenmodus beenden (Esc) – Striche bleiben als Freihand\">Schließen</button><button type=\"button\" class=\"btn primary dk-sk-go\" data-a=\"go\"": "> Shapes instantly</label>\n      <span class=\"dk-sk-sep\"></span><button type=\"button\" class=\"btn\" data-a=\"photo\" title=\"Turn a photo of a sketch or whiteboard into new slides\">Photo …</button><button type=\"button\" class=\"btn\" data-a=\"pdf\" title=\"Turn a PDF page (annotations included) into new slides\">PDF page …</button>\n      <span class=\"dk-grow\"></span><button type=\"button\" class=\"btn\" data-a=\"end\" title=\"End sketch mode (Esc) – strokes stay as ink\">Close</button><button type=\"button\" class=\"btn primary dk-sk-go\" data-a=\"go\"",
   "\n\nGRAU im Bild ist der schon vorhandene Inhalt der Folie – erzeuge ihn NICHT noch einmal. Nur die farbigen/schwarzen Striche sind neu. Vorhandene Elemente (Koordinaten in Prozent, fontSize in Punkt):\n": null,
   "\n\nRichte Neues an Vorhandenem aus: gleiche Kanten, Abstände und Größen wie benachbarte Elemente, wenn es offensichtlich so gemeint ist. Linien und Pfeile, die bei einem vorhandenen Element beginnen oder enden, setzen genau an dessen Rand an. Text, der in eine vorhandene Form ohne Text geschrieben ist: Element type \"text\" mit into = deren id. Passt gezeichnete Schrift ungefähr zu einer vorhandenen Schriftgröße, gib genau diese als fontSize an.": null,
-  "\"><a:avLst><a:gd name=\"adj\" fmla=\"val ": null
+  "\"><a:avLst><a:gd name=\"adj\" fmla=\"val ": null,
+  "width shrec": null,
+  "Formen gerade ziehen": "Straighten shapes",
+  "Formen gerade ziehen: gezeichnete Kreise, Kästen, Dreiecke, Linien und Pfeile werden sofort sauber – Schrift bleibt Schrift (": "Straighten shapes: circles, boxes, triangles, lines and arrows you draw are cleaned up at once – handwriting stays handwriting (",
+  "an": "on",
+  "aus": "off",
+  "<svg viewBox=\"0 0 24 24\"><circle cx=\"8\" cy=\"8\" r=\"4.5\"/><rect x=\"12.5\" y=\"12.5\" width=\"8\" height=\"8\" rx=\"0.5\"/><path d=\"M4 20l6-6\"/></svg>": null,
+  "Formen gerade ziehen: an – Kreise, Kästen, Linien und Pfeile werden beim Zeichnen sauber.": "Straighten shapes: on – circles, boxes, lines and arrows are cleaned up as you draw.",
+  "Formen gerade ziehen: aus.": "Straighten shapes: off.",
+  "#deckView ": null,
+  "Das gibt es nur bei PDFs.": "That is only available for PDFs.",
+  "Formen beim Zeichnen gerade ziehen (an/aus)": "Straighten shapes while drawing (on/off)"
 }
