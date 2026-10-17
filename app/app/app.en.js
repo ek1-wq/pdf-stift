@@ -2,7 +2,7 @@
 /* PDF-Stift – PDFs mit dem Stift beschriften, automatisch speichern, offline weiterarbeiten. */
 'use strict';
 (() => {
-  const VERSION = '1.99.1';
+  const VERSION = '1.99.2';
   const API = 'api.php';
   const LOC = document.documentElement.lang === 'en' ? 'en-GB' : 'de-DE'; // Datums- und Zahlenformat der Sprache
   const DEC = LOC === 'de-DE' ? ',' : '.';
@@ -5097,6 +5097,9 @@
   function deckCore() {
     window.PDFSTIFT_CORE = window.PDFSTIFT_CORE || {
       API, VERSION, LANG, esc, ls, apiJson, toast, confirmDlg, askText, prepareImage, uploadImage, downloadBlob,
+      // Skizze → Folie: API-Schlüssel und Modell (nur auf diesem Gerät gespeichert)
+      aiCfg: () => ({ key: SET.aiKey || '', model: SET.aiModel || AI_MODELS[0][0] }),
+      aiSetKey: (k) => { SET.aiKey = String(k || '').trim(); saveSet(); },
       pptx: () => pptxMod(),
       finger: () => !!S.finger,
       ensureFontkit: () => (window.fontkit ? Promise.resolve() : loadScript('vendor/fontkit.min.js?v=' + VERSION)),
@@ -12221,6 +12224,8 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
   // auf allen Geräten gleich (Server): redactPurge, autoOcr, keepVersions · nur auf diesem Gerät: Ansicht, Startwerkzeug, Start, Druck
   const SET = Object.assign({ viewMode: 'single', startTool: 'last', startView: 'last', printDpi: 160, redactPurge: true, autoOcr: true, keepVersions: 5, autoUpdate: true, pdfNextTo: false, dropFolder: DROP0, usage: true, helpLang: 'en' }, ls('settings') || {});
   function saveSet() { ls('settings', SET); UG.on = !LOCAL && SET.usage !== false; }
+  // Modelle für Skizze → Folie (Anthropic)
+  const AI_MODELS = [['claude-sonnet-5-5', "Sonnet 5.5 (recommended)"], ['claude-haiku-5-5', "Haiku 5.5 (cheaper, faster)"], ['claude-opus-5-5', "Opus 5.5 (most capable)"]];
   UG.on = !LOCAL && SET.usage !== false; // freie Ausgabe: kein Nutzungsprotokoll
   if (window.pdfstiftWin && window.pdfstiftWin.setFolder) window.pdfstiftWin.setFolder(SET.dropFolder || DROP0);
   async function loadServerSettings() {
@@ -12371,6 +12376,10 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
       ${window.pdfstiftWin ? `<h3 class="dlg-sub">Windows app</h3>${chk('stUpd', "Check for updates automatically", SET.autoUpdate, '')}${chk('stNext', "Word/PowerPoint/Excel: also put a PDF copy next to the original file", SET.pdfNextTo, "Dragging in always creates a PDF in the Library; the original stays unchanged.")}` : ''}
       ${hot ? `${chk('stHot', "Watch a folder on this PC", hot.on, "Anything put there (PDF, Word, PowerPoint, Excel) is added to the Library automatically; the original then moves to the subfolder “übernommen”.")}
       <div class="set-row"><span class="hot-dir" id="stHotDir">${esc(hot.dir)}</span><span><button type="button" class="btn" id="stHotPick">Choose folder …</button> <button type="button" class="btn" id="stHotOpen">Open</button></span></div>` : ''}
+      <h3 class="dlg-sub">Sketch → Slide (on this device)</h3>
+      <div class="set-row"><span>API key (Anthropic)</span><input id="stAiKey" type="password" autocomplete="off" spellcheck="false" value="${esc(SET.aiKey || '')}" placeholder="sk-ant-…"></div>
+      <div class="set-row"><span>Model</span>${sel('stAiModel', AI_MODELS, SET.aiModel || AI_MODELS[0][0])}</div>
+      <p class="muted small">For “Sketch → Slide” in the slide editor (Insert). Get the key at console.anthropic.com; it stays on this device only. One conversion costs about 1–2 cents.</p>
       <div class="dlg-actions"><button type="submit" value="" class="btn">Cancel</button><button type="submit" value="ok" class="btn primary">Save</button></div></form>`;
     document.body.appendChild(d);
     d.showModal();
@@ -12395,6 +12404,7 @@ Original no longer on the server (older than 7 days)` + (S.library && S.library.
       SET.helpStart = $('#stHelpStart').checked;
       if ($('#hpPanel') && !$('#hpPanel').hidden) helpFill();
       if ($('#stNext')) SET.pdfNextTo = $('#stNext').checked;
+      SET.aiKey = $('#stAiKey').value.trim(); SET.aiModel = $('#stAiModel').value;
       if (hot && $('#stHot')) { await window.pdfstiftWin.hotSet({ on: $('#stHot').checked, dir: hot.dir }); if ($('#stHot').checked && !hot.on) toast("Now watching the folder: " + hot.dir, 5000); }
       SET.dropFolder = ($('#stDrop').value || DROP0).trim().replace(/^\/+|\/+$/g, '') || DROP0;
       if (window.pdfstiftWin && window.pdfstiftWin.setFolder) window.pdfstiftWin.setFolder(SET.dropFolder);
